@@ -1,7 +1,7 @@
 from django.apps import AppConfig
 
 
-class DMConfig(AppConfig):
+class DmConfig(AppConfig):
     """AppConfig for the dm app.
 
     Models and URLs are intentionally empty at Phase 0;
