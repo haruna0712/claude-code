@@ -34,3 +34,11 @@
 | [0000](./0000-record-architecture-decisions.md) | ADR プロセスを採用する | Accepted |
 | [0001](./0001-use-ecs-fargate-for-stg.md) | stg 環境に ECS Fargate を採用 | Accepted |
 | [0002](./0002-fulltext-search-backend.md) | 全文検索バックエンドの選定 | Proposed |
+
+## 今後作成予定の ADR
+
+| # | 予定タイトル | 優先度 | 根拠 |
+|---|---|---|---|
+| 0003 | JWT + HttpOnly Cookie 認証 (SameSite / Secure / リフレッシュトークン保存) | High | Phase 1 着手前に決定必要 |
+| 0004 | Celery タスク設計 (キュー分割 / acks_late / リトライ戦略) | High | ADR-0001 の Spot 運用と直結 |
+| 0005 | pg_bigm 正式採用 or Meilisearch 移行 (ADR-0002 の Supersedes) | High | Phase 2 PoC 後 |
