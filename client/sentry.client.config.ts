@@ -23,4 +23,14 @@ Sentry.init({
   // PII は送らない (ユーザーの投稿本文・プロフィール画像 URL など)。
   // 必要に応じて beforeSend で個別マスキングすること。
   sendDefaultPii: false,
+  integrations: [
+    // Session Replay の PII 漏洩対策 (security-reviewer PR #36 フィードバック)。
+    // DM / ツイート本文 / プロフィール編集等を録画に含めないため、デフォルトで
+    // 全文マスクと全メディアブロックを有効化する。特定のコンポーネントで
+    // 表示内容を確認したい場合は DOM に `data-sentry-unmask` 属性を付与する。
+    Sentry.replayIntegration({
+      maskAllText: true,
+      blockAllMedia: true,
+    }),
+  ],
 });
