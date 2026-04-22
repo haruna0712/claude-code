@@ -9,10 +9,15 @@ path は RequestContextMiddleware が context var として差し込み、
 `merge_contextvars` processor 経由で自動的にログへ含まれる。
 
 Celery タスクの start / success / failure も signal で自動ロギングする。
+
+Note (Celery worker fork):
+    `cache_logger_on_first_use=True` はプロセッサ束をキャッシュする。Celery
+    prefork ワーカーが settings を再 import するタイミングで設定が古いまま
+    になるケースがある。テストで挙動を切り替える場合は `structlog.reset_defaults()`
+    を呼んでからフィクスチャで再設定すること。
 """
 from __future__ import annotations
 
-import logging
 import os
 import time
 import uuid
@@ -169,11 +174,20 @@ class RequestContextMiddleware(MiddlewareMixin):
 # ---------------------------------------------------------------------------
 
 
+_celery_signals_registered = False
+
+
 def register_celery_signals() -> None:
     """Wire Celery task lifecycle events into structlog.
 
     Called from config/celery_app.py after the Celery app is created.
+    Idempotent: subsequent calls become no-ops to prevent double-logging
+    when celery_app is imported multiple times (e.g. test reload cycles).
     """
+    global _celery_signals_registered
+    if _celery_signals_registered:
+        return
+
     from celery.signals import task_failure, task_postrun, task_prerun
 
     log = structlog.get_logger("celery.task")
@@ -187,11 +201,24 @@ def register_celery_signals() -> None:
         structlog.contextvars.unbind_contextvars("task_id", "task_name")
 
     def _failure(task_id: str | None, exception: BaseException | None = None, **_kwargs: Any) -> None:
-        log.error("task.failed", task_id=task_id, exc_info=exception)
+        # exc_info: True を渡すと sys.exc_info() を取りに行くが、
+        # task_failure シグナルでは例外コンテキストが既に保たれているのでそれを利用する。
+        # BaseException を直接 exc_info に渡すと structlog 実装に依存して挙動が変わるため、
+        # (type, value, tb) のタプル形式で明示的に渡す。
+        if exception is not None:
+            log.error(
+                "task.failed",
+                task_id=task_id,
+                exc_info=(type(exception), exception, exception.__traceback__),
+            )
+        else:
+            log.error("task.failed", task_id=task_id)
 
     task_prerun.connect(_prerun, weak=False)
     task_postrun.connect(_postrun, weak=False)
     task_failure.connect(_failure, weak=False)
+
+    _celery_signals_registered = True
 
 
 __all__ = [
@@ -200,8 +227,3 @@ __all__ = [
     "configure_structlog",
     "register_celery_signals",
 ]
-
-
-# Silence mypy / unused-import warnings for `logging` (kept in case
-# downstream modules want to grab it from here for convenience).
-_ = logging
