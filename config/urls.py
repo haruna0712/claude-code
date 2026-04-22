@@ -27,8 +27,6 @@ urlpatterns = [
     path(settings.ADMIN_URL, admin.site.urls),
     path("api/v1/auth/", include("djoser.urls")),
     path("api/v1/auth/", include("apps.users.urls")),
-    # Sentry smoke test (DEBUG 時のみ有効、stg/prod では 404 を返す)
-    path("debug-sentry/", include("apps.common.urls")),
     # Phase 0 scaffold (P0-04). Each app ships empty urlpatterns until
     # the owning phase adds real endpoints (see docs/ROADMAP.md).
     path("api/v1/tweets/", include("apps.tweets.urls")),
@@ -45,6 +43,14 @@ urlpatterns = [
     path("api/v1/billing/", include("apps.billing.urls")),
     path("api/v1/search/", include("apps.search.urls")),
 ]
+
+# Sentry smoke test endpoint (P0-06). DEBUG=True の環境だけ URL 登録すること自体を
+# 行い、本番デプロイのルーティングテーブルに載らないようにする。
+# (security-reviewer PR #38 MEDIUM 指摘反映)
+if settings.DEBUG:
+    urlpatterns += [
+        path("debug-sentry/", include("apps.common.urls")),
+    ]
 
 admin.site.site_header = "Admin"
 admin.site.site_title = "Admin Portal"

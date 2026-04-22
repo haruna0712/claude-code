@@ -26,6 +26,31 @@ SENTRY_DSN = getenv("SENTRY_DSN", "")
 SENTRY_ENVIRONMENT = getenv("SENTRY_ENVIRONMENT", "local")
 SENTRY_RELEASE = getenv("SENTRY_RELEASE")  # CI で git SHA を渡す
 
+
+def _sentry_before_send(event, _hint):
+    """Strip request body / form data / query string from Sentry events.
+
+    security-reviewer (PR #38) フィードバック: DjangoIntegration は例外発生時に
+    request.data / request.query_string をコンテキストとして送信する可能性がある。
+    ツイート本文や DM 等のユーザー入力はどの API でも発生し得るため、一律で除去する。
+    """
+    request = event.get("request")
+    if request:
+        request.pop("data", None)
+        request.pop("query_string", None)
+        cookies = request.get("cookies")
+        if cookies:
+            # セッション Cookie などは PII に該当するため送らない
+            request["cookies"] = {k: "[Filtered]" for k in cookies}
+    return event
+
+
+_SENTRY_SAMPLE_RATES = {
+    "production": 0.1,
+    "stg": 0.5,
+    "local": 1.0,
+}
+
 if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
@@ -36,11 +61,11 @@ if SENTRY_DSN:
             CeleryIntegration(),
             RedisIntegration(),
         ],
-        # production のみサンプリングを絞り、local/stg は全量送信して検知感度を上げる。
-        traces_sample_rate=0.1 if SENTRY_ENVIRONMENT == "production" else 1.0,
+        # stg は prod より粗く、local はフルサンプリング。
+        traces_sample_rate=_SENTRY_SAMPLE_RATES.get(SENTRY_ENVIRONMENT, 1.0),
         # PII は送らない。投稿本文やユーザー名が誤って Sentry に載らないようにする。
-        # 必要に応じて個別イベントで scope.user / tags を設定する。
         send_default_pii=False,
+        before_send=_sentry_before_send,
     )
 
 
