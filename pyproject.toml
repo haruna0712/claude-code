@@ -23,7 +23,7 @@ extend-exclude = [
 # - F:      pyflakes
 # - I:      isort
 # - B:      flake8-bugbear
-# - UP:     pyupgrade
+# - UP:     pyupgrade (keep UP006 on — requires-python >= 3.12)
 # - SIM:    flake8-simplify
 # - DJ:     flake8-django
 # - RUF:    ruff-specific
@@ -31,13 +31,13 @@ select = ["E", "W", "F", "I", "B", "UP", "SIM", "DJ", "RUF"]
 ignore = [
     "E501",  # line length is handled by ruff-format
     "B008",  # function calls in argument defaults (common Django pattern)
-    "UP006", # defer `list[int]` migration until we drop py<3.12 consumers
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "*/settings/*.py" = ["F401", "F403", "F405"]  # settings do module-level glue
-"*/tests/*.py" = ["S101"]  # assert in tests is fine
 "conftest.py" = ["F401"]
+# NOTE: `S101` (assert) ignore for tests/ will be added once `S`
+# (flake8-bandit) is enabled in `select`. See ADR backlog.
 
 [tool.ruff.lint.isort]
 known-first-party = ["apps", "config"]
