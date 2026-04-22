@@ -5,6 +5,11 @@ from os import getenv,path
 from dotenv import load_dotenv
 from datetime import timedelta
 
+import sentry_sdk
+from sentry_sdk.integrations.celery import CeleryIntegration
+from sentry_sdk.integrations.django import DjangoIntegration
+from sentry_sdk.integrations.redis import RedisIntegration
+
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
 APPS_DIR = BASE_DIR / "apps"
 
@@ -12,6 +17,31 @@ local_env_file = path.join(BASE_DIR, ".envs", ".env.local")
 
 if path.isfile(local_env_file):
     load_dotenv(local_env_file)
+
+
+# --- Sentry observability (P0-06) ---
+# DSN / environment / release はすべて env 経由。未設定なら SDK を無効化する。
+# stg/prod では CI で必ず設定する（欠落は CD ワークフローで fail させる方針）。
+SENTRY_DSN = getenv("SENTRY_DSN", "")
+SENTRY_ENVIRONMENT = getenv("SENTRY_ENVIRONMENT", "local")
+SENTRY_RELEASE = getenv("SENTRY_RELEASE")  # CI で git SHA を渡す
+
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=SENTRY_ENVIRONMENT,
+        release=SENTRY_RELEASE,
+        integrations=[
+            DjangoIntegration(),
+            CeleryIntegration(),
+            RedisIntegration(),
+        ],
+        # production のみサンプリングを絞り、local/stg は全量送信して検知感度を上げる。
+        traces_sample_rate=0.1 if SENTRY_ENVIRONMENT == "production" else 1.0,
+        # PII は送らない。投稿本文やユーザー名が誤って Sentry に載らないようにする。
+        # 必要に応じて個別イベントで scope.user / tags を設定する。
+        send_default_pii=False,
+    )
 
 
 

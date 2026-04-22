@@ -27,6 +27,8 @@ urlpatterns = [
     path(settings.ADMIN_URL, admin.site.urls),
     path("api/v1/auth/", include("djoser.urls")),
     path("api/v1/auth/", include("apps.users.urls")),
+    # Sentry smoke test (DEBUG 時のみ有効、stg/prod では 404 を返す)
+    path("debug-sentry/", include("apps.common.urls")),
     # Phase 0 scaffold (P0-04). Each app ships empty urlpatterns until
     # the owning phase adds real endpoints (see docs/ROADMAP.md).
     path("api/v1/tweets/", include("apps.tweets.urls")),
