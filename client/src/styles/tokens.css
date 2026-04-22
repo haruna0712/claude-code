@@ -18,6 +18,11 @@
 
 :root {
   /* ---------- Typography scale (fluid: clamp(min, preferred, max)) ---------- */
+  /* 可読性ガイド (a11y-architect PR #39 レビュー):
+   *   - 本文 (段落): --text-sm 以上を使用
+   *   - --text-xs は timestamp / caption / メタ情報専用
+   *   - 本文に 12px (0.75rem) は使わない
+   */
   --text-xs:   clamp(0.75rem, 0.72rem + 0.15vw, 0.8125rem);
   --text-sm:   clamp(0.875rem, 0.84rem + 0.2vw, 0.9375rem);
   --text-base: clamp(1rem, 0.96rem + 0.25vw, 1.0625rem);
@@ -28,6 +33,12 @@
   --text-hero: clamp(2.5rem, 2rem + 2.5vw, 4rem);
 
   /* ---------- Line height ---------- */
+  /* 使用指針:
+   *   - tight  : 見出し・hero 専用 (本文に使うと可読性低下)
+   *   - snug   : 大きめ見出し、サブタイトル
+   *   - normal : 本文のデフォルト (SC 1.4.12 推奨の 1.5)
+   *   - relaxed/loose : 長文記事、コードブロック周辺
+   */
   --leading-tight:   1.2;
   --leading-snug:    1.35;
   --leading-normal:  1.5;
@@ -56,6 +67,12 @@
   --space-24:  6rem;      /* 96px */
   /* fluid gutter between sections */
   --space-section: clamp(3rem, 2rem + 5vw, 8rem);
+  /* horizontal padding for page/section wrappers (SC 1.4.10 Reflow) */
+  --space-inline: clamp(1rem, 4vw, 2rem);
+
+  /* ---------- Interactive target size (SC 2.5.8) ---------- */
+  /* Phase 1 以降で Button/IconButton の min-height/min-width に適用すること */
+  --target-min: 2.75rem;   /* 44px */
 
   /* ---------- Motion ---------- */
   --duration-instant: 75ms;
@@ -99,12 +116,26 @@
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.3);
 }
 
-/* Reduced motion 設定: 明示的に設定しているユーザーには duration を短縮 */
+/* Reduced motion 設定 (SC 2.3.3 Animation from Interactions)。
+ * duration トークンの上書きだけでなく、CSS animation / keyframes /
+ * transform / scroll-behavior すべてを無効化する安全網も用意する
+ * (a11y-architect PR #39 フィードバック)。
+ * `!important` は普段避けたいが、reduced-motion は全コンポーネントを
+ * 横断的に強制したい用途のため許容する。 */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --duration-instant: 0ms;
     --duration-fast:    0ms;
     --duration-normal:  0ms;
     --duration-slow:    0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }
