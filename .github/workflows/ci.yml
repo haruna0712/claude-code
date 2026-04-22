@@ -6,10 +6,17 @@ on:
   push:
     branches: [main]
 
-# Cancel previous runs on the same PR/branch when a new commit is pushed.
+# Workflow-level least-privilege. CI only reads source and uploads
+# artifacts; no comments, no PR write, no branch push. Each job can
+# tighten further if needed (security-reviewer PR #43 feedback).
+permissions:
+  contents: read
+
+# Cancel previous runs on the same PR. main pushes are NOT cancelled
+# so future CD steps don't lose deployment runs (security-reviewer PR #43).
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # -----------------------------------------------------------------------
@@ -44,18 +51,19 @@ jobs:
             terraform:
               - 'terraform/**'
               - '.github/workflows/ci.yml'
-            pre_commit:
+            # pre_commit は always-run なので filter ではなく `needs:` の if で
+            # 制御する (security-reviewer PR #43 feedback: `**` は意図不明確)。
+            pre_commit_config:
               - '.pre-commit-config.yaml'
-              - '**'
 
   # -----------------------------------------------------------------------
   # Pre-commit (delegates to .pre-commit-config.yaml from P0-12)
   # Catches anything ruff / prettier / detect-secrets would block locally.
+  # 常時実行: contributor が `pre-commit install` を忘れていても CI で必ず弾く。
   # -----------------------------------------------------------------------
   pre-commit:
     name: pre-commit
     needs: changes
-    if: needs.changes.outputs.pre_commit == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -105,7 +113,10 @@ jobs:
       DATABASE_URL: postgres://ci:ci@localhost:5432/ci
       REDIS_URL: redis://localhost:6379/0
       DJANGO_SETTINGS_MODULE: config.settings.local
-      SIGNING_KEY: ci-only-signing-key-not-a-secret
+      # CI 用の signing key は GitHub Actions secrets で管理する (ハルナさんが
+      # repo settings -> Secrets and variables -> Actions に DJANGO_SIGNING_KEY を登録)。
+      # 未設定時は CI 専用ダミーにフォールバックして PR の動作確認だけは通す。
+      SIGNING_KEY: ${{ secrets.DJANGO_SIGNING_KEY || 'ci-fallback-only-not-for-stg-or-prod' }}
       DOMAIN: localhost
     steps:
       - uses: actions/checkout@v4
@@ -125,10 +136,27 @@ jobs:
           ruff format --check .
       - name: Django system check
         run: python manage.py check --deploy --fail-level WARNING || python manage.py check
+      # TODO(Phase1): remove the `continue-on-error: true` and the `5` exit code
+      # tolerance. Phase 0 has no tests yet, so pytest exits 5 ("no tests collected").
+      # Once Phase 1 lands the first test, real failures (exit 1) must hard-fail CI.
+      # Tracking: this block must be edited together with the first pytest case.
       - name: Run pytest with coverage
+        id: pytest
+        continue-on-error: true
         run: |
-          pytest --cov=apps --cov=config --cov-report=xml --cov-report=term-missing \
-                 --maxfail=1 || echo "::warning::No tests yet (Phase 0); will fail real tests in Phase 1+"
+          pytest --cov=apps --cov=config --cov-report=xml --cov-report=term-missing --maxfail=1
+      - name: Fail when pytest reported a real failure (exit != 0 and != 5)
+        if: steps.pytest.outcome == 'failure'
+        run: |
+          # pytest exit codes: 0=ok, 1=test fail, 2=interrupted, 5=no tests collected
+          # We tolerate 5 only during Phase 0. Anything else fails the job.
+          ec=${{ steps.pytest.outputs.exit_code || '1' }}
+          if [ "$ec" = "5" ]; then
+            echo "::warning::No tests collected (Phase 0). Remove this guard once Phase 1 ships tests."
+          else
+            echo "::error::pytest failed with exit $ec"
+            exit 1
+          fi
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
