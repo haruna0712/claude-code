@@ -1,8 +1,13 @@
 # 実装ロードマップ（Phase 分割）
 
-> Version: 0.2 (Draft)
-> 最終更新: 2026-04-21
+> Version: 0.3
+> 最終更新: 2026-04-23
 > 関連: [SPEC.md](./SPEC.md), [ER.md](./ER.md), [ARCHITECTURE.md](./ARCHITECTURE.md), [A11Y.md](./A11Y.md), [REVIEW_CONSOLIDATED.md](./REVIEW_CONSOLIDATED.md)
+>
+> v0.2 → v0.3 変更点:
+> - **Phase 0 完了**: 13 Issue すべてマージ済み (P0-01〜P0-13)
+> - **Phase 0.5 コード完了**: 15/16 Issue マージ済み、残 1 は ハルナさん手動実行 (P0.5-15 stg 初回デプロイ)
+> - Phase 0.5 のレビュー指摘で発生した 15 件のフォローアップを [phase-0.5-followups.md](./issues/phase-0.5-followups.md) に集約
 >
 > v0.1 → v0.2 主要変更（planner レビュー反映）:
 > - **Phase 0.5 新設**: 最小 stg デプロイ (C-3)
@@ -31,23 +36,38 @@
 
 ### 0.2 全体タイムライン（再見積 v0.2）
 
-| Phase | 内容 | 目安工数 | 累計 |
-|---|---|---|---|
-| Phase 0 | セットアップ・基盤整備・観測性 | 5〜7 日 | 7 日 |
-| **Phase 0.5** | **最小 stg デプロイ（Hello World 相当）** | 5〜7 日 | 14 日 |
-| Phase 1 | 認証・プロフィール・基本ツイート | 14〜18 日 | 32 日 |
-| Phase 2 | TL・リアクション・フォロー・検索 | 14〜18 日 | 50 日 |
-| Phase 3 | DM（リアルタイム、S3 プリサインド含む） | 10〜14 日 | 64 日 |
-| Phase 4A | 通知・お気に入りボックス | 5〜7 日 | 71 日 |
-| Phase 4B | モデレーション（Block/Mute/Report） | 5〜7 日 | 78 日 |
-| Phase 5 | 掲示板 | 5〜7 日 | 85 日 |
-| Phase 6 | 記事機能（GitHub 片方向 push のみ） | 12〜14 日 | 99 日 |
-| Phase 7 | Bot（RSS + AI 要約） | 7〜10 日 | 109 日 |
-| Phase 8 | プレミアム機能（Stripe + 記事 AI） | 7〜10 日 | 119 日 |
-| Phase 9 | 本番昇格・負荷試験・Lighthouse CI | 5〜7 日 | 126 日 |
-| Phase 10 | Claude Design 取り込み・a11y 監査・SEO | 7〜10 日 | 136 日 |
+| Phase | 内容 | 目安工数 | 累計 | 状態 |
+|---|---|---|---|---|
+| Phase 0 | セットアップ・基盤整備・観測性 | 5〜7 日 | 7 日 | ✅ **完了** (13/13 Issue) |
+| **Phase 0.5** | **最小 stg デプロイ（Hello World 相当）** | 5〜7 日 | 14 日 | 🚧 **コード完了** (15/16、残は手動デプロイ) |
+| Phase 1 | 認証・プロフィール・基本ツイート | 14〜18 日 | 32 日 | 次フェーズ |
+| Phase 2 | TL・リアクション・フォロー・検索 | 14〜18 日 | 50 日 | |
+| Phase 3 | DM（リアルタイム、S3 プリサインド含む） | 10〜14 日 | 64 日 | |
+| Phase 4A | 通知・お気に入りボックス | 5〜7 日 | 71 日 | |
+| Phase 4B | モデレーション（Block/Mute/Report） | 5〜7 日 | 78 日 | |
+| Phase 5 | 掲示板 | 5〜7 日 | 85 日 | |
+| Phase 6 | 記事機能（GitHub 片方向 push のみ） | 12〜14 日 | 99 日 | |
+| Phase 7 | Bot（RSS + AI 要約） | 7〜10 日 | 109 日 | |
+| Phase 8 | プレミアム機能（Stripe + 記事 AI） | 7〜10 日 | 119 日 | |
+| Phase 9 | 本番昇格・負荷試験・Lighthouse CI | 5〜7 日 | 126 日 | |
+| Phase 10 | Claude Design 取り込み・a11y 監査・SEO | 7〜10 日 | 136 日 | |
 
 **合計 MVP 目安: 約 4.5 ヶ月（115〜136 日）**（Q4 フルスコープ確定）
+
+### 0.3 Phase 0 / 0.5 実績サマリ
+
+**Phase 0** (完了、2026-04-21〜22): 10 ラウンドの並列 PR で 13 Issue をマージ。
+サブエージェントレビュー (python-reviewer / typescript-reviewer / security-reviewer /
+a11y-architect / architect / doc-updater) を毎 PR で起動、指摘を反映する循環を確立。
+
+**Phase 0.5** (コード完了、2026-04-22〜23): 7 モジュール構成の Terraform + 結合 env +
+Django health endpoint + Next.js Hello + GitHub Actions OIDC + cd-stg.yml + 運用手順書。
+レビュー指摘の 15 件は `docs/issues/phase-0.5-followups.md` に集約し Phase 1 / 7 / 8 /
+9 のマイルストーンに紐付け済み。
+
+残作業 (ハルナさん実行):
+- [P0.5-15] `terraform apply` による stg 初回デプロイ。手順は
+  [docs/operations/stg-deployment.md §1](./operations/stg-deployment.md) 参照。
 
 ---
 
