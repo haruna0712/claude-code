@@ -30,13 +30,24 @@ Double Submit Cookie パターンで対策する。**
 
 ### 1. トークンの寿命
 
-- Access token: 30 分 (`SIMPLE_JWT.ACCESS_TOKEN_LIFETIME = timedelta(minutes=30)`)
-  - 既存 settings/base.py の値を採用。ユーザー操作の導線を阻害せず、流出時の
-    影響時間を抑える妥協点。
-- Refresh token: 14 日 (`REFRESH_TOKEN_LIFETIME = timedelta(days=14)`)
-  - SPEC §1.3 の `セッション有効期間: リフレッシュ 14 日` と整合。
-  - `ROTATE_REFRESH_TOKENS = True` で使い捨て、再ログインなしで連続利用時は
-    自動ローテ、途中切断時は再ログイン要。
+**SPEC §1.3 準拠で Access 60 分 / Refresh 14 日に確定する** (planner PR #80 CRITICAL 指摘)。
+
+| トークン | 寿命 | 既存 settings 値 | 意図 |
+|---|---|---|---|
+| Access | 60 分 | 30 分 (要更新) | SPEC §1.3 の「アクセス 60 分」と一致。ユーザー操作の導線を阻害せず、流出時の影響時間も 1 時間に収まる |
+| Refresh | 14 日 | 1 日 (要更新) | SPEC §1.3 の「リフレッシュ 14 日」と一致。`ROTATE_REFRESH_TOKENS = True` で毎回ローテ |
+
+**P1-01 (Django settings 拡張) で以下の既存値を更新する必要あり**:
+
+```python
+# config/settings/base.py の現状:
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),   # → 60
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),      # → 14
+    "ROTATE_REFRESH_TOKENS": True,                    # 維持
+    ...
+}
+```
 
 ### 2. Cookie 属性
 
