@@ -25,21 +25,51 @@ terraform apply
 
 このディレクトリは以下の循環依存を抱えている:
 
-- `storage` bucket policy には `edge` の OAC ARN が必要
+- `storage` bucket policy には `edge` の OAC ARN (実体は CloudFront distribution ARN) が必要
 - `compute` HTTPS listener には `edge` の ACM ARN が必要
 
-初回 apply はこの 2 点を**空文字列**にして通す (main.tf の `cloudfront_oac_arn = ""`、
-`alb_certificate_arn = ""`)。apply 後、以下の手順で埋める:
+main.tf の編集を避けるため、**変数経由**で値を受け渡す運用にしている
+(architect PR #53 HIGH 指摘対応):
 
-1. edge モジュール apply 完了後、`terraform output -raw route53_name_servers` で NS を取得
-2. お名前.com で NS レコードを変更 ([docs/operations/dns-delegation.md](../../../docs/operations/dns-delegation.md) 参照)
-3. NS 伝播を待ち (15 分〜数時間)、ACM 証明書が `ISSUED` になることを確認
-4. **main.tf を編集**: `module.storage.cloudfront_oac_arn = module.edge.cloudfront_distribution_arn`、
-   `module.compute.alb_certificate_arn = module.edge.acm_alb_arn`
-5. 2 度目の `terraform apply`
+```hcl
+# variables.tf
+variable "cloudfront_distribution_arn_override" { default = "" }
+variable "alb_certificate_arn_override"         { default = "" }
 
-**Phase 0.5-07 時点では初回 apply の成功までがスコープ**。二段階目の手順書は
-[docs/operations/stg-deployment.md](../../../docs/operations/stg-deployment.md) (P0.5-16) で整備。
+# main.tf
+module "storage" {
+  cloudfront_oac_arn = var.cloudfront_distribution_arn_override
+}
+module "compute" {
+  alb_certificate_arn = var.alb_certificate_arn_override
+}
+```
+
+### 運用手順
+
+1. **初回 apply** (両 override 空のまま):
+   ```bash
+   terraform apply
+   ```
+2. Route 53 NS を出力から取得し、お名前.com で設定
+   ([docs/operations/dns-delegation.md](../../../docs/operations/dns-delegation.md))
+3. NS 伝播を待ち (15 分〜数時間)、ACM 証明書が `ISSUED` になることを確認:
+   ```bash
+   aws acm describe-certificate --region us-east-1 --certificate-arn $(terraform output -raw acm_cloudfront_arn)
+   ```
+4. **二段階目**: override 値を取得して tfvars に追記:
+   ```bash
+   terraform output -raw cloudfront_distribution_arn
+   terraform output -raw acm_alb_arn
+   # terraform.tfvars に以下を追記
+   cloudfront_distribution_arn_override = "<cf.arn>"
+   alb_certificate_arn_override         = "<acm.arn>"
+
+   terraform apply
+   ```
+
+**main.tf を編集する必要はない**。tfvars 変更のみで二段階目に進めるので
+CI/CD 自動化も可能 (Phase 0.5-14 の cd-stg.yml で 2 回 apply する pipeline)。
 
 ## リソース一覧 (概算)
 

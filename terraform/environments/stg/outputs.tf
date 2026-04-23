@@ -37,11 +37,13 @@ output "ecs_cluster_name" {
 output "rds_endpoint" {
   description = "RDS エンドポイント (app の DATABASE_URL に使う)"
   value       = module.data.rds_endpoint
+  sensitive   = true # architect PR #53 MEDIUM: hostname と port を terminal/CI ログに晒さない
 }
 
 output "redis_connection_url" {
   description = "Redis 接続 URL (app の REDIS_URL に使う)"
   value       = module.data.redis_connection_url
+  sensitive   = true # 接続先 host 情報を含むため
 }
 
 output "alerts_topic_arn" {
@@ -52,4 +54,16 @@ output "alerts_topic_arn" {
 output "secret_arns" {
   description = "ECS task definition の secrets 属性や IAM policy で参照"
   value       = module.secrets.secret_arns
+  sensitive   = true # 個別の ARN 自体は公開情報だが、全 Secret の存在リストを平文で出さない
+}
+
+# 二段階 apply で使う ARN (terraform.tfvars に書き戻す)
+output "cloudfront_distribution_arn" {
+  description = "二段階 apply 時に terraform.tfvars の cloudfront_distribution_arn_override に設定"
+  value       = module.edge.cloudfront_distribution_arn
+}
+
+output "acm_alb_arn" {
+  description = "二段階 apply 時に terraform.tfvars の alb_certificate_arn_override に設定"
+  value       = module.edge.acm_alb_arn
 }

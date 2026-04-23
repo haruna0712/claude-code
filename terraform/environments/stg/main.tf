@@ -94,10 +94,9 @@ module "storage" {
   aws_account_id   = data.aws_caller_identity.current.account_id
   frontend_origins = ["https://${var.app_subdomain}.${var.domain_name}"]
 
-  # cloudfront_oac_arn は edge 作成後に埋める (terraform.tfvars の更新で対応)。
-  # 変数未設定時は bucket policy がスキップされるが、Public Access Block と
-  # IAM 署名リクエストで保護されているので脆弱ではない (see storage/README.md)。
-  cloudfront_oac_arn = ""
+  # 二段階 apply (architect PR #53 HIGH): 初回は空、edge 作成後に tfvars で
+  # `cloudfront_distribution_arn_override` を埋めて再 apply。
+  cloudfront_oac_arn = var.cloudfront_distribution_arn_override
 }
 
 # ---------------------------------------------------------------------------
@@ -116,9 +115,9 @@ module "compute" {
   public_subnet_ids     = module.network.public_subnet_ids
   alb_security_group_id = module.network.alb_security_group_id
 
-  # edge 作成後に acm_alb_arn を渡す (二段階 apply)。
+  # edge 作成後に acm_alb_arn を渡す (二段階 apply、architect PR #53 HIGH)。
   # 最初の apply は空文字列 = HTTP only で ALB を起動。
-  alb_certificate_arn = ""
+  alb_certificate_arn = var.alb_certificate_arn_override
 
   alb_idle_timeout_seconds = 3600
   enable_fargate_spot      = true
@@ -141,7 +140,7 @@ module "edge" {
 
   domain_name        = var.domain_name
   app_subdomain      = var.app_subdomain
-  webhook_subdomain  = "webhook"
+  webhook_subdomain  = var.webhook_subdomain
 
   alb_dns_name = module.compute.alb_dns_name
   alb_zone_id  = module.compute.alb_zone_id
