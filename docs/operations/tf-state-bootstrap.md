@@ -70,15 +70,61 @@ aws dynamodb describe-table --table-name sns-stg-tf-lock --query 'Table.TableSta
 
 ## 削除
 
-stg 環境を破棄する際は state file が含まれる S3 バケットも明示的に削除する:
+stg 環境を完全に破棄する際は以下の**厳密な順序**で実行する。バージョニングが有効な
+バケットは **全バージョン + delete markers** を個別削除しないと `BucketNotEmpty` で失敗する。
+
+### 前提
+- 先に `terraform destroy` で AWS 上の stg リソースを削除済み
+- state ファイルはもう使わないことを確認
+
+### 手順
 
 ```bash
-# state バケット内の全オブジェクト (全バージョン含む) を削除
-aws s3api delete-objects --bucket sns-stg-tf-state ...
-# バケット削除
-aws s3api delete-bucket --bucket sns-stg-tf-state
-# lock テーブル削除
-aws dynamodb delete-table --table-name sns-stg-tf-lock
+BUCKET=sns-stg-tf-state
+TABLE=sns-stg-tf-lock
+REGION=ap-northeast-1
+
+# 1. まず現行 state オブジェクトの全バージョンを列挙して削除
+aws s3api list-object-versions \
+  --bucket "${BUCKET}" \
+  --region "${REGION}" \
+  --output json \
+  --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}' \
+  > /tmp/versions.json
+
+if [ "$(jq '.Objects | length' /tmp/versions.json)" -gt 0 ]; then
+  aws s3api delete-objects \
+    --bucket "${BUCKET}" \
+    --region "${REGION}" \
+    --delete "file:///tmp/versions.json"
+fi
+
+# 2. Delete markers も列挙して削除 (バージョニング有効バケット特有)
+aws s3api list-object-versions \
+  --bucket "${BUCKET}" \
+  --region "${REGION}" \
+  --output json \
+  --query '{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' \
+  > /tmp/markers.json
+
+if [ "$(jq '.Objects | length' /tmp/markers.json)" -gt 0 ]; then
+  aws s3api delete-objects \
+    --bucket "${BUCKET}" \
+    --region "${REGION}" \
+    --delete "file:///tmp/markers.json"
+fi
+
+# 3. バケット削除 (空になっていることを確認してから)
+aws s3api delete-bucket --bucket "${BUCKET}" --region "${REGION}"
+
+# 4. DynamoDB lock テーブル削除
+aws dynamodb delete-table --table-name "${TABLE}" --region "${REGION}"
 ```
 
-**警告**: 消すと `terraform destroy` 前の state も消えるため、順序に注意。
+### 警告
+
+- 手順 1-2 を飛ばすと `delete-bucket` が `BucketNotEmpty` で失敗する
+- MFA Delete が有効化されている場合は root account + MFA デバイスが必要
+- `terraform destroy` 前に state を消すと、実リソースが残ったまま Terraform
+  から追跡不能になる。必ず **terraform destroy → state 削除** の順を守ること
+- prod 環境では state を消す前にスナップショット (別バケットへコピー) 推奨

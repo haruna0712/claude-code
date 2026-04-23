@@ -58,14 +58,28 @@ else
   echo "📦 S3 bucket 作成中..."
   if [[ "${REGION}" == "us-east-1" ]]; then
     # us-east-1 だけは LocationConstraint を指定しない特殊仕様
-    aws s3api create-bucket --bucket "${BUCKET}" --region "${REGION}"
+    aws s3api create-bucket --bucket "${BUCKET}" --region "${REGION}" \
+      --object-ownership BucketOwnerEnforced
   else
     aws s3api create-bucket \
       --bucket "${BUCKET}" \
       --region "${REGION}" \
+      --object-ownership BucketOwnerEnforced \
       --create-bucket-configuration "LocationConstraint=${REGION}"
   fi
 fi
+
+# SECURITY: Public Access Block は最初に適用する (architect PR #45 HIGH)。
+# 他の設定より前に置くことで、create-bucket 直後の短い窓で public ACL を
+# 受け付けてしまう race condition を塞ぐ。
+aws s3api put-public-access-block \
+  --bucket "${BUCKET}" \
+  --public-access-block-configuration '{
+    "BlockPublicAcls": true,
+    "IgnorePublicAcls": true,
+    "BlockPublicPolicy": true,
+    "RestrictPublicBuckets": true
+  }'
 
 # バージョニング (state の巻き戻し・監査目的)
 aws s3api put-bucket-versioning \
@@ -81,15 +95,14 @@ aws s3api put-bucket-encryption \
     ]
   }'
 
-# Public Access を全て遮断
-aws s3api put-public-access-block \
+# タグ付け (コスト配分・監査用。DynamoDB テーブルとキーを揃える)
+aws s3api put-bucket-tagging \
   --bucket "${BUCKET}" \
-  --public-access-block-configuration '{
-    "BlockPublicAcls": true,
-    "IgnorePublicAcls": true,
-    "BlockPublicPolicy": true,
-    "RestrictPublicBuckets": true
-  }'
+  --tagging "TagSet=[
+    {Key=Project,Value=engineer-sns},
+    {Key=Environment,Value=stg},
+    {Key=ManagedBy,Value=bootstrap-tf-state}
+  ]"
 
 echo "✅ S3 bucket 準備完了"
 
