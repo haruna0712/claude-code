@@ -10,6 +10,7 @@
  *
  * ランタイムでの `notFound()` 分岐はもう不要だが、多層防御として残す。
  */
+import type { ReactNode } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -212,7 +213,7 @@ export default function ComponentsDemo() {
 
 interface SectionProps {
 	title: string;
-	children: React.ReactNode;
+	children: ReactNode;
 }
 
 function Section({ title, children }: SectionProps) {

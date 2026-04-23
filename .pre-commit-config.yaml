@@ -34,7 +34,7 @@ repos:
         exclude: ^(demo\.gif|client/package-lock\.json)$
       - id: check-merge-conflict
       - id: check-executables-have-shebangs
-        exclude: ^plugins/  # 外部プラグインの shebang は上流管理
+        exclude: ^plugins/ # 外部プラグインの shebang は上流管理
       - id: check-shebang-scripts-are-executable
         exclude: ^plugins/
       - id: detect-private-key
@@ -113,13 +113,15 @@ repos:
             | ^\.secrets\.baseline$
           )
 
-  # --- Terraform (Phase 0.5 で terraform/ が増え次第自動有効化) ---
-  # CI 側は .github/workflows/ci.yml の pre-commit ジョブで hashicorp/setup-terraform
-  # を事前に呼ぶことで terraform バイナリを供給する。
-  - repo: https://github.com/antonbabenko/pre-commit-terraform
-    rev: v1.96.1
-    hooks:
-      - id: terraform_fmt
-        files: ^terraform/.*\.(tf|tfvars)$
-      - id: terraform_validate
-        files: ^terraform/.*\.tf$
+  # --- Terraform ---
+  # pre-commit での terraform_fmt / terraform_validate は F-17 (terraform CI 専用 PR) で
+  # 再有効化する。それまでは CI 側 (.github/workflows/ci.yml の Terraform ジョブ) で
+  # fmt/validate を実施する設計。
+  # - 単体 module validate は provider/var 未解決で必ず落ちる (設計上の制約)
+  # - CI ランナーに terraform バイナリを毎回 setup すると pre-commit キャッシュが
+  #   効かず時間を食うため、別 job に分離した方が早い
+  # - repo: https://github.com/antonbabenko/pre-commit-terraform
+  #   rev: v1.96.1
+  #   hooks:
+  #     - id: terraform_fmt
+  #       files: ^terraform/.*\.(tf|tfvars)$
