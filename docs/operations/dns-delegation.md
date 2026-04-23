@@ -1,5 +1,7 @@
 # お名前.com → Route 53 への NS 委任手順 (P0.5-10)
 
+> 最終確認: 2026-04 (UI は時期により変わるため、差異があれば Issue を起票)
+
 お名前.com で取得した apex ドメインのネームサーバー (NS) を AWS Route 53 に
 切り替える手順。初回の stg デプロイ前に一度だけ実行する。
 
@@ -21,9 +23,16 @@
 
 ### 1. Route 53 の NS レコードを取得
 
+output は list 型なので `-json` で取るか、`| jq -r` で改行区切りに展開する:
+
 ```bash
 cd terraform/environments/stg
+
+# JSON array で取得 (目視用)
 terraform output -json route53_name_servers
+
+# 改行区切りで取得 (コピペしやすい)
+terraform output -json route53_name_servers | jq -r '.[]'
 ```
 
 出力例:
@@ -37,9 +46,19 @@ terraform output -json route53_name_servers
 ]
 ```
 
-4 本すべて控える (順序は関係ない)。
+> **⚠ 4 本すべて登録が必須** (doc-updater PR #54 HIGH)。
+> 一部のクライアントは 4 本をラウンドロビンで照会するため、3 本以下だと
+> 一定確率で NXDOMAIN が返る。ドット (`.`) で終わる FQDN 形式だが、
+> お名前.com の入力欄ではドットを付けずに貼る (下記手順 2 参照)。
 
 ### 2. お名前.com のコントロールパネルで NS を更新
+
+> **⚠ セキュリティ** (doc-updater PR #54 MEDIUM):
+> 本ステップはドメイン登録者アカウントへのログインが必要。作業前に以下を確認:
+> - **2FA が有効**であること (お名前.com の「会員情報」→「2段階認証」)
+> - 不審なログイン履歴がないこと
+> - 作業完了後、必要ならパスワードローテーション
+> DNS 権限を奪われるとフィッシング・証明書乗っ取りに直結するため。
 
 1. お名前.com の [ドメイン Navi](https://navi.onamae.com) にログイン
 2. 左サイドバー「ドメイン」→「ドメイン一覧」
@@ -83,11 +102,16 @@ dig NS example.com @8.8.8.8 +short
 NS 切替が反映されたら、ACM の DNS 検証 (Route 53 に `_<hash>.example.com`
 CNAME が自動追加済み) が自動で通る。
 
+ACM は **リージョン別に 2 本** 発行している (edge モジュールの設計):
+- **ap-northeast-1**: ALB 用 (リスナーが ACM を参照するので同リージョン必須)
+- **us-east-1**: CloudFront 用 (CloudFront は us-east-1 の ACM しか受け付けない)
+
 ```bash
-# 2 本の ACM 証明書が ISSUED になるまで待つ
+# ap-northeast-1 (ALB 用)
 aws acm list-certificates --region ap-northeast-1 \
   --query 'CertificateSummaryList[?DomainName==`stg.example.com`]'
 
+# us-east-1 (CloudFront 用)
 aws acm list-certificates --region us-east-1 \
   --query 'CertificateSummaryList[?DomainName==`stg.example.com`]'
 ```
