@@ -36,6 +36,17 @@ variable "generate_random_values" {
   default     = true
 }
 
+variable "kms_key_id" {
+  description = <<-EOT
+    シークレット暗号化用の KMS CMK ID または ARN。null (default) の場合は
+    AWS managed key (alias/aws/secretsmanager) を使う。
+    security-reviewer PR #49 LOW: 先に変数化しておくことで prod CMK 移行時に
+    ForceNew を避ける。CMK 採用時の ADR は別途発行予定。
+  EOT
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "全リソース共通タグ"
   type        = map(string)

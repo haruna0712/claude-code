@@ -68,15 +68,22 @@ resource "aws_secretsmanager_secret" "generated" {
   name                    = "${local.prefix}/${each.key}"
   description             = each.value.description
   recovery_window_in_days = var.recovery_window_in_days
+  kms_key_id              = var.kms_key_id
 
   tags = merge(local.default_tags, { Key = each.key })
 }
 
 resource "aws_secretsmanager_secret_version" "generated" {
-  for_each = var.generate_random_values ? local.generated_secrets : {}
+  # security-reviewer PR #49 MEDIUM: generate_random_values=false の時でも
+  # version を作らないと AWSCURRENT が存在せず GetSecretValue が
+  # ResourceNotFoundException を返す。値が無い状態でも必ず placeholder を
+  # 入れておき、後から手動 put で上書きする。
+  for_each = local.generated_secrets
 
-  secret_id     = aws_secretsmanager_secret.generated[each.key].id
-  secret_string = random_password.generated[each.key].result
+  secret_id = aws_secretsmanager_secret.generated[each.key].id
+  secret_string = var.generate_random_values ? random_password.generated[each.key].result : jsonencode({
+    value = "SET_VIA_AWS_CLI: aws secretsmanager put-secret-value --secret-id ${local.prefix}/${each.key} --secret-string ...",
+  })
 
   # 運用者が手動で put-secret-value で上書きした場合、terraform がそれを
   # revert しないように ignore する。random_password を変更すると意図的に
@@ -96,16 +103,24 @@ resource "aws_secretsmanager_secret" "placeholder" {
   name                    = "${local.prefix}/${each.key}"
   description             = each.value
   recovery_window_in_days = var.recovery_window_in_days
+  kms_key_id              = var.kms_key_id
 
   tags = merge(local.default_tags, { Key = each.key })
 }
 
+# Placeholder の初期値は実運用の書式 (plain value) と合わせるため、
+# アプリが直接 parse して key "value" を取り出すことを前提とした JSON にする。
+# 運用者が手動 put する際も同じ `{"value": "<actual-secret>"}` 形式を使う想定
+# (security-reviewer PR #49 HIGH: 書式不一致バグの予防)。
+# アプリ側コード例:
+#   secret_dict = json.loads(secrets_manager_client.get_secret_value(...)["SecretString"])
+#   api_key = secret_dict["value"]
 resource "aws_secretsmanager_secret_version" "placeholder_initial" {
   for_each = local.placeholder_secrets
 
-  secret_id     = aws_secretsmanager_secret.placeholder[each.key].id
+  secret_id = aws_secretsmanager_secret.placeholder[each.key].id
   secret_string = jsonencode({
-    note = "SET_VIA_AWS_CLI: aws secretsmanager put-secret-value --secret-id ${local.prefix}/${each.key} --secret-string ...",
+    value = "SET_VIA_AWS_CLI: aws secretsmanager put-secret-value --secret-id ${local.prefix}/${each.key} --secret-string '{\"value\":\"<actual-secret>\"}'",
   })
 
   # 手動 put で上書きされても terraform が戻さない
