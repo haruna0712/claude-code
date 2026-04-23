@@ -118,6 +118,16 @@ jobs:
       # 未設定時は CI 専用ダミーにフォールバックして PR の動作確認だけは通す。
       SIGNING_KEY: ${{ secrets.DJANGO_SIGNING_KEY || 'ci-fallback-only-not-for-stg-or-prod' }}
       DOMAIN: localhost
+      # config/urls.py が `path(settings.ADMIN_URL, ...)` で参照するため空値だと URL 解決で落ちる。
+      DJANGO_ADMIN_URL: "admin/"
+      # apps/common/logging.py 等で参照される可能性のある env を CI 用に埋める
+      POSTGRES_DB: ci
+      POSTGRES_USER: ci
+      POSTGRES_PASSWORD: ci  # pragma: allowlist secret
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
