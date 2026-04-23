@@ -131,7 +131,9 @@ jobs:
           # Python 3.12 は setuptools 同梱なし。drf-yasg 1.21.7 が pkg_resources を
           # 要求するが、setuptools 81 以降では pkg_resources が削除されているため 80 系を pin。
           pip install "setuptools<81"
-          pip install -r requirements/base.txt
+          # local.txt = base + psycopg2-binary + watchfiles + black。CI では Django
+          # system check / migrations に psycopg2 が必須なので local.txt を使う。
+          pip install -r requirements/local.txt
           pip install ruff==0.6.9 pytest pytest-django pytest-cov coverage
       - name: ruff (lint + format check)
         run: |
