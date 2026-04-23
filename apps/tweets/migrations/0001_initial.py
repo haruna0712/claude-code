@@ -43,7 +43,7 @@ class Migration(migrations.Migration):
                         verbose_name="ID",
                     ),
                 ),
-                ("body", models.TextField(max_length=180)),
+                ("body", models.CharField(max_length=180)),
                 ("is_deleted", models.BooleanField(default=False)),
                 ("deleted_at", models.DateTimeField(blank=True, null=True)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
@@ -224,17 +224,7 @@ class Migration(migrations.Migration):
                 name="tweet_edit_count_lte_max",
             ),
         ),
-        # body は TextField のため Django ORM は max_length を CHECK にしない。
-        # defense in depth として PostgreSQL 側で char_length 制約を追加する。
-        migrations.RunSQL(
-            sql=(
-                "ALTER TABLE tweets_tweet "
-                "ADD CONSTRAINT tweet_body_char_length_lte_180 "
-                "CHECK (char_length(body) <= 180)"
-            ),
-            reverse_sql=(
-                "ALTER TABLE tweets_tweet "
-                "DROP CONSTRAINT IF EXISTS tweet_body_char_length_lte_180"
-            ),
-        ),
+        # body は CharField(max_length=180) に変更したため、PostgreSQL 側では
+        # `varchar(180)` になり DB レイヤーでも長さが強制される。
+        # full_clean() / DB CHECK 両方で bypass 不可。
     ]

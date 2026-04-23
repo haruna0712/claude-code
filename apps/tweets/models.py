@@ -49,7 +49,9 @@ class Tweet(models.Model):
         related_name="tweets",
     )
     # Markdown ソース (HTML 換算は P1-09 で別実装)
-    body = models.TextField(max_length=TWEET_BODY_MAX_LENGTH)
+    # CharField にすることで `max_length` が full_clean/DB 両方で強制される。
+    # TextField だと `max_length` はフォーム用のヒントに過ぎず ValidationError を投げない。
+    body = models.CharField(max_length=TWEET_BODY_MAX_LENGTH)
 
     # ソフト削除 (§3.9)
     is_deleted = models.BooleanField(default=False)
@@ -93,7 +95,7 @@ class Tweet(models.Model):
         ]
         # defense in depth (python-reviewer HIGH):
         # - TOCTOU で record_edit が競合しても edit_count は 5 を超えない
-        # - body は TextField だが CHAR_LENGTH 制約も migration で RunSQL 追加
+        # - body は CharField(max_length=180) なので DB 側も varchar(180) で長さ enforce
         constraints = [
             models.CheckConstraint(
                 check=Q(edit_count__lte=TWEET_MAX_EDIT_COUNT),
@@ -154,7 +156,7 @@ class Tweet(models.Model):
           インスタンスに読み戻す。
         """
 
-        # new_body の長さは常に検証する (DB の TextField は max_length を CHECK にしない)
+        # new_body の長さは常に検証する (CharField にしたが record_edit は save() を使わないため)
         if len(new_body) > TWEET_BODY_MAX_LENGTH:
             raise ValidationError(f"本文は {TWEET_BODY_MAX_LENGTH} 字以内で入力してください。")
 
