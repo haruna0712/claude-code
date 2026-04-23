@@ -27,7 +27,10 @@ class TweetTagInline(admin.TabularInline):
     extra = 0
     fields = ("tag", "created_at")
     readonly_fields = ("created_at",)
-    autocomplete_fields = ("tag",)
+    # autocomplete_fields は Django の system check で `tags.Tag` の lazy FK 解決が
+    # 間に合わず AttributeError になるため、raw_id_fields に切替。
+    # 運用で tag 検索が必要になったら TagAdmin に search_fields 追加 + ここを autocomplete_fields に戻す。
+    raw_id_fields = ("tag",)
 
 
 @admin.register(Tweet)
@@ -84,7 +87,8 @@ class TweetImageAdmin(admin.ModelAdmin):
 class TweetTagAdmin(admin.ModelAdmin):
     list_display = ("id", "tweet", "tag", "created_at")
     search_fields = ("tweet__id", "tag__name")
-    autocomplete_fields = ("tag",)
+    # autocomplete_fields は system check と衝突するため raw_id_fields を使用 (TweetTagInline と同様)
+    raw_id_fields = ("tag",)
 
 
 @admin.register(TweetEdit)
