@@ -63,6 +63,9 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       # ---------- Backend (Django) ----------
+      # buildcache tag に環境サフィックスを付けて、将来 CI (PR build) や
+      # prod CD が同一 ECR リポジトリを使っても干渉しないようにする
+      # (security-reviewer PR #58 MEDIUM)。
       - name: Build & push backend
         uses: docker/build-push-action@v6
         with:
@@ -72,8 +75,8 @@ jobs:
           tags: |
             ${{ vars.ECR_BACKEND_REPOSITORY }}:${{ env.IMAGE_TAG }}
             ${{ vars.ECR_BACKEND_REPOSITORY }}:stg-latest
-          cache-from: type=registry,ref=${{ vars.ECR_BACKEND_REPOSITORY }}:buildcache
-          cache-to: type=registry,ref=${{ vars.ECR_BACKEND_REPOSITORY }}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ vars.ECR_BACKEND_REPOSITORY }}:buildcache-stg
+          cache-to: type=registry,ref=${{ vars.ECR_BACKEND_REPOSITORY }}:buildcache-stg,mode=max
           provenance: false
 
       # ---------- Frontend (Next.js) ----------
@@ -86,8 +89,8 @@ jobs:
           tags: |
             ${{ vars.ECR_FRONTEND_REPOSITORY }}:${{ env.IMAGE_TAG }}
             ${{ vars.ECR_FRONTEND_REPOSITORY }}:stg-latest
-          cache-from: type=registry,ref=${{ vars.ECR_FRONTEND_REPOSITORY }}:buildcache
-          cache-to: type=registry,ref=${{ vars.ECR_FRONTEND_REPOSITORY }}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ vars.ECR_FRONTEND_REPOSITORY }}:buildcache-stg
+          cache-to: type=registry,ref=${{ vars.ECR_FRONTEND_REPOSITORY }}:buildcache-stg,mode=max
           provenance: false
           build-args: |
             NEXT_PUBLIC_SENTRY_DSN=${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
@@ -104,8 +107,8 @@ jobs:
           tags: |
             ${{ vars.ECR_NGINX_REPOSITORY }}:${{ env.IMAGE_TAG }}
             ${{ vars.ECR_NGINX_REPOSITORY }}:stg-latest
-          cache-from: type=registry,ref=${{ vars.ECR_NGINX_REPOSITORY }}:buildcache
-          cache-to: type=registry,ref=${{ vars.ECR_NGINX_REPOSITORY }}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ vars.ECR_NGINX_REPOSITORY }}:buildcache-stg
+          cache-to: type=registry,ref=${{ vars.ECR_NGINX_REPOSITORY }}:buildcache-stg,mode=max
           provenance: false
 
   # -----------------------------------------------------------------------
@@ -180,6 +183,11 @@ jobs:
     needs: deploy
     steps:
       - name: curl /api/health/
+        # TODO(Phase1): `continue-on-error: true` を外して smoke 失敗で job を
+        # 落とすこと。Phase 0.5 では SMOKE_URL 未設定 + ECS サービス未配線で
+        # 常時失敗するので warning 止まりにしている。追跡 Issue: Phase 1 着手
+        # 時の `[P1-XX] Harden cd-stg.yml smoke test` で対応。
+        if: vars.SMOKE_URL != ''
         run: |
           url="${{ vars.SMOKE_URL }}/api/health/"
           echo "Hitting $url"
@@ -193,25 +201,34 @@ jobs:
           done
           echo "::error::Health check failed after 5 attempts"
           exit 1
-        # Phase 0.5 では SMOKE_URL が未設定のことがあるので失敗しても止めない
         continue-on-error: true
+      - name: Smoke test skipped notice
+        if: vars.SMOKE_URL == ''
+        run: |
+          echo "::warning::SMOKE_URL is not set; skipping smoke test. Configure it in repo Variables before Phase 1."
 
   # -----------------------------------------------------------------------
   # 5. Sentry release
+  # `secrets.SENTRY_AUTH_TOKEN` は `if:` 内で参照できないため、設定済みか
+  # どうかは Variables 側 (`vars.SENTRY_ORG`) で判定する
+  # (security-reviewer PR #58 LOW)。vars.SENTRY_ORG を入れる運用 =
+  # Sentry 連携を有効化する運用、という合意で揃える。
   # -----------------------------------------------------------------------
   sentry-release:
     name: Sentry release
     runs-on: ubuntu-latest
     needs: smoke-test
-    if: ${{ env.SENTRY_AUTH_TOKEN != '' }}
+    if: vars.SENTRY_ORG != ''
     env:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       SENTRY_ORG: ${{ vars.SENTRY_ORG }}
       SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
     steps:
       - uses: actions/checkout@v4
+      # サードパーティ Action は SHA pin で供給元の書換え攻撃を防ぐ
+      # (security-reviewer PR #58 MEDIUM)。バージョン注釈のコメントを併記。
       - name: Create Sentry release
-        uses: getsentry/action-release@v1
+        uses: getsentry/action-release@586b62368a1c6b5dffb12d55a1a7edfd2263ad3c # v1.7.0
         with:
           environment: stg
           version: ${{ env.IMAGE_TAG }}
