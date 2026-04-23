@@ -57,7 +57,7 @@ def api_client():
 
 
 @pytest.fixture
-def authenticated_client():  # noqa: ARG001 — プレースホルダ
+def authenticated_client():
     """認証済み APIClient を返す (P1-02 以降で本実装).
 
     TODO(P1-02 / P1-12): User model 拡張と JWT 発行フローが揃ったら、
