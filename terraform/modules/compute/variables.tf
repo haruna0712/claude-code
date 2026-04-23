@@ -78,7 +78,20 @@ variable "ecs_services" {
 }
 
 variable "enable_fargate_spot" {
-  description = "Celery worker を Fargate Spot で動かすか (stg=true、beat は常に非 Spot)"
+  description = <<-EOT
+    Cluster の capacity providers に FARGATE_SPOT を含めるか。
+    **本 module は cluster 定義までしか行わない**ため、実際に Spot で動かすには
+    環境ディレクトリの aws_ecs_service 側で以下のように明示的に上書きする必要がある
+    (architect PR #51 HIGH):
+
+    capacity_provider_strategy {
+      capacity_provider = "FARGATE_SPOT"
+      weight            = 1
+    }
+
+    celery-beat は Spot 絶対不可 (二重発火防止)、celery-worker と cold 系 batch は
+    Spot 推奨、django/next/daphne は FARGATE (on-demand) 推奨。
+  EOT
   type        = bool
   default     = true
 }

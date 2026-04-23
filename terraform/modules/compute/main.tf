@@ -98,7 +98,12 @@ resource "aws_ecr_repository" "this" {
   tags = merge(local.default_tags, { Service = each.value })
 }
 
-# 古いイメージ削除ポリシー: tagged は 30 個、untagged は 7 日で消す
+# 古いイメージ削除ポリシー (architect PR #51 HIGH 指摘反映):
+#   - release-* tag (手動タグ、本番ロールバック用): 30 個保持
+#   - stg-* tag (CI 自動タグ、PR/merge ごとに生成): 100 個保持
+#     毎 PR で stg-<sha> を push するため、30 個だとすぐ枯渇する
+#   - latest tag: 最新のみ保持
+#   - untagged: 7 日で削除
 resource "aws_ecr_lifecycle_policy" "cleanup" {
   for_each = aws_ecr_repository.this
 
@@ -108,17 +113,28 @@ resource "aws_ecr_lifecycle_policy" "cleanup" {
     rules = [
       {
         rulePriority = 1
-        description  = "Keep last 30 tagged images"
+        description  = "Keep last 30 release-* tagged images (prod rollback pool)"
         selection = {
-          tagStatus     = "tagged"
-          tagPatternList = ["*"]
-          countType     = "imageCountMoreThan"
-          countNumber   = 30
+          tagStatus      = "tagged"
+          tagPatternList = ["release-*"]
+          countType      = "imageCountMoreThan"
+          countNumber    = 30
         }
         action = { type = "expire" }
       },
       {
         rulePriority = 2
+        description  = "Keep last 100 stg-* tagged images (CI pool, high churn)"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["stg-*"]
+          countType      = "imageCountMoreThan"
+          countNumber    = 100
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 10
         description  = "Expire untagged images after 7 days"
         selection = {
           tagStatus   = "untagged"
@@ -144,10 +160,15 @@ resource "aws_lb" "this" {
   subnets         = var.public_subnet_ids
   security_groups = [var.alb_security_group_id]
 
+  # idle_timeout=3600s は Daphne WebSocket が再接続なしで最大 1h 生きるため。
+  # architect PR #51 HIGH: CloudFront origin_read_timeout (default 60s / edge
+  # モジュールで 60s 明示) とミスマッチするので、/ws/* は **edge モジュールの
+  # CloudFront behavior で origin read timeout を長めに設定する** か、または
+  # WebSocket は CloudFront を迂回する経路 (将来の別サブドメイン ws.<domain>)
+  # を検討。現状は CloudFront 経由で 60s ごとに keepalive ping を打つ前提で運用。
   idle_timeout               = var.alb_idle_timeout_seconds
   enable_deletion_protection = var.environment == "prod"
   enable_http2               = true
-  # WebSocket 超過トラフィックで HTTP/2 が切れるのを防ぐため、必要なら false に
 
   dynamic "access_logs" {
     for_each = var.alb_access_logs_bucket == "" ? [] : [1]
@@ -172,13 +193,18 @@ resource "aws_lb_target_group" "this" {
 
   deregistration_delay = 30
 
+  # architect PR #51 MEDIUM: matcher を "200" に絞り、リダイレクトを
+  # 健全状態と誤認しないようにする。
+  # TODO(Phase1): Next.js 側で軽量な /api/healthz route handler を用意し、
+  # next target group の health path を / から /api/healthz に差し替える。
+  # 現状 / は SSR をフルレンダするので 30s 間隔でコストが嵩む。
   health_check {
     path                = each.value.health
     interval            = 30
     timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 3
-    matcher             = "200-399"
+    matcher             = "200"
   }
 
   dynamic "stickiness" {
