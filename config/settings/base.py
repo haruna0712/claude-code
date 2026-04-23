@@ -1,11 +1,10 @@
 
-from pathlib import Path
-from os import getenv,path
-
-from dotenv import load_dotenv
 from datetime import timedelta
+from os import getenv, path
+from pathlib import Path
 
 import sentry_sdk
+from dotenv import load_dotenv
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.django import DjangoIntegration
 from sentry_sdk.integrations.redis import RedisIntegration
