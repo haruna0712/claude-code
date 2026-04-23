@@ -176,7 +176,9 @@ gh workflow run cd-stg.yml -f image_tag=<git-sha>
 
 ## 3. ロールバック
 
-### 3.1 ECS service レベル
+**推奨優先度**: §3.1 → §3.2 → §3.3。ECS service レベルで戻せるならそれが最も安全。
+
+### 3.1 ECS service レベル（最優先）
 
 直前の task definition revision に戻す (Phase 1 で aws_ecs_service が入ったら有効):
 
@@ -194,6 +196,10 @@ aws ecs update-service \
 ```
 
 ### 3.2 Image レベル (stg-latest タグを前の SHA に向ける)
+
+⚠️ **warning**: `stg-latest` タグ上書きは、同時に `cd-stg.yml` がデプロイ中だと
+競合する。§3.1 が機能するなら先にそちらを試すこと。どうしても image タグ自体を
+戻したい時だけ実行する。
 
 ```bash
 aws ecr batch-get-image \
@@ -232,6 +238,11 @@ aws s3api get-object \
 ---
 
 ## 4. データベースマイグレーション手動実行
+
+> **前提**: この章は **Phase 1 以降で有効**。Phase 0.5 時点では
+> `sns-stg-django-migrate` task definition が存在せず、`cd-stg.yml` の
+> migrate ジョブも placeholder のみ。Phase 1 で aws_ecs_task_definition と
+> aws_ecs_service が作られたら本章のコマンドが機能するようになる。
 
 CD の migrate ジョブが失敗した時、または特定の migration だけ流したい時:
 
@@ -315,7 +326,21 @@ fields @timestamp, @message, task_name
    aws ecs update-service --cluster sns-stg-cluster --service <svc> --force-new-deployment
    ```
 5. CloudTrail で漏洩時刻以降のアクセス履歴を追跡
-6. `git log -p` で commit 内容に secret が混入していないか確認 (detect-secrets baseline も更新)
+6. **Git 履歴全体の secret スキャン** (doc-updater 指摘、`git log -p` だけでは past
+   branches / deleted commits を取りこぼす):
+   ```bash
+   # detect-secrets で全 commit をスキャン
+   detect-secrets scan --all-files > /tmp/detect-secrets.json
+   detect-secrets audit /tmp/detect-secrets.json
+
+   # gitleaks で補完 (高精度、ルールセットも広い)
+   brew install gitleaks    # or: docker run -v "$PWD:/repo" zricethezav/gitleaks
+   gitleaks detect --source . --log-opts="--all"
+   ```
+   検知された場合は**履歴書き換え** (`git filter-repo` または BFG) を検討。
+   本当に履歴に混入していた場合、force push 後に全 contributor に clone し直しを依頼。
+7. `.secrets.baseline` を再生成 (`detect-secrets scan --baseline .secrets.baseline`)
+   し commit。
 
 ---
 
@@ -351,7 +376,17 @@ terraform destroy
 
 注意:
 - `rds_skip_final_snapshot = false` なので final snapshot が作成される
-- S3 bucket は `force_destroy = false` なので中身を手動削除する必要あり
+- S3 bucket は `force_destroy = false` なので **中身を手動削除** してから destroy
+  (doc-updater 指摘、具体コマンド):
+  ```bash
+  for bucket in sns-stg-media sns-stg-static sns-stg-backup; do
+    # バージョニング有効なので全バージョン削除
+    aws s3api list-object-versions --bucket "$bucket" \
+      --query '{Objects: [Versions[], DeleteMarkers[]][].{Key:Key,VersionId:VersionId}}' \
+      --output json > /tmp/versions-$bucket.json
+    aws s3api delete-objects --bucket "$bucket" --delete "file:///tmp/versions-$bucket.json"
+  done
+  ```
 - state bucket は teardown 後に削除する場合 [tf-state-bootstrap.md](./tf-state-bootstrap.md) の削除手順
 
 ---
@@ -367,8 +402,20 @@ aws ce get-cost-and-usage \
   --filter '{"Tags":{"Key":"Environment","Values":["stg"]}}'
 ```
 
-目標: **月 ¥20-30k (≒ $150-200)** を超えないこと。
-超過の主犯候補: データ転送 (CloudFront Out) / NAT 料金 / Fargate vCPU。
+### コスト推移の目安
+
+(doc-updater 指摘を反映):
+
+| 時期 | 想定月額 | 内訳のドライバ |
+|---|---|---|
+| Phase 0.5 直後 (最小構成、トラフィックほぼゼロ) | ¥10-15k ($70-100) | RDS + Redis + ALB + fck-nat の idle コスト |
+| Phase 1-5 終了時 (開発トラフィック + テストユーザー) | ¥18-23k ($120-155) | + Fargate 実稼働時間、CloudFront 少量データ転送 |
+| MVP 完成後 (初期 2000 ユーザー想定) | ¥22-28k ($150-185) | + Celery ジョブ / Bot / AI API / 画像配信 |
+
+**目標**: 月 ¥20-30k を超えないこと。
+**超過の主犯候補**: データ転送 (CloudFront Out) / NAT 料金 / Fargate vCPU。
+超過時は Cost Explorer の日次 drill-down → 原因特定 → Sentry カスタムメトリクスで
+サービス別使用量可視化、の順で切り分ける。
 
 ---
 
