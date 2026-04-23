@@ -203,11 +203,25 @@ pre-commit run --all-files
 └── README.md              # 本ファイル
 ```
 
+## トラブルシューティング
+
+| 症状 | 原因候補 | 対応 |
+|---|---|---|
+| `docker compose up` がポート衝突で失敗 | 既に 5432 / 6379 / 8025 / 8080 / 5555 を使うプロセスあり | `lsof -i :<port>` で特定し停止、もしくは `local.yml` の `ports:` マッピングを変更 |
+| `api` コンテナが `Permission denied` で起動失敗 | ボリュームマウント先の所有者不整合 (主に Linux) | `docker compose -f local.yml down -v` 後に再ビルド、それでも解決しなければ uid を揃える |
+| `pre-commit` が遅い | 初回は全フック + 環境構築で数分かかる | `pre-commit run --all-files` を一度通しておくと以後は差分ファイルのみで高速化 |
+| `ruff` が tmp ファイルを検知して失敗 | worktree / 一時ファイルを除外していない | `pyproject.toml` の `extend-exclude` に追加、または対象ディレクトリ外で作業 |
+| `gh auth status` が未ログイン | gh CLI 認証切れ | `gh auth login` → GitHub.com → HTTPS → Web Browser |
+| `terraform init` が backend エラー | tf-state バケットが未 bootstrap | `./scripts/bootstrap-tf-state.sh` を先に実行 (Phase 0.5) |
+| Next.js `npm run build` で Sentry エラー | DSN 未設定 + `SENTRY_ENVIRONMENT=production` 設定済み | ローカルビルドでは `SENTRY_ENVIRONMENT` を未設定 or `local` にする |
+
 ## ライセンス・リポジトリ方針
 
 - リポジトリ: `haruna0712/claude-code` (Public)
+- ライセンス: [LICENSE.md](./LICENSE.md) を参照 (上流の Claude Code fork 経緯により Anthropic Commercial Terms。SNS 本体として独立公開する際に MIT / Apache-2.0 等へ変更検討)
 - 上流の Claude Code に関する記述は [docs/CLAUDE_CODE.md](./docs/CLAUDE_CODE.md) を参照
 - Phase 9 以降の本番公開時に、必要に応じて専用リポへ切り出しを検討
+- 貢献ガイドは `CONTRIBUTING.md` として Phase 1 以降に整備予定
 
 ---
 
