@@ -88,6 +88,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
 # ---------------------------------------------------------------------------
 
 # backup: IA -> Glacier -> 期限削除
+# NOTE: Glacier (90 日最小) を採用し Deep Archive (180 日最小) を選ばないのは、
+# stg の監査要件が 730 日で、Deep Archive の 180 日最小 + 取出し遅延 (最大 48 時間)
+# を避けるため (security-reviewer PR #48 LOW 指摘)。prod で保持期間を 5 年以上に
+# 延ばす場合は Deep Archive 併用を再検討する。
 resource "aws_s3_bucket_lifecycle_configuration" "backup" {
   bucket = aws_s3_bucket.this["backup"].id
 
@@ -184,14 +188,20 @@ resource "aws_s3_bucket_cors_configuration" "media" {
     max_age_seconds = 3600
   }
 
-  cors_rule {
-    id              = "presigned-upload"
-    allowed_methods = ["PUT", "POST"]
-    # フロントエンドの origin のみ。Phase 0.5-07 の stg 環境で上書きする。
-    allowed_origins = ["https://stg.*"] # 仮、edge モジュール導入時に上書き
-    allowed_headers = ["Content-Type", "Content-MD5", "x-amz-*"]
-    expose_headers  = ["ETag"]
-    max_age_seconds = 3600
+  # PUT/POST は var.frontend_origins に明示列挙された origin 限定
+  # (security-reviewer PR #48 HIGH)。S3 CORS の allowed_origins は末尾
+  # 1 箇所の `*` しか効かず、`https://stg.*` のような書き方は
+  # `https://stg.evil.com` 等の攻撃者 origin を通してしまう。
+  dynamic "cors_rule" {
+    for_each = length(var.frontend_origins) > 0 ? [1] : []
+    content {
+      id              = "presigned-upload"
+      allowed_methods = ["PUT", "POST"]
+      allowed_origins = var.frontend_origins
+      allowed_headers = ["Content-Type", "Content-MD5", "x-amz-*"]
+      expose_headers  = ["ETag"]
+      max_age_seconds = 3600
+    }
   }
 }
 
@@ -219,6 +229,18 @@ data "aws_iam_policy_document" "cloudfront_read" {
       test     = "StringEquals"
       variable = "AWS:SourceArn"
       values   = [var.cloudfront_oac_arn]
+    }
+
+    # AWS 公式推奨の追加ガード (security-reviewer PR #48 MEDIUM)。
+    # SourceArn だけでなく SourceAccount でも絞ると、将来 CloudFront
+    # ディストリを別アカウントに移す可能性への保険になる。
+    dynamic "condition" {
+      for_each = var.aws_account_id == "" ? [] : [1]
+      content {
+        test     = "StringEquals"
+        variable = "AWS:SourceAccount"
+        values   = [var.aws_account_id]
+      }
     }
   }
 }

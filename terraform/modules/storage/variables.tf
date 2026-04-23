@@ -40,6 +40,34 @@ variable "cloudfront_oac_arn" {
   default     = ""
 }
 
+variable "aws_account_id" {
+  description = <<-EOT
+    自 AWS アカウント ID。OAC bucket policy の AWS:SourceAccount 条件に使う
+    (security-reviewer PR #48 MEDIUM)。未指定なら SourceAccount 条件をスキップ
+    (SourceArn のみで絞る)。
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "frontend_origins" {
+  description = <<-EOT
+    media bucket の PUT/POST CORS で許可する frontend origin のリスト。
+    例: ["https://stg.example.com"]。S3 CORS は正規表現ではなく完全一致 + 末尾
+    ワイルドカードしか効かないため、必ず具体的な値を指定する
+    (security-reviewer PR #48 HIGH)。
+    空リストの場合は PUT/POST ルールを作成しない (presigned URL 直アップロード不可)。
+  EOT
+  type        = list(string)
+  default     = []
+  validation {
+    condition = alltrue([
+      for o in var.frontend_origins : can(regex("^https://[^*]+$", o))
+    ])
+    error_message = "frontend_origins は https:// で始まる完全な origin (ワイルドカード不可) のリスト。"
+  }
+}
+
 variable "tags" {
   description = "全リソース共通タグ"
   type        = map(string)
