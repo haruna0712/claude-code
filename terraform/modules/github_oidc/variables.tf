@@ -34,6 +34,16 @@ variable "allowed_refs" {
   EOT
   type        = list(string)
   default     = []
+  # security-reviewer PR #57 MEDIUM: StringLike で広すぎるパターン (例:
+  # "repo:owner/repo:*") が渡ると全 ref/environment から assume 可能になる。
+  # 必ず `:ref:`, `:environment:`, `:pull_request` セグメントを含むことを強制する。
+  validation {
+    condition = alltrue([
+      for r in var.allowed_refs :
+      can(regex("^repo:[^:]+/[^:]+:(ref:|environment:|pull_request$)", r))
+    ])
+    error_message = "allowed_refs の各値は 'repo:<owner>/<repo>:ref:...' か ':environment:...' か ':pull_request' で始まること。ワイルドカードのみの指定は禁止。"
+  }
 }
 
 variable "ecr_repository_arns" {
@@ -46,6 +56,18 @@ variable "ecs_cluster_arn" {
   description = "ecs update-service を許可する ECS Cluster ARN。空なら ECS 権限をスキップ。"
   type        = string
   default     = ""
+}
+
+variable "ecs_task_role_arns" {
+  description = <<-EOT
+    iam:PassRole を許可する task / task_execution ロール ARN のリスト
+    (security-reviewer PR #57 HIGH: resource="*" を避ける)。
+    空リスト時は PassRole を全 role ("*") に対して許可するが、
+    PassedToService=ecs-tasks.amazonaws.com で絞る (stg 暫定)。
+    prod ではこのリストを必ず埋めること。
+  EOT
+  type        = list(string)
+  default     = []
 }
 
 variable "secrets_arn_prefix" {

@@ -39,8 +39,12 @@ resource "aws_iam_openid_connect_provider" "github_actions" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
 
-  # GitHub 公式のルート証明書 thumbprint (2026 時点の最新)。
-  # 将来 GitHub が回転した際はこの値を更新する。
+  # thumbprint_list (security-reviewer PR #57 MEDIUM):
+  #   AWS は 2023 年以降、OIDC トークンの署名検証を thumbprint ベースから
+  #   ルート CA ベースに移行しているため、ここで列挙する値の実質的な効力は
+  #   限定的。ただし aws_iam_openid_connect_provider リソースは値を要求する
+  #   ため、GitHub 公式の DigiCert 系ルート thumbprint を記録。将来 AWS が
+  #   再度 thumbprint 検証に戻した場合の後退防止として維持する。
   thumbprint_list = [
     "6938fd4d98bab03faadb97b34396831e3780aea1",
     "1c58a3a8518e8759bf075b76b750d4f2df264fcd",
@@ -146,17 +150,17 @@ data "aws_iam_policy_document" "ecs_deploy" {
     resources = ["*"] # 上記 Describe 系は resource level 絞りにくい
   }
 
+  # UpdateService / RunTask / StopTask は ecs:cluster condition で
+  # クラスター外への拡張を拒否できる。
   statement {
-    sid    = "EcsUpdateService"
+    sid    = "EcsClusterScopedActions"
     effect = "Allow"
     actions = [
       "ecs:UpdateService",
-      "ecs:RegisterTaskDefinition",
-      "ecs:DeregisterTaskDefinition",
       "ecs:RunTask", # マイグレーション run-task 用
       "ecs:StopTask",
     ]
-    resources = ["*"] # UpdateService は cluster ARN 指定可能だが RegisterTaskDefinition は不可
+    resources = ["*"] # UpdateService 等は resource を cluster ARN で指定できるが、Service ARN 個別列挙が煩雑
     condition {
       test     = "StringEquals"
       variable = "ecs:cluster"
@@ -164,12 +168,29 @@ data "aws_iam_policy_document" "ecs_deploy" {
     }
   }
 
-  # ECS タスク実行ロールを PassRole する必要あり
+  # RegisterTaskDefinition / DeregisterTaskDefinition は ecs:cluster condition が
+  # 効かない (security-reviewer PR #57 HIGH)。condition なしで別 statement に
+  # 分離し、最小 action のみ許可する。実体の保護はタグや命名規約と、ecs:family
+  # を conditions で絞る将来運用に委ねる。
   statement {
-    sid       = "EcsPassRole"
-    effect    = "Allow"
-    actions   = ["iam:PassRole"]
+    sid    = "EcsTaskDefinitionManagement"
+    effect = "Allow"
+    actions = [
+      "ecs:RegisterTaskDefinition",
+      "ecs:DeregisterTaskDefinition",
+    ]
     resources = ["*"]
+  }
+
+  # ECS タスク実行ロール/タスクロールを PassRole する必要あり。
+  # ecs_task_role_arns が指定されていればそれに絞り、空なら全 role ("*") に
+  # 対して PassedToService=ecs-tasks.amazonaws.com で絞る暫定運用
+  # (security-reviewer PR #57 HIGH)。
+  statement {
+    sid     = "EcsPassRole"
+    effect  = "Allow"
+    actions = ["iam:PassRole"]
+    resources = length(var.ecs_task_role_arns) > 0 ? var.ecs_task_role_arns : ["*"]
     condition {
       test     = "StringEquals"
       variable = "iam:PassedToService"
