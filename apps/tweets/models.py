@@ -14,13 +14,19 @@ SPEC §3 の要件に従い、以下の 4 モデルを提供する:
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.core.validators import MaxValueValidator, URLValidator
+from django.db import models, transaction
+from django.db.models import F, Q
 from django.utils import timezone
 
 from apps.tweets.managers import TweetManager
+
+if TYPE_CHECKING:
+    from django.contrib.auth.models import AbstractBaseUser
 
 # 仕様上のマジックナンバーは定数として切り出す
 TWEET_BODY_MAX_LENGTH = 180
@@ -71,9 +77,28 @@ class Tweet(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        # database-reviewer HIGH: TL の主要クエリは `is_deleted=False` で絞るため、
+        # partial index で index サイズと書き込みコストを抑える (PostgreSQL 前提)。
         indexes = [
-            models.Index(fields=["-created_at"]),
-            models.Index(fields=["author", "-created_at"]),
+            models.Index(
+                fields=["-created_at"],
+                condition=Q(is_deleted=False),
+                name="tweets_tl_idx",
+            ),
+            models.Index(
+                fields=["author", "-created_at"],
+                condition=Q(is_deleted=False),
+                name="tweets_author_tl_idx",
+            ),
+        ]
+        # defense in depth (python-reviewer HIGH):
+        # - TOCTOU で record_edit が競合しても edit_count は 5 を超えない
+        # - body は TextField だが CHAR_LENGTH 制約も migration で RunSQL 追加
+        constraints = [
+            models.CheckConstraint(
+                check=Q(edit_count__lte=TWEET_MAX_EDIT_COUNT),
+                name="tweet_edit_count_lte_max",
+            ),
         ]
 
     def __str__(self) -> str:  # pragma: no cover - 表示用
@@ -107,34 +132,62 @@ class Tweet(models.Model):
         deadline = self.created_at + timedelta(minutes=TWEET_EDIT_WINDOW_MINUTES)
         return deadline >= timezone.now()
 
-    def record_edit(self, new_body: str, editor: models.Model | None = None) -> TweetEdit:
+    @transaction.atomic
+    def record_edit(
+        self,
+        new_body: str,
+        editor: AbstractBaseUser | None = None,
+    ) -> TweetEdit:
         """編集履歴を残しつつ本文を更新する (§3.5)。
 
         - ``TweetEdit`` を 1 件作成
         - ``body`` / ``edit_count`` / ``last_edited_at`` を更新
 
         呼び出し側は事前に :py:meth:`can_edit` で編集可能性を確認すること。
+
+        python/security-reviewer HIGH 対応:
+        - ``@transaction.atomic`` + ``select_for_update`` で TOCTOU を排除し、
+          edit_count の上限 (5) を跨ぐ並行更新を阻止する。
+        - ``new_body`` の長さを事前検証し、DB レイヤー (TextField) を迂回した
+          長大本文の挿入を防ぐ。
+        - 更新は F 式で原子的に ``+1``。F 式評価後の値は ``refresh_from_db`` で
+          インスタンスに読み戻す。
         """
 
-        if not self.can_edit():
+        # new_body の長さは常に検証する (DB の TextField は max_length を CHECK にしない)
+        if len(new_body) > TWEET_BODY_MAX_LENGTH:
+            raise ValidationError(
+                f"本文は {TWEET_BODY_MAX_LENGTH} 字以内で入力してください。"
+            )
+
+        # 行ロックを取り、ロック後にもう一度 can_edit を評価することで
+        # TOCTOU (can_edit と save の間で別トランザクションが挿入) を排除する
+        locked = Tweet.all_objects.select_for_update().get(pk=self.pk)
+        if not locked.can_edit():
             raise ValidationError("この Tweet はこれ以上編集できません。")
 
-        body_before = self.body
+        body_before = locked.body
         now = timezone.now()
 
         edit = TweetEdit.objects.create(
-            tweet=self,
+            tweet=locked,
             body_before=body_before,
             body_after=new_body,
             editor=editor,
+            editor_username=(getattr(editor, "username", "") if editor else ""),
         )
 
-        self.body = new_body
-        self.edit_count = models.F("edit_count") + 1
-        self.last_edited_at = now
-        self.save(update_fields=["body", "edit_count", "last_edited_at", "updated_at"])
-        # F 式評価後の値を読み戻す
-        self.refresh_from_db(fields=["edit_count"])
+        # F 式で原子的に +1。同時に本文 / last_edited_at / updated_at も更新する
+        Tweet.all_objects.filter(pk=self.pk).update(
+            body=new_body,
+            edit_count=F("edit_count") + 1,
+            last_edited_at=now,
+            updated_at=now,
+        )
+        # インスタンスに最新値を反映
+        self.refresh_from_db(
+            fields=["body", "edit_count", "last_edited_at", "updated_at"]
+        )
         return edit
 
 
@@ -150,12 +203,20 @@ class TweetImage(models.Model):
         on_delete=models.CASCADE,
         related_name="images",
     )
-    # S3 URL。アップロード処理自体は P1-08 以降で実装されるため、
-    # ここでは純粋な文字列カラムとして保持する。
-    image_url = models.CharField(max_length=512)
+    # S3 URL。security-reviewer HIGH: https 限定の URLValidator を付けて
+    # javascript: 等の危険スキームの混入を防ぐ。S3 ドメイン固定は後続 (P1-08) で。
+    image_url = models.URLField(
+        max_length=512,
+        validators=[URLValidator(schemes=["https"])],
+    )
     width = models.PositiveIntegerField()
     height = models.PositiveIntegerField()
-    order = models.PositiveSmallIntegerField(default=0)
+    # order は 0..TWEET_MAX_IMAGES-1 (=0..3)。DB 側で CHECK はかけられないため
+    # MaxValueValidator で full_clean 経由の検証を行う。
+    order = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MaxValueValidator(TWEET_MAX_IMAGES - 1)],
+    )
 
     class Meta:
         ordering = ["order"]
@@ -163,6 +224,16 @@ class TweetImage(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - 表示用
         return f"TweetImage(tweet={self.tweet_id}, order={self.order})"
+
+    def save(self, *args, **kwargs) -> None:
+        """save() 経由でも ``clean()`` の制約が必ず適用されるようにする。
+
+        python-reviewer HIGH: ``TweetImage.objects.create`` など ORM 直接経由で
+        枚数制限が bypass される問題への対応 (defense in depth)。
+        """
+
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def clean(self) -> None:
         """同一 Tweet に既に 4 枚以上紐付いていないか検証する。"""
@@ -189,21 +260,40 @@ class TweetTag(models.Model):
     tweet = models.ForeignKey(
         Tweet,
         on_delete=models.CASCADE,
+        related_name="tweet_tags",
     )
     tag = models.ForeignKey(
         "tags.Tag",
         on_delete=models.PROTECT,
+        related_name="tweet_tags",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = [("tweet", "tag")]
+        # database-reviewer HIGH: tag_id 逆引きのクエリ (「このタグを持つ Tweet 一覧」)
+        # に備え明示的に index を張る。
+        indexes = [
+            models.Index(fields=["tag"], name="tweets_tweettag_tag_idx"),
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - 表示用
         return f"TweetTag(tweet={self.tweet_id}, tag={self.tag_id})"
 
+    def save(self, *args, **kwargs) -> None:
+        """save() 経由でも ``clean()`` の制約が必ず適用されるようにする。
+
+        python-reviewer HIGH: ``TweetTag.objects.create`` など ORM 直接経由で
+        タグ数制限 / 未承認タグ禁止が bypass される問題への対応。
+        """
+
+        self.full_clean()
+        super().save(*args, **kwargs)
+
     def clean(self) -> None:
-        """同一 Tweet に既に 3 個以上タグが付いていないか検証する。"""
+        """同一 Tweet に既に 3 個以上タグが付いていないか、
+        および未承認タグが紐付けられていないかを検証する。
+        """
 
         super().clean()
         if self.tweet_id is None:
@@ -212,7 +302,20 @@ class TweetTag(models.Model):
         if self.pk is not None:
             qs = qs.exclude(pk=self.pk)
         if qs.count() >= TWEET_MAX_TAGS:
-            raise ValidationError(f"1 つのツイートに付与できるタグは最大 {TWEET_MAX_TAGS} 個です。")
+            raise ValidationError(
+                f"1 つのツイートに付与できるタグは最大 {TWEET_MAX_TAGS} 個です。"
+            )
+
+        # security-reviewer HIGH + CROSS-PR: tags worktree 側で Tag.is_approved が
+        # 追加される前提で、未承認タグの紐付けを拒否する。
+        # Tag モデルに is_approved 属性が未搭載の期間 (tags worktree 未マージ) は
+        # getattr で安全にフォールバック (True 扱い) する。
+        if self.tag_id is not None:
+            is_approved = getattr(self.tag, "is_approved", True)
+            if not is_approved:
+                raise ValidationError(
+                    "承認されていないタグは Tweet に紐付けられません。"
+                )
 
 
 class TweetEdit(models.Model):
@@ -227,8 +330,9 @@ class TweetEdit(models.Model):
         on_delete=models.CASCADE,
         related_name="edits",
     )
-    body_before = models.TextField()
-    body_after = models.TextField()
+    # body_before / body_after は Tweet.body と同じ max_length を揃える (MEDIUM)
+    body_before = models.CharField(max_length=TWEET_BODY_MAX_LENGTH)
+    body_after = models.CharField(max_length=TWEET_BODY_MAX_LENGTH)
     edited_at = models.DateTimeField(auto_now_add=True)
     editor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -236,9 +340,18 @@ class TweetEdit(models.Model):
         null=True,
         blank=True,
     )
+    # database-reviewer HIGH: editor は SET_NULL なので、ユーザ削除後に
+    # 編集者情報が完全に失われる。監査用にユーザ名スナップショットを保持する。
+    # Django 慣習に従い、文字列カラムは NULL ではなく空文字列で「未記録」を表す。
+    editor_username = models.CharField(max_length=150, blank=True, default="")
 
     class Meta:
         ordering = ["-edited_at"]
+        # database-reviewer HIGH: editor_id 逆引き (「このユーザが編集した履歴」)
+        # 用の index を明示的に張る。
+        indexes = [
+            models.Index(fields=["editor"], name="tweets_tweetedit_editor_idx"),
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - 表示用
         return f"TweetEdit(tweet={self.tweet_id}, edited_at={self.edited_at})"

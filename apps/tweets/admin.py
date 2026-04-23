@@ -51,8 +51,19 @@ class TweetAdmin(admin.ModelAdmin):
     inlines = (TweetImageInline, TweetTagInline)
 
     def get_queryset(self, request):  # type: ignore[override]
-        # 管理画面では削除済みも表示する
-        return Tweet.all_objects.get_queryset()
+        """管理画面では削除済みも表示する。
+
+        python-reviewer HIGH: ``super().get_queryset()`` を呼ばないと、
+        ModelAdmin が期待する属性 (list_select_related 等) が初期化されず
+        副作用が出る。super を呼んで ``all_objects`` の queryset に差し替え、
+        admin 側の ordering も尊重する。
+        """
+
+        # まず super を経由して admin の周辺設定 (order / select_related) を適用
+        qs = super().get_queryset(request)
+        # 削除済みも含めるため model の all_objects に差し替え
+        ordering = self.get_ordering(request) or qs.query.order_by
+        return Tweet.all_objects.all().order_by(*ordering)
 
     @admin.display(description="body")
     def body_preview(self, obj: Tweet) -> str:

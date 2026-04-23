@@ -1,8 +1,12 @@
 """TweetEdit / 編集関連のテスト (P1-07, §3.5)。
 
 - can_edit: 30 分以内 / 超過 / 削除済み / 編集回数上限
+- can_edit: 境界値 ±1 秒
 - record_edit: TweetEdit 作成 + body 更新 + edit_count +1
+- record_edit: new_body 長さ検証 (security-reviewer HIGH)
+- record_edit: editor_username スナップショット (database-reviewer HIGH)
 - 上限 (5) を超えたら ValidationError
+- 境界値: 5 回目までは OK、6 回目は拒否
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from apps.tweets.models import (
+    TWEET_BODY_MAX_LENGTH,
     TWEET_EDIT_WINDOW_MINUTES,
     TWEET_MAX_EDIT_COUNT,
     Tweet,
@@ -51,6 +56,27 @@ class CanEditTests(TestCase):
 
         self.assertFalse(tweet.can_edit())
 
+    # ---------------- 境界値 ±1 秒 ----------------
+    def test_exactly_at_window_boundary_minus_1sec_is_editable(self) -> None:
+        """境界値 (MEDIUM): 30分 - 1 秒 は編集可能。"""
+
+        tweet = make_tweet()
+        past = timezone.now() - timedelta(minutes=TWEET_EDIT_WINDOW_MINUTES, seconds=-1)
+        Tweet.objects.filter(pk=tweet.pk).update(created_at=past)
+        tweet.refresh_from_db()
+
+        self.assertTrue(tweet.can_edit())
+
+    def test_just_after_window_boundary_plus_1sec_is_not_editable(self) -> None:
+        """境界値 (MEDIUM): 30分 + 1 秒 は編集不可。"""
+
+        tweet = make_tweet()
+        past = timezone.now() - timedelta(minutes=TWEET_EDIT_WINDOW_MINUTES, seconds=1)
+        Tweet.objects.filter(pk=tweet.pk).update(created_at=past)
+        tweet.refresh_from_db()
+
+        self.assertFalse(tweet.can_edit())
+
 
 class RecordEditTests(TestCase):
     """record_edit の挙動。"""
@@ -65,6 +91,8 @@ class RecordEditTests(TestCase):
         self.assertEqual(edit.body_before, "before")
         self.assertEqual(edit.body_after, "after")
         self.assertEqual(edit.editor_id, editor.pk)
+        # database-reviewer HIGH: editor_username がスナップショット保存されている
+        self.assertEqual(edit.editor_username, editor.username)
 
         tweet.refresh_from_db()
         self.assertEqual(tweet.body, "after")
@@ -106,14 +134,47 @@ class RecordEditTests(TestCase):
             tweet.record_edit("too late")
 
     def test_editor_nullable_when_user_deleted(self) -> None:
-        """editor は SET_NULL。ユーザ削除後も履歴は残る。"""
+        """editor は SET_NULL。ユーザ削除後も履歴は残る。
 
-        author = make_user(username="author", email="author@example.com")
+        editor_username スナップショットは残り続ける (監査保全)。
+        """
+
+        author = make_user(username="author-1")
         tweet = make_tweet(author=author, body="v0")
-        other = make_user(username="other", email="other@example.com")
+        other = make_user(username="other-1")
+        saved_username = other.username
 
         edit = tweet.record_edit("v1", editor=other)
 
         other.delete()
         edit.refresh_from_db()
         self.assertIsNone(edit.editor)
+        # editor FK は失うが editor_username は残る (空文字列ではない)
+        self.assertEqual(edit.editor_username, saved_username)
+        self.assertNotEqual(edit.editor_username, "")
+
+    # ---------------- security-reviewer HIGH: new_body 長さ ----------------
+    def test_rejects_new_body_over_max_length(self) -> None:
+        """record_edit は new_body の長さを必ず検証する (TextField 迂回防止)。"""
+
+        tweet = make_tweet(body="v0")
+
+        with self.assertRaises(ValidationError):
+            tweet.record_edit("x" * (TWEET_BODY_MAX_LENGTH + 1))
+
+        # TweetEdit は作られず、body / edit_count も変わらない
+        tweet.refresh_from_db()
+        self.assertEqual(tweet.body, "v0")
+        self.assertEqual(tweet.edit_count, 0)
+        self.assertEqual(tweet.edits.count(), 0)
+
+    def test_accepts_new_body_at_exact_max_length(self) -> None:
+        """境界値: 180 字ピッタリは OK。"""
+
+        tweet = make_tweet(body="v0")
+        body = "x" * TWEET_BODY_MAX_LENGTH
+
+        tweet.record_edit(body)
+
+        tweet.refresh_from_db()
+        self.assertEqual(tweet.body, body)

@@ -4,10 +4,19 @@
 `apps.tags` の初期マイグレーションが merge されていない worktree では
 このマイグレーションは流れないが、`apps.tags` 担当 worktree のマージ後に
 通る想定で書いている。
+
+レビュー HIGH 吸収:
+- Tweet: TL クエリ用の partial index (`is_deleted=False`) を採用
+- Tweet: CheckConstraint(edit_count <= 5) + char_length(body) <= 180 の RunSQL
+- TweetImage: `order` に MaxValueValidator / `image_url` を URLField (https 限定)
+- TweetTag: `tag_id` 逆引き index を追加 / related_name=`tweet_tags`
+- TweetEdit: `editor` 逆引き index / `editor_username` スナップショットカラムを追加
+- TweetEdit: `body_before` / `body_after` を CharField(max_length=180) に揃える
 """
 
 from __future__ import annotations
 
+import django.core.validators
 import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
@@ -71,6 +80,7 @@ class Migration(migrations.Migration):
                     "tag",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
+                        related_name="tweet_tags",
                         to="tags.tag",
                     ),
                 ),
@@ -78,6 +88,7 @@ class Migration(migrations.Migration):
                     "tweet",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
+                        related_name="tweet_tags",
                         to="tweets.tweet",
                     ),
                 ),
@@ -107,10 +118,24 @@ class Migration(migrations.Migration):
                         verbose_name="ID",
                     ),
                 ),
-                ("image_url", models.CharField(max_length=512)),
+                (
+                    "image_url",
+                    models.URLField(
+                        max_length=512,
+                        validators=[
+                            django.core.validators.URLValidator(schemes=["https"])
+                        ],
+                    ),
+                ),
                 ("width", models.PositiveIntegerField()),
                 ("height", models.PositiveIntegerField()),
-                ("order", models.PositiveSmallIntegerField(default=0)),
+                (
+                    "order",
+                    models.PositiveSmallIntegerField(
+                        default=0,
+                        validators=[django.core.validators.MaxValueValidator(3)],
+                    ),
+                ),
                 (
                     "tweet",
                     models.ForeignKey(
@@ -137,9 +162,13 @@ class Migration(migrations.Migration):
                         verbose_name="ID",
                     ),
                 ),
-                ("body_before", models.TextField()),
-                ("body_after", models.TextField()),
+                ("body_before", models.CharField(max_length=180)),
+                ("body_after", models.CharField(max_length=180)),
                 ("edited_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "editor_username",
+                    models.CharField(blank=True, default="", max_length=150),
+                ),
                 (
                     "editor",
                     models.ForeignKey(
@@ -162,15 +191,50 @@ class Migration(migrations.Migration):
                 "ordering": ["-edited_at"],
             },
         ),
+        # ------------- Indexes -------------
         migrations.AddIndex(
             model_name="tweet",
-            index=models.Index(fields=["-created_at"], name="tweets_twee_created_a8e7a3_idx"),
+            index=models.Index(
+                fields=["-created_at"],
+                condition=models.Q(is_deleted=False),
+                name="tweets_tl_idx",
+            ),
         ),
         migrations.AddIndex(
             model_name="tweet",
             index=models.Index(
                 fields=["author", "-created_at"],
-                name="tweets_twee_author__2d9c21_idx",
+                condition=models.Q(is_deleted=False),
+                name="tweets_author_tl_idx",
+            ),
+        ),
+        migrations.AddIndex(
+            model_name="tweettag",
+            index=models.Index(fields=["tag"], name="tweets_tweettag_tag_idx"),
+        ),
+        migrations.AddIndex(
+            model_name="tweetedit",
+            index=models.Index(fields=["editor"], name="tweets_tweetedit_editor_idx"),
+        ),
+        # ------------- Constraints -------------
+        migrations.AddConstraint(
+            model_name="tweet",
+            constraint=models.CheckConstraint(
+                check=models.Q(edit_count__lte=5),
+                name="tweet_edit_count_lte_max",
+            ),
+        ),
+        # body は TextField のため Django ORM は max_length を CHECK にしない。
+        # defense in depth として PostgreSQL 側で char_length 制約を追加する。
+        migrations.RunSQL(
+            sql=(
+                "ALTER TABLE tweets_tweet "
+                "ADD CONSTRAINT tweet_body_char_length_lte_180 "
+                "CHECK (char_length(body) <= 180)"
+            ),
+            reverse_sql=(
+                "ALTER TABLE tweets_tweet "
+                "DROP CONSTRAINT IF EXISTS tweet_body_char_length_lte_180"
             ),
         ),
     ]
