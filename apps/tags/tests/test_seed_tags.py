@@ -11,9 +11,7 @@ from django.test import TestCase
 
 from apps.tags.models import Tag
 
-FIXTURE_PATH = (
-    Path(__file__).resolve().parents[1] / "fixtures" / "tech_tags.json"
-)
+FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "tech_tags.json"
 
 
 class SeedTagsCommandTests(TestCase):

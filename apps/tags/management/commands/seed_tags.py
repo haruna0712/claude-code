@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -22,7 +23,7 @@ FIXTURE_PATH = Path(__file__).resolve().parents[2] / "fixtures" / "tech_tags.jso
 class Command(BaseCommand):
     help = "Seed baseline tech tags from apps/tags/fixtures/tech_tags.json (idempotent)."
 
-    def add_arguments(self, parser) -> None:
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
             "--fixture",
             default=str(FIXTURE_PATH),
@@ -62,7 +63,9 @@ class Command(BaseCommand):
             }
             # usage_count は tweets 側が更新するため、seed では初期値のみ尊重
             # (既存行の usage_count を 0 に戻さないよう update_or_create の defaults には含めない)
-            tag, created = Tag.objects.update_or_create(name=name.lower(), defaults=defaults)
+            # Tag.objects は is_approved=True に絞り込む ApprovedTagManager のため、
+            # 未承認で事前作成されたテスト行も含めて更新できるよう all_objects を使う。
+            tag, created = Tag.all_objects.update_or_create(name=name.lower(), defaults=defaults)
             if created:
                 # 初回作成時のみ usage_count の初期値を fixture に合わせる
                 desired_usage = fields.get("usage_count", 0)

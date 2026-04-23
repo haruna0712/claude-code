@@ -17,23 +17,24 @@ from dataclasses import dataclass
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
+MIN_TAG_LENGTH = 1
+MAX_TAG_LENGTH = 50
+
 # SPEC §4: 英数 + `_` `-` `+` `#` のみ (日本語タグは今フェーズでは扱わない)
 #   - `#` はハッシュタグ互換
 #   - `+` は `c++` のような名前を許容
-TAG_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_\-+#]{1,50}$")
-
-MIN_TAG_LENGTH = 1
-MAX_TAG_LENGTH = 50
+TAG_NAME_PATTERN = re.compile(rf"^[A-Za-z0-9_\-+#]{{{MIN_TAG_LENGTH},{MAX_TAG_LENGTH}}}$")
 
 # デフォルトで「編集距離 2 以下」を類似扱いにする。
 # 例: `pythn` ↔ `python` (距離 1), `pyhton` ↔ `python` (距離 2) を検知する。
 DEFAULT_SIMILARITY_THRESHOLD = 2
 
 
-def validate_tag_name(value: str) -> None:
+def validate_tag_name(value: str | None) -> None:
     """タグ名のフォーマット検証.
 
     Django の validator として使える形で ValidationError を raise する.
+    ``value`` が ``None`` / 空文字の場合は ``tag_empty`` として拒否する。
     """
     if value is None or value == "":
         raise ValidationError(_("Tag name must not be empty."), code="tag_empty")
@@ -119,17 +120,14 @@ def find_similar_tags(
     results: list[SimilarTag] = []
     # Tag 名は最大 50 文字 / approved タグ件数も数百〜数千オーダーを想定しているため
     # 全件 Python 側で距離計算する. RDB 側の距離計算 (pg_trgm 等) は P1-06 で検討.
-    for tag_name, display_name in Tag.objects.filter(is_approved=True).values_list(
-        "name", "display_name"
-    ):
+    # Tag.objects は既定で is_approved=True に絞り込む ApprovedTagManager.
+    for tag_name, display_name in Tag.objects.values_list("name", "display_name"):
         distance = levenshtein_distance(normalized, tag_name)
         if distance > threshold:
             continue
         if exclude_exact and distance == 0:
             continue
-        results.append(
-            SimilarTag(name=tag_name, display_name=display_name, distance=distance)
-        )
+        results.append(SimilarTag(name=tag_name, display_name=display_name, distance=distance))
 
     results.sort(key=lambda t: (t.distance, t.name))
     return results

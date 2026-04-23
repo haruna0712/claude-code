@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import unittest
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
@@ -13,7 +15,7 @@ from apps.tags.validators import (
 )
 
 
-class ValidateTagNameTests(TestCase):
+class ValidateTagNameTests(unittest.TestCase):
     """SPEC §4: 英数 + `_` `-` `+` `#`, 1〜50 文字."""
 
     def test_valid_name(self) -> None:
@@ -46,8 +48,8 @@ class ValidateTagNameTests(TestCase):
                 self.assertEqual(ctx.exception.code, "tag_empty")
 
 
-class LevenshteinDistanceTests(TestCase):
-    """手書き Levenshtein DP の回帰テスト."""
+class LevenshteinDistanceTests(unittest.TestCase):
+    """手書き Levenshtein DP の回帰テスト (DB 不要)."""
 
     def test_identical_strings(self) -> None:
         self.assertEqual(levenshtein_distance("python", "python"), 0)

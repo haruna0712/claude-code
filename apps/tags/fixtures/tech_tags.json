@@ -1,7 +1,6 @@
 [
   {
     "model": "tags.tag",
-    "pk": 1,
     "fields": {
       "name": "python",
       "display_name": "Python",
@@ -13,7 +12,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 2,
     "fields": {
       "name": "typescript",
       "display_name": "TypeScript",
@@ -25,7 +23,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 3,
     "fields": {
       "name": "javascript",
       "display_name": "JavaScript",
@@ -37,7 +34,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 4,
     "fields": {
       "name": "go",
       "display_name": "Go",
@@ -49,7 +45,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 5,
     "fields": {
       "name": "rust",
       "display_name": "Rust",
@@ -61,7 +56,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 6,
     "fields": {
       "name": "react",
       "display_name": "React",
@@ -73,7 +67,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 7,
     "fields": {
       "name": "nextjs",
       "display_name": "Next.js",
@@ -85,7 +78,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 8,
     "fields": {
       "name": "vue",
       "display_name": "Vue",
@@ -97,7 +89,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 9,
     "fields": {
       "name": "svelte",
       "display_name": "Svelte",
@@ -109,7 +100,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 10,
     "fields": {
       "name": "django",
       "display_name": "Django",
@@ -121,7 +111,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 11,
     "fields": {
       "name": "fastapi",
       "display_name": "FastAPI",
@@ -133,7 +122,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 12,
     "fields": {
       "name": "rails",
       "display_name": "Rails",
@@ -145,7 +133,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 13,
     "fields": {
       "name": "laravel",
       "display_name": "Laravel",
@@ -157,7 +144,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 14,
     "fields": {
       "name": "spring",
       "display_name": "Spring",
@@ -169,7 +155,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 15,
     "fields": {
       "name": "aspnet",
       "display_name": "ASP.NET",
@@ -181,7 +166,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 16,
     "fields": {
       "name": "aws",
       "display_name": "AWS",
@@ -193,7 +177,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 17,
     "fields": {
       "name": "gcp",
       "display_name": "GCP",
@@ -205,7 +188,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 18,
     "fields": {
       "name": "azure",
       "display_name": "Azure",
@@ -217,7 +199,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 19,
     "fields": {
       "name": "docker",
       "display_name": "Docker",
@@ -229,7 +210,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 20,
     "fields": {
       "name": "kubernetes",
       "display_name": "Kubernetes",
@@ -241,7 +221,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 21,
     "fields": {
       "name": "terraform",
       "display_name": "Terraform",
@@ -253,7 +232,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 22,
     "fields": {
       "name": "ansible",
       "display_name": "Ansible",
@@ -265,7 +243,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 23,
     "fields": {
       "name": "github",
       "display_name": "GitHub",
@@ -277,7 +254,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 24,
     "fields": {
       "name": "gitlab",
       "display_name": "GitLab",
@@ -289,7 +265,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 25,
     "fields": {
       "name": "linux",
       "display_name": "Linux",
@@ -301,7 +276,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 26,
     "fields": {
       "name": "macos",
       "display_name": "macOS",
@@ -313,7 +287,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 27,
     "fields": {
       "name": "windows",
       "display_name": "Windows",
@@ -325,7 +298,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 28,
     "fields": {
       "name": "postgresql",
       "display_name": "PostgreSQL",
@@ -337,7 +309,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 29,
     "fields": {
       "name": "mysql",
       "display_name": "MySQL",
@@ -349,7 +320,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 30,
     "fields": {
       "name": "sqlite",
       "display_name": "SQLite",
@@ -361,7 +331,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 31,
     "fields": {
       "name": "mongodb",
       "display_name": "MongoDB",
@@ -373,7 +342,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 32,
     "fields": {
       "name": "redis",
       "display_name": "Redis",
@@ -385,7 +353,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 33,
     "fields": {
       "name": "elasticsearch",
       "display_name": "Elasticsearch",
@@ -397,7 +364,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 34,
     "fields": {
       "name": "kafka",
       "display_name": "Kafka",
@@ -409,7 +375,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 35,
     "fields": {
       "name": "rabbitmq",
       "display_name": "RabbitMQ",
@@ -421,7 +386,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 36,
     "fields": {
       "name": "graphql",
       "display_name": "GraphQL",
@@ -433,7 +397,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 37,
     "fields": {
       "name": "rest",
       "display_name": "REST",
@@ -445,7 +408,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 38,
     "fields": {
       "name": "grpc",
       "display_name": "gRPC",
@@ -457,7 +419,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 39,
     "fields": {
       "name": "websocket",
       "display_name": "WebSocket",
@@ -469,7 +430,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 40,
     "fields": {
       "name": "oauth",
       "display_name": "OAuth",
@@ -481,7 +441,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 41,
     "fields": {
       "name": "jwt",
       "display_name": "JWT",
@@ -493,7 +452,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 42,
     "fields": {
       "name": "tailwind",
       "display_name": "Tailwind",
@@ -505,7 +463,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 43,
     "fields": {
       "name": "bootstrap",
       "display_name": "Bootstrap",
@@ -517,7 +474,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 44,
     "fields": {
       "name": "sass",
       "display_name": "Sass",
@@ -529,7 +485,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 45,
     "fields": {
       "name": "css",
       "display_name": "CSS",
@@ -541,7 +496,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 46,
     "fields": {
       "name": "html",
       "display_name": "HTML",
@@ -553,7 +507,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 47,
     "fields": {
       "name": "webassembly",
       "display_name": "WebAssembly",
@@ -565,7 +518,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 48,
     "fields": {
       "name": "llm",
       "display_name": "LLM",
@@ -577,7 +529,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 49,
     "fields": {
       "name": "ai",
       "display_name": "AI",
@@ -589,7 +540,6 @@
   },
   {
     "model": "tags.tag",
-    "pk": 50,
     "fields": {
       "name": "machine-learning",
       "display_name": "Machine Learning",
