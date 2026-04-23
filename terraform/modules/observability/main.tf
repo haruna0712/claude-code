@@ -17,6 +17,19 @@ locals {
     },
     var.tags,
   )
+
+  # ECS サービス論理名 -> 実 ServiceName を解決する。
+  # caller が map で明示した場合はそちらを優先し、それ以外は prefix+論理名で推定。
+  resolved_ecs_service_names = {
+    for logical in var.ecs_services :
+    logical => lookup(var.ecs_service_name_map, logical, "${local.prefix}-${logical}")
+  }
+
+  # RDS FreeStorageSpace 閾値 (bytes) = allocated_storage * (1 - ratio)
+  # 例: 20GB × 0.2 = 4GB、100GB × 0.2 = 20GB
+  rds_free_storage_threshold_bytes = floor(
+    var.rds_allocated_storage_gb * var.rds_free_storage_threshold_ratio * 1024 * 1024 * 1024
+  )
 }
 
 # ---------------------------------------------------------------------------
@@ -68,8 +81,9 @@ resource "aws_cloudwatch_metric_alarm" "ecs_service_cpu" {
 
   dimensions = {
     ClusterName = var.ecs_cluster_name
-    # ECS サービス名は compute モジュールで統一的に "<prefix>-<service>" 命名する前提
-    ServiceName = "${local.prefix}-${each.value}"
+    # 実 ServiceName は var.ecs_service_name_map で明示注入可能 (architect PR #46 HIGH)。
+    # 未指定時は "<prefix>-<logical>" にフォールバックする。
+    ServiceName = local.resolved_ecs_service_names[each.value]
   }
 
   alarm_actions = [aws_sns_topic.alerts.arn]
@@ -111,14 +125,14 @@ resource "aws_cloudwatch_metric_alarm" "rds_storage" {
   count = var.rds_instance_identifier == "" ? 0 : 1
 
   alarm_name          = "${local.prefix}-rds-storage-low"
-  alarm_description   = "RDS FreeStorageSpace < 20% (4GB of 20GB)"
+  alarm_description   = "RDS FreeStorageSpace < ${floor(var.rds_free_storage_threshold_ratio * 100)}% of ${var.rds_allocated_storage_gb}GB"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 2
   metric_name         = "FreeStorageSpace"
   namespace           = "AWS/RDS"
   period              = 300
   statistic           = "Average"
-  threshold           = 4 * 1024 * 1024 * 1024 # 4 GiB in bytes
+  threshold           = local.rds_free_storage_threshold_bytes
   treat_missing_data  = "notBreaching"
 
   dimensions = {
