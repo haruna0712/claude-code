@@ -110,16 +110,23 @@ resource "aws_route_table_association" "public" {
 }
 
 # Private: fck-nat 経由で外部 API (Mailgun / Stripe / OpenAI / Claude / GitHub) へ
+#
+# ⚠️ COST WARNING (stg 割り切り、architect PR #47 HIGH):
+#   stg では fck-nat を AZ-a にのみ 1 台配置する。AZ-c の ECS タスクから
+#   外向き通信は cross-AZ データ転送料 ($0.01/GB) が発生する。stg 規模
+#   (月 < 100 GB 想定) では月額 $1 未満で無視可能だが、prod 昇格時は
+#   以下のいずれかで対処:
+#     1. AZ ごとに fck-nat を立て、private RT を AZ 別 ENI に向ける
+#     2. AZ-c の ECS タスクを AZ-a に寄せる (Multi-AZ を放棄)
+#   現状は 1 が推奨。compute モジュール実装時に ECS を Multi-AZ に
+#   広げた段階で network モジュールも per-AZ fck-nat に拡張する。
 resource "aws_route_table" "private" {
   count  = local.az_count
   vpc_id = aws_vpc.this.id
 
-  # Phase 0.5 は Single-AZ の fck-nat 1 台だが、Multi-AZ 化までのインタフェースは
-  # ここで完結させる。prod で fck-nat を AZ ごとに立てる場合はこのロジックを
-  # network_interface_id -> aws_network_interface(for AZ=each.az) に変える。
   route {
     cidr_block           = "0.0.0.0/0"
-    network_interface_id = aws_network_interface.fcknat[0].id
+    network_interface_id = aws_network_interface.fcknat[0].id # ← stg: AZ-a 固定
   }
 
   tags = merge(local.default_tags, {
@@ -184,12 +191,31 @@ resource "aws_security_group" "ecs" {
   description = "ECS tasks receive traffic from ALB and reach externals via fck-nat / VPC endpoints"
   vpc_id      = aws_vpc.this.id
 
+  # ALB -> ECS の実ポートに絞って最小権限化 (architect PR #47 HIGH):
+  # - nginx (Django への proxy) 80
+  # - Next.js SSR 3000
+  # - Daphne (Channels WebSocket) 8001
+  # コンテナ間の lateral movement を避けるため 0-65535 全開は採用しない。
   ingress {
     protocol        = "tcp"
-    from_port       = 0
-    to_port         = 65535
+    from_port       = 80
+    to_port         = 80
     security_groups = [aws_security_group.alb.id]
-    description     = "From ALB (nginx:80 / next:3000 / daphne:8001)"
+    description     = "From ALB to nginx (Django proxy)"
+  }
+  ingress {
+    protocol        = "tcp"
+    from_port       = 3000
+    to_port         = 3000
+    security_groups = [aws_security_group.alb.id]
+    description     = "From ALB to Next.js SSR"
+  }
+  ingress {
+    protocol        = "tcp"
+    from_port       = 8001
+    to_port         = 8001
+    security_groups = [aws_security_group.alb.id]
+    description     = "From ALB to Daphne (WebSocket)"
   }
 
   egress {
@@ -197,6 +223,7 @@ resource "aws_security_group" "ecs" {
     from_port   = 0
     to_port     = 0
     cidr_blocks = ["0.0.0.0/0"]
+    description = "Outbound to RDS / Redis / VPC Endpoints / fck-nat -> Internet"
   }
 
   tags = merge(local.default_tags, { Name = "${local.prefix}-ecs-sg" })
@@ -248,15 +275,18 @@ resource "aws_security_group" "redis" {
 
 resource "aws_security_group" "fcknat" {
   name        = "${local.prefix}-fcknat-sg"
-  description = "fck-nat instance SG. Accepts traffic from private subnets, egress anywhere."
+  description = "fck-nat instance SG. Accepts traffic from private subnets only, egress anywhere."
   vpc_id      = aws_vpc.this.id
 
+  # ingress は private subnet CIDR 限定。db subnet は外向き route を持たないため
+  # fck-nat へ到達する経路が存在せず、ingress に含める理由がない (architect PR #47 HIGH)。
+  # defense-in-depth で「ingress 許可 != 到達可能」の関係を明示する。
   ingress {
     protocol    = "-1"
     from_port   = 0
     to_port     = 0
-    cidr_blocks = concat(var.private_subnet_cidrs, var.db_subnet_cidrs)
-    description = "All protocols from private/db subnets"
+    cidr_blocks = var.private_subnet_cidrs
+    description = "All protocols from private subnets only (db subnets have no route here)"
   }
 
   egress {
