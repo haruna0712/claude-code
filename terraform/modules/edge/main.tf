@@ -212,6 +212,13 @@ resource "aws_cloudfront_distribution" "this" {
     }
   }
 
+  # -------- Ordered cache behaviors --------
+  # ⚠️ NOTE (architect PR #52 MEDIUM): AWS CloudFront は
+  # `ordered_cache_behavior` を **Terraform 定義順 = API 送信順** で評価する。
+  # 具体度ではなく先勝ち。新しい behavior を追加する際は既存 pattern と
+  # 衝突しないよう順序を確認すること (例: /api/ws/* を入れる場合、/ws/* より
+  # 先に定義しないと /api/ws/abc が /ws/* でマッチしてしまう)。
+
   # -------- Default behavior (Next.js SSR via ALB) --------
   default_cache_behavior {
     target_origin_id       = "alb"
@@ -264,6 +271,14 @@ resource "aws_cloudfront_distribution" "this" {
   }
 
   # -------- /ws/* → ALB (WebSocket 透過) --------
+  # ⚠️ WebSocket keepalive 要件 (architect PR #52 HIGH):
+  #   - CloudFront viewer idle timeout = 10 分 (固定)
+  #   - CloudFront origin_read_timeout = 60s (custom_origin_config で明示)
+  #   - ALB idle_timeout = 3600s (compute モジュール側)
+  #   この連携だと idle な接続は origin_read_timeout (60s) で切断される。
+  #   クライアント (reconnecting-websocket) は自動再接続するが、Phase 3 DM で
+  #   長時間セッションが続く場合は 30s 間隔で ping frame を送る運用が前提。
+  #   将来 ws.<domain> を別途立てて CloudFront を bypass する選択肢あり (docs/adr)。
   ordered_cache_behavior {
     path_pattern           = "/ws/*"
     target_origin_id       = "alb"
