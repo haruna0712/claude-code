@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from django.conf import settings
 from django.db import connections
-from django.db.utils import OperationalError
+from django.db.utils import DatabaseError
 from django.http import Http404, HttpRequest, JsonResponse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
@@ -31,16 +31,21 @@ def health(_request: HttpRequest) -> JsonResponse:
         {
           "status": "ok",
           "version": "7ca1708",
-          "environment": "stg",
           "time": "2026-04-23T12:34:56.789012+00:00",
           "db": "ok"
         }
+
+    注: `environment` を含めないのは偵察耐性のため (python-reviewer PR #55 MEDIUM)。
+    運用者が環境を知りたい場合は CloudWatch Logs か Sentry を参照する。
     """
     db_state = "ok"
     try:
-        # default connection の cursor を一瞬取るだけ。実クエリは SELECT 1。
-        connections["default"].cursor().execute("SELECT 1")
-    except OperationalError:
+        # cursor をコンテキストマネージャで閉じて connection leak を防ぐ
+        # (python-reviewer PR #55 HIGH)。DatabaseError を親クラスで catch して
+        # OperationalError / InterfaceError / ProgrammingError を全て拾う。
+        with connections["default"].cursor() as cursor:
+            cursor.execute("SELECT 1")
+    except DatabaseError:
         db_state = "unreachable"
 
     status_code = 200 if db_state == "ok" else 503
@@ -48,7 +53,6 @@ def health(_request: HttpRequest) -> JsonResponse:
     payload = {
         "status": "ok" if status_code == 200 else "degraded",
         "version": os.environ.get("SENTRY_RELEASE", "unknown"),
-        "environment": os.environ.get("SENTRY_ENVIRONMENT", "local"),
         "time": datetime.now(timezone.utc).isoformat(),
         "db": db_state,
     }
