@@ -33,7 +33,10 @@ def make_user(**overrides: Any) -> Any:
         "last_name": "User",
     }
     defaults.update(overrides)
-    return User.objects.create_user(password="pw-unused-for-tests", **defaults)
+    return User.objects.create_user(
+        password="pw-unused-for-tests",  # pragma: allowlist secret
+        **defaults,
+    )
 
 
 def make_tag(name: str = "python", display_name: str | None = None) -> Tag:

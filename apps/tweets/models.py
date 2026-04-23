@@ -156,9 +156,7 @@ class Tweet(models.Model):
 
         # new_body の長さは常に検証する (DB の TextField は max_length を CHECK にしない)
         if len(new_body) > TWEET_BODY_MAX_LENGTH:
-            raise ValidationError(
-                f"本文は {TWEET_BODY_MAX_LENGTH} 字以内で入力してください。"
-            )
+            raise ValidationError(f"本文は {TWEET_BODY_MAX_LENGTH} 字以内で入力してください。")
 
         # 行ロックを取り、ロック後にもう一度 can_edit を評価することで
         # TOCTOU (can_edit と save の間で別トランザクションが挿入) を排除する
@@ -185,9 +183,7 @@ class Tweet(models.Model):
             updated_at=now,
         )
         # インスタンスに最新値を反映
-        self.refresh_from_db(
-            fields=["body", "edit_count", "last_edited_at", "updated_at"]
-        )
+        self.refresh_from_db(fields=["body", "edit_count", "last_edited_at", "updated_at"])
         return edit
 
 
@@ -302,9 +298,7 @@ class TweetTag(models.Model):
         if self.pk is not None:
             qs = qs.exclude(pk=self.pk)
         if qs.count() >= TWEET_MAX_TAGS:
-            raise ValidationError(
-                f"1 つのツイートに付与できるタグは最大 {TWEET_MAX_TAGS} 個です。"
-            )
+            raise ValidationError(f"1 つのツイートに付与できるタグは最大 {TWEET_MAX_TAGS} 個です。")
 
         # security-reviewer HIGH + CROSS-PR: tags worktree 側で Tag.is_approved が
         # 追加される前提で、未承認タグの紐付けを拒否する。
@@ -313,9 +307,7 @@ class TweetTag(models.Model):
         if self.tag_id is not None:
             is_approved = getattr(self.tag, "is_approved", True)
             if not is_approved:
-                raise ValidationError(
-                    "承認されていないタグは Tweet に紐付けられません。"
-                )
+                raise ValidationError("承認されていないタグは Tweet に紐付けられません。")
 
 
 class TweetEdit(models.Model):
