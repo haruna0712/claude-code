@@ -39,12 +39,22 @@ def make_user(**overrides: Any) -> Any:
     )
 
 
-def make_tag(name: str = "python", display_name: str | None = None) -> Tag:
-    """テスト用タグ。"""
+def make_tag(
+    name: str = "python",
+    display_name: str | None = None,
+    is_approved: bool = True,
+) -> Tag:
+    """テスト用タグ。既定で is_approved=True (TweetTag.clean の検証を通すため)。
 
-    return Tag.objects.create(
+    未承認タグのケースを試したい場合は `make_tag(is_approved=False)` を指定する。
+    `Tag.all_objects.create` は ApprovedTagManager の絞込を迂回するため、
+    未承認タグを作ってもテスト内で扱える。
+    """
+
+    return Tag.all_objects.create(
         name=name,
         display_name=display_name or name.capitalize(),
+        is_approved=is_approved,
     )
 
 
