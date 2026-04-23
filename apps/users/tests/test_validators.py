@@ -25,7 +25,8 @@ class TestValidateHandle:
         # Act + Assert: 例外なく通ること
         validate_handle(value)
 
-    @pytest.mark.parametrize("reserved", ["admin", "API", "Me", "support", "users"])
+    # "me" は 2 文字で format check (≥3 字) に先に弾かれるため除外し、3 字以上の予約語を使う。
+    @pytest.mark.parametrize("reserved", ["admin", "API", "api", "support", "users"])
     def test_rejects_reserved_handles(self, reserved: str) -> None:
         # 大文字小文字を問わず拒否されること。
         with pytest.raises(ValidationError) as exc:
