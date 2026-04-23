@@ -3,11 +3,16 @@ from typing import Any
 
 from django.contrib.auth.models import AbstractUser
 from django.core import validators
+from django.core.validators import URLValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.users.managers import UserManager
 from apps.users.validators import validate_handle
+
+# SNS / アバター / ヘッダー URL には https のみ許容する (security-reviewer HIGH)。
+# ftp:// / http:// を拒否する URLValidator を使い回す。
+_HTTPS_URL_VALIDATOR = URLValidator(schemes=["https"])
 
 
 class UsernameValidator(validators.RegexValidator):
@@ -39,7 +44,9 @@ class User(AbstractUser):
     id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     first_name = models.CharField(verbose_name=_("First Name"), max_length=60)
     last_name = models.CharField(verbose_name=_("Last Name"), max_length=60)
-    email = models.EmailField(verbose_name=_("Email Address"), unique=True, db_index=True)
+    # ``unique=True`` は PostgreSQL で UNIQUE index を自動生成するため、
+    # ``db_index=True`` の併用は冗長 (database-reviewer HIGH)。
+    email = models.EmailField(verbose_name=_("Email Address"), unique=True)
     username = models.CharField(
         verbose_name=_("Username"),
         max_length=30,
@@ -62,19 +69,21 @@ class User(AbstractUser):
         default="",
         help_text=_("Plain text only. Markdown is NOT rendered."),
     )
-    avatar_url = models.CharField(
+    avatar_url = models.URLField(
         verbose_name=_("Avatar URL"),
         max_length=500,
         blank=True,
         default="",
-        help_text=_("S3 URL to the user's avatar image."),
+        validators=[_HTTPS_URL_VALIDATOR],
+        help_text=_("S3 URL to the user's avatar image. Must be https://."),
     )
-    header_url = models.CharField(
+    header_url = models.URLField(
         verbose_name=_("Header URL"),
         max_length=500,
         blank=True,
         default="",
-        help_text=_("S3 URL to the user's header image."),
+        validators=[_HTTPS_URL_VALIDATOR],
+        help_text=_("S3 URL to the user's header image. Must be https://."),
     )
 
     # ---- 課金 / オンボーディング ----
@@ -90,35 +99,43 @@ class User(AbstractUser):
     )
 
     # ---- SNS リンク ----
+    # python-reviewer HIGH (DJ001): CharField/URLField の null=True は避け、
+    # 空値は "" で統一する。security-reviewer HIGH: https のみ許容。
     github_url = models.URLField(
         verbose_name=_("GitHub URL"),
-        null=True,
         blank=True,
+        default="",
+        validators=[_HTTPS_URL_VALIDATOR],
     )
     x_url = models.URLField(
         verbose_name=_("X (Twitter) URL"),
-        null=True,
         blank=True,
+        default="",
+        validators=[_HTTPS_URL_VALIDATOR],
     )
     zenn_url = models.URLField(
         verbose_name=_("Zenn URL"),
-        null=True,
         blank=True,
+        default="",
+        validators=[_HTTPS_URL_VALIDATOR],
     )
     qiita_url = models.URLField(
         verbose_name=_("Qiita URL"),
-        null=True,
         blank=True,
+        default="",
+        validators=[_HTTPS_URL_VALIDATOR],
     )
     note_url = models.URLField(
         verbose_name=_("note URL"),
-        null=True,
         blank=True,
+        default="",
+        validators=[_HTTPS_URL_VALIDATOR],
     )
     linkedin_url = models.URLField(
         verbose_name=_("LinkedIn URL"),
-        null=True,
         blank=True,
+        default="",
+        validators=[_HTTPS_URL_VALIDATOR],
     )
 
     EMAIL_FIELD = "email"
@@ -132,8 +149,11 @@ class User(AbstractUser):
         verbose_name = _("User")
         verbose_name_plural = _("Users")
         ordering = ["-date_joined"]
+        # NOTE (database-reviewer HIGH): ``username`` は ``unique=True`` により
+        # PostgreSQL が自動で UNIQUE index を張る。明示的な ``Index(fields=["username"])``
+        # は完全に重複するため削除した。``-date_joined`` はソート/フィード用途で
+        # 独立したインデックスが必要なため残す。``name=`` を明示して命名 drift を防ぐ。
         indexes = [
-            models.Index(fields=["username"], name="users_username_idx"),
             models.Index(fields=["-date_joined"], name="users_joined_desc_idx"),
         ]
 
@@ -149,6 +169,10 @@ class User(AbstractUser):
         return instance
 
     @property
-    def get_full_name(self) -> str:
-        full_name = f"{self.first_name} {self.last_name}"
-        return full_name.strip()
+    def full_name(self) -> str:
+        """表示用のフルネーム (read-only プロパティ)。
+
+        ``AbstractUser.get_full_name()`` を上書き (shadow) しないよう、あえて
+        別名 ``full_name`` として公開する (python-reviewer HIGH)。
+        """
+        return f"{self.first_name} {self.last_name}".strip()

@@ -3,15 +3,19 @@ P1-02 / P1-02a: User モデル拡張。
 
 - @handle バリデーター (validate_handle) への差し替え + max_length 30。
 - プロフィール列 (display_name, bio, avatar_url, header_url)。
+  - avatar_url / header_url は URLField + URLValidator(https のみ)。
 - 課金/オンボーディング列 (is_premium, needs_onboarding)。
-- SNS リンク 6 列。
-- username, -date_joined の index 追加。
+- SNS リンク 6 列 (https のみ、default="" で null 不可)。
+- -date_joined の index 追加。
+  - username は unique=True で UNIQUE index が張られるため別途 AddIndex しない。
+- email の db_index=True を撤去 (unique=True で UNIQUE index が張られるため重複)。
 
 NOTE: サンドボックス環境で ``manage.py makemigrations`` が実行できないため
 手書きで作成している。将来 ``makemigrations`` を走らせたときに差分が出た
 場合は自動生成版と本ファイルをマージして更新すること。
 """
 
+from django.core.validators import URLValidator
 from django.db import migrations, models
 
 import apps.users.validators
@@ -24,6 +28,16 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # ---- email: db_index=True (冗長) を撤去 ----
+        migrations.AlterField(
+            model_name="user",
+            name="email",
+            field=models.EmailField(
+                max_length=254,
+                unique=True,
+                verbose_name="Email Address",
+            ),
+        ),
         # ---- username: max_length=60 -> 30, validator 差し替え ----
         migrations.AlterField(
             model_name="user",
@@ -61,22 +75,24 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="user",
             name="avatar_url",
-            field=models.CharField(
+            field=models.URLField(
                 blank=True,
                 default="",
-                help_text="S3 URL to the user's avatar image.",
+                help_text="S3 URL to the user's avatar image. Must be https://.",
                 max_length=500,
+                validators=[URLValidator(schemes=["https"])],
                 verbose_name="Avatar URL",
             ),
         ),
         migrations.AddField(
             model_name="user",
             name="header_url",
-            field=models.CharField(
+            field=models.URLField(
                 blank=True,
                 default="",
-                help_text="S3 URL to the user's header image.",
+                help_text="S3 URL to the user's header image. Must be https://.",
                 max_length=500,
+                validators=[URLValidator(schemes=["https"])],
                 verbose_name="Header URL",
             ),
         ),
@@ -101,46 +117,70 @@ class Migration(migrations.Migration):
                 verbose_name="Needs Onboarding",
             ),
         ),
-        # ---- SNS リンク ----
+        # ---- SNS リンク (https のみ / default="") ----
         migrations.AddField(
             model_name="user",
             name="github_url",
-            field=models.URLField(blank=True, null=True, verbose_name="GitHub URL"),
+            field=models.URLField(
+                blank=True,
+                default="",
+                validators=[URLValidator(schemes=["https"])],
+                verbose_name="GitHub URL",
+            ),
         ),
         migrations.AddField(
             model_name="user",
             name="x_url",
             field=models.URLField(
-                blank=True, null=True, verbose_name="X (Twitter) URL"
+                blank=True,
+                default="",
+                validators=[URLValidator(schemes=["https"])],
+                verbose_name="X (Twitter) URL",
             ),
         ),
         migrations.AddField(
             model_name="user",
             name="zenn_url",
-            field=models.URLField(blank=True, null=True, verbose_name="Zenn URL"),
+            field=models.URLField(
+                blank=True,
+                default="",
+                validators=[URLValidator(schemes=["https"])],
+                verbose_name="Zenn URL",
+            ),
         ),
         migrations.AddField(
             model_name="user",
             name="qiita_url",
-            field=models.URLField(blank=True, null=True, verbose_name="Qiita URL"),
+            field=models.URLField(
+                blank=True,
+                default="",
+                validators=[URLValidator(schemes=["https"])],
+                verbose_name="Qiita URL",
+            ),
         ),
         migrations.AddField(
             model_name="user",
             name="note_url",
-            field=models.URLField(blank=True, null=True, verbose_name="note URL"),
+            field=models.URLField(
+                blank=True,
+                default="",
+                validators=[URLValidator(schemes=["https"])],
+                verbose_name="note URL",
+            ),
         ),
         migrations.AddField(
             model_name="user",
             name="linkedin_url",
             field=models.URLField(
-                blank=True, null=True, verbose_name="LinkedIn URL"
+                blank=True,
+                default="",
+                validators=[URLValidator(schemes=["https"])],
+                verbose_name="LinkedIn URL",
             ),
         ),
         # ---- indexes ----
-        migrations.AddIndex(
-            model_name="user",
-            index=models.Index(fields=["username"], name="users_username_idx"),
-        ),
+        # ``username`` の AddIndex は unique=True により UNIQUE index が自動生成
+        # されるため冗長 (database-reviewer HIGH)。削除済み。
         migrations.AddIndex(
             model_name="user",
             index=models.Index(

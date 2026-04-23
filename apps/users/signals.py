@@ -17,6 +17,11 @@ Migration バイパスについて:
     書き換えることが可能。本 SPEC では初回 migration 以降 username の変更は
     想定していないが、将来的に正規化 migration 等が必要になった場合は
     この逃げ道を使うこと。
+
+NOTE (python-reviewer HIGH 対応):
+    ``sender`` は文字列 ``"users.User"`` を指定して apps.py の ``ready()`` 経由で
+    遅延解決させる。トップレベルで ``from apps.users.models import User`` すると
+    AppRegistry 準備前に import される危険があるため、直接 import は避ける。
 """
 
 from __future__ import annotations
@@ -26,14 +31,13 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
+from django.utils.translation import gettext_lazy as _
 
-from apps.users.models import User
 
-
-@receiver(pre_save, sender=User)
+@receiver(pre_save, sender="users.User")
 def prevent_username_change(
-    sender: type[User],
-    instance: User,
+    sender: type,
+    instance: Any,
     raw: bool = False,
     update_fields: frozenset[str] | None = None,
     **kwargs: Any,
@@ -61,13 +65,13 @@ def prevent_username_change(
     # update_fields で "username" を明示的に更新しようとしている場合は拒否。
     if update_fields is not None and "username" in update_fields:
         raise ValidationError(
-            {"username": "Username (@handle) cannot be changed once set."},
+            {"username": _("Username (@handle) cannot be changed once set.")},
             code="username_immutable",
         )
 
     # 値が変わっている場合は拒否 (通常の save() 経路)。
     if instance.username != original:
         raise ValidationError(
-            {"username": "Username (@handle) cannot be changed once set."},
+            {"username": _("Username (@handle) cannot be changed once set.")},
             code="username_immutable",
         )

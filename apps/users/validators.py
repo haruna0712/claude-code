@@ -25,6 +25,7 @@ HANDLE_REGEX = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
 # 大文字小文字は区別せず比較する。
 RESERVED_HANDLES: frozenset[str] = frozenset(
     {
+        # --- 基本的な予約語 ---
         "admin",
         "api",
         "me",
@@ -53,6 +54,25 @@ RESERVED_HANDLES: frozenset[str] = frozenset(
         "home",
         "explore",
         "search",
+        # --- security-reviewer HIGH: インフラ/認証 系の誤配線を防ぐため追加 ---
+        # Webhook / 決済 / 認証コールバックの URL と衝突する handle を予約。
+        "webhook",
+        "webhooks",
+        "stripe",
+        "auth",
+        "callback",
+        "oauth",
+        # --- SNS 標準パスと衝突しがちなもの ---
+        "profile",
+        "following",
+        "followers",
+        "notification",
+        "notifications",
+        "feed",
+        "timeline",
+        "status",
+        # --- 運用系 ---
+        "health",
     }
 )
 
