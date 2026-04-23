@@ -256,11 +256,22 @@ CELERY_WORKERS_SEND_TASKS_EVENTS =True
 
 # P1-01 + ADR-0003: HttpOnly Cookie で JWT を運搬する設定。
 # Secure は stg/prod で True、local では False (mailpit 等で HTTP 疎通用)。
+#
+# security-reviewer (PR #84) 指摘: stg/prod で COOKIE_SECURE が False のまま起動すると
+# Cookie が HTTP でも送信され、セッション盗聴に繋がる。環境別に fail-fast させる。
 COOKIE_NAME = "access"
 COOKIE_SAMESITE = "Lax"
 COOKIE_PATH = "/"
 COOKIE_HTTPONLY = True
 COOKIE_SECURE = getenv("COOKIE_SECURE", "False").lower() == "true"
+
+if SENTRY_ENVIRONMENT in ("stg", "production") and not COOKIE_SECURE:
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured(
+        f"COOKIE_SECURE must be True in {SENTRY_ENVIRONMENT} — "
+        "set env COOKIE_SECURE=True (ADR-0003)."
+    )
 
 
 REST_FRAMEWORK = {
@@ -274,10 +285,6 @@ REST_FRAMEWORK = {
         "django_filters.rest_framework.DjangoFilterBackend",
     ],
     "PAGE_SIZE": 10,
-    "DEFAULT_THROTTLE_CLASSES": (
-        "rest_framework.throttling.AnonRateThrottle",
-        "rest_framework.throttling.UserRateThrottle",
-    ),
     # P1-01 + SPEC §14.5: スパム検知階層を意識した throttle 設定。
     # user_default は既定の 500/day、post_tweet は P1-08 で ScopedRateThrottle として
     # 個別使用し SPEC §14.5 の階層 (100/500/1000 /day) をアラート側 Celery Beat で検知する。
@@ -293,11 +300,13 @@ REST_FRAMEWORK = {
 }
 
 # P1-01 + ADR-0003 準拠:
+# - ALGORITHM              : HS256 を明示 (security-reviewer PR #84 指摘)
 # - ACCESS_TOKEN_LIFETIME  : 60 min (SPEC §1.3 に合わせる、旧 30 分からアップ)
 # - REFRESH_TOKEN_LIFETIME : 14 days (SPEC §1.3 に合わせる、旧 1 day からアップ)
 # - ROTATE_REFRESH_TOKENS  : 継続使用時は自動ローテ、切断後は再ログイン
 # - BLACKLIST_AFTER_ROTATION: ローテ後の旧 refresh を blacklist 追加して再利用拒否
 SIMPLE_JWT = {
+    "ALGORITHM": "HS256",
     "SIGNING_KEY": getenv("SIGNING_KEY"),
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
@@ -305,6 +314,7 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
+    "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 DJOSER = {
@@ -342,14 +352,24 @@ SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE = [
 ]
 SOCIAL_AUTH_USER_MODEL = AUTH_USER_MODEL
 SOCIAL_AUTH_JSONFIELD_ENABLED = True
-# pipeline は P1-12 で JWT 発行ステップを挿入するため先に定義しておく
+# pipeline は P1-12 で JWT 発行ステップを挿入するため先に定義しておく。
+#
+# security-reviewer (PR #84) 指摘: `associate_by_email` はアカウント乗っ取りリスクが
+# あるため含めない。Google OAuth 経由でログインする際、email 一致だけで既存
+# ローカル (djoser) アカウントに紐付けると、攻撃者が他人のメールを使った Google
+# アカウントを作成することで侵入できてしまう。
+#
+# 代わりに:
+#   - 新規 Google ユーザーは `create_user` で新規作成
+#   - 既存ユーザーへの Google 連携は P1-12a で「ログイン済みユーザーが明示的に
+#     リンクする」フローを別途実装する (settings 画面 → OAuth 開始)
 SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.social_auth.social_details",
     "social_core.pipeline.social_auth.social_uid",
     "social_core.pipeline.social_auth.auth_allowed",
     "social_core.pipeline.social_auth.social_user",
     "social_core.pipeline.user.get_username",
-    "social_core.pipeline.social_auth.associate_by_email",
+    # "social_core.pipeline.social_auth.associate_by_email",  # account takeover risk — intentionally omitted
     "social_core.pipeline.user.create_user",
     "social_core.pipeline.social_auth.associate_user",
     "social_core.pipeline.social_auth.load_extra_data",
@@ -410,12 +430,15 @@ MARKDOWN_BLEACH_ALLOWED_TAGS = [
     "span", "strike", "strong", "sub", "sup", "table", "tbody", "td",
     "tfoot", "th", "thead", "tr", "ul", "div", # div はシンタックスハイライトのラッパ用
 ]
+# security-reviewer (PR #84) 指摘: `*` ワイルドカードで全タグに class/id を許可すると
+# XSS 経由のクラス衝突 (例: admin ボタンと同じ class 名で UI を欺瞞) を許してしまう。
+# シンタックスハイライト / コードブロック / コラプス用 div に限定して class を個別許可。
 MARKDOWN_BLEACH_ALLOWED_ATTRS = {
-    "*": ["class", "id"],
-    "a": ["href", "title", "target", "rel"],
-    "img": ["src", "alt", "title", "width", "height", "loading"],
-    "code": ["class"], # e.g. language-python
+    "a":    ["href", "title", "target", "rel"],
+    "img":  ["src", "alt", "title", "width", "height", "loading"],
+    "code": ["class"], # e.g. language-python (Shiki 用)
     "pre":  ["class"],
-    "span": ["class"], # Shiki のシンタックスハイライト
+    "span": ["class"], # Shiki のシンタックスハイライト (style は別途拒否)
+    "div":  ["class"], # シンタックスハイライトのラッパ (highlight 等)
 }
 MARKDOWN_BLEACH_ALLOWED_PROTOCOLS = ["http", "https", "mailto"] # javascript: を弾く
