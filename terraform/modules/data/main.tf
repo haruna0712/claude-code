@@ -40,8 +40,17 @@ resource "aws_db_parameter_group" "postgres15" {
   description = "Postgres 15 parameters with pg_bigm + pg_trgm preloaded"
 
   parameter {
+    # pg_bigm: 日本語全文検索 (Phase 1/2 で CREATE EXTENSION)
+    # pg_stat_statements: Performance Insights が参照するクエリ統計 (DB reviewer PR #50 HIGH)
     name         = "shared_preload_libraries"
-    value        = "pg_bigm"
+    value        = "pg_bigm,pg_stat_statements"
+    apply_method = "pending-reboot"
+  }
+
+  parameter {
+    # pg_stat_statements の追跡対象: IN 句などの正規化した文
+    name         = "pg_stat_statements.track"
+    value        = "all"
     apply_method = "pending-reboot"
   }
 
@@ -78,6 +87,8 @@ resource "aws_db_instance" "this" {
   allocated_storage      = var.rds_allocated_storage_gb
   max_allocated_storage  = var.rds_max_allocated_storage_gb > 0 ? var.rds_max_allocated_storage_gb : null
   storage_type           = "gp3"
+  iops                   = var.rds_storage_iops
+  storage_throughput     = var.rds_storage_throughput_mbs
   storage_encrypted      = true
   # KMS は AWS managed key (aws/rds)。prod で CMK 移行時は kms_key_id を variable 化する。
 
@@ -102,9 +113,14 @@ resource "aws_db_instance" "this" {
   backup_window           = "18:00-19:00" # JST 03:00-04:00
   maintenance_window      = "Wed:19:00-Wed:20:00" # JST 水曜 04:00-05:00
 
-  deletion_protection       = var.rds_deletion_protection
-  skip_final_snapshot       = var.rds_skip_final_snapshot
-  final_snapshot_identifier = var.rds_skip_final_snapshot ? null : "${local.prefix}-postgres-final-${formatdate("YYYYMMDDhhmm", timestamp())}"
+  deletion_protection = var.rds_deletion_protection
+  skip_final_snapshot = var.rds_skip_final_snapshot
+  # final_snapshot_identifier は timestamp() を使わず固定名にする
+  # (database-reviewer PR #50 MEDIUM: timestamp() は毎 plan で差分を生む)。
+  # 実行時刻は copy_tags_to_snapshot で引き継いだ tags + AWS 側の作成時刻から追える。
+  # teardown を複数回行う場合は手動で snapshot 名を別にする (e.g. `final_snapshot_identifier`
+  # 変数化は本モジュールでは未対応、必要になれば追加)。
+  final_snapshot_identifier = var.rds_skip_final_snapshot ? null : "${local.prefix}-postgres-final"
   copy_tags_to_snapshot     = true
 
   performance_insights_enabled          = true
@@ -117,10 +133,9 @@ resource "aws_db_instance" "this" {
   })
 
   lifecycle {
-    # password と engine_version は手動運用に委ねる
+    # password は手動運用に委ねる (secrets モジュール側の ignore_changes と対)
     ignore_changes = [
       password,
-      final_snapshot_identifier, # timestamp() で差分が出続けるため
     ]
   }
 }
@@ -146,11 +161,20 @@ resource "aws_elasticache_parameter_group" "redis7" {
   family      = "redis7"
   description = "Redis 7 parameters for stg (Channels layer + Celery broker + cache)"
 
-  # Celery broker として使うので AOF 有効化、Channels layer として使うので
-  # maxmemory-policy は allkeys-lru。
+  # maxmemory-policy の選択 (database-reviewer PR #50 HIGH):
+  #
+  # この Redis は 3 種類のワークロードを相乗りしている:
+  #   1. Celery broker (キューの key は TTL なし、evict されるとジョブ消失)
+  #   2. Django Channels layer (WebSocket state、key に TTL あり)
+  #   3. 汎用キャッシュ (ツイート TL / OGP / トレンドタグ等、key に TTL あり)
+  #
+  # allkeys-lru は 1 も evict するため stg でもジョブ消失のリスクがある。
+  # volatile-lru は「TTL を明示的に設定した key のみを LRU で evict」するため、
+  # Channels と cache (両方 TTL 付き) は evict されつつ、Celery の broker キュー
+  # は保持される。Phase 3+ で job 量が増えたら Celery 用を別 Redis に分離する。
   parameter {
     name  = "maxmemory-policy"
-    value = "allkeys-lru"
+    value = "volatile-lru"
   }
 
   lifecycle {

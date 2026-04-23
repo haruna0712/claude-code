@@ -56,9 +56,25 @@ variable "db_master_password" {
 # ---------- RDS ----------
 
 variable "rds_engine_version" {
-  description = "PostgreSQL バージョン"
+  description = <<-EOT
+    PostgreSQL バージョン。
+    `auto_minor_version_upgrade = true` のためマイナーはメンテナンスウィンドウで
+    自動更新される。メジャーアップグレード (15→16) は ADR 化して明示的に実施する。
+  EOT
   type        = string
-  default     = "15.8"
+  default     = "15.12"
+}
+
+variable "rds_storage_iops" {
+  description = "gp3 IOPS。null で AWS デフォルト (3000 IOPS)。allocated_storage が 400GB を超える場合は指定推奨。"
+  type        = number
+  default     = null
+}
+
+variable "rds_storage_throughput_mbs" {
+  description = "gp3 スループット (MB/s)。null で AWS デフォルト (125 MB/s)。"
+  type        = number
+  default     = null
 }
 
 variable "rds_instance_class" {
