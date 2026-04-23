@@ -29,8 +29,8 @@ class TestUserCreationFormCleanUsername:
                 "last_name": "Yamada",
                 "username": "admin",
                 "email": "taro@example.com",
-                "password1": "VeryStrongPass9!",
-                "password2": "VeryStrongPass9!",
+                "password1": "VeryStrongPass9!",  # pragma: allowlist secret
+                "password2": "VeryStrongPass9!",  # pragma: allowlist secret
             }
         )
 
@@ -46,8 +46,8 @@ class TestUserCreationFormCleanUsername:
                 "last_name": "Yamada",
                 "username": "taro-yamada",
                 "email": "taro2@example.com",
-                "password1": "VeryStrongPass9!",
-                "password2": "VeryStrongPass9!",
+                "password1": "VeryStrongPass9!",  # pragma: allowlist secret
+                "password2": "VeryStrongPass9!",  # pragma: allowlist secret
             }
         )
 
@@ -63,8 +63,8 @@ class TestUserCreationFormCleanUsername:
                 "last_name": "Suzuki",
                 "username": "tarohan",
                 "email": "hanako@example.com",
-                "password1": "VeryStrongPass9!",
-                "password2": "VeryStrongPass9!",
+                "password1": "VeryStrongPass9!",  # pragma: allowlist secret
+                "password2": "VeryStrongPass9!",  # pragma: allowlist secret
             }
         )
 
@@ -80,8 +80,8 @@ class TestUserCreationFormCleanUsername:
                 "last_name": "Yamada",
                 "username": "taro_42",
                 "email": "valid@example.com",
-                "password1": "VeryStrongPass9!",
-                "password2": "VeryStrongPass9!",
+                "password1": "VeryStrongPass9!",  # pragma: allowlist secret
+                "password2": "VeryStrongPass9!",  # pragma: allowlist secret
             }
         )
         assert form.is_valid(), form.errors
@@ -99,8 +99,8 @@ class TestUserCreationFormCleanEmail:
                 "last_name": "Yamada",
                 "username": "another_handle",
                 "email": "dup@example.com",
-                "password1": "VeryStrongPass9!",
-                "password2": "VeryStrongPass9!",
+                "password1": "VeryStrongPass9!",  # pragma: allowlist secret
+                "password2": "VeryStrongPass9!",  # pragma: allowlist secret
             }
         )
 

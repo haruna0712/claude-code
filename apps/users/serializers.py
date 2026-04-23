@@ -28,7 +28,7 @@ class CustomUserSerializer(UserSerializer):
     SPEC §2 に従い username は read_only (= 変更不可) として公開する。
     """
 
-    full_name = serializers.ReadOnlyField(source="full_name")
+    full_name = serializers.ReadOnlyField()
 
     class Meta(UserSerializer.Meta):
         model = User
