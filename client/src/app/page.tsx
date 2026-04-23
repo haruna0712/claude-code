@@ -10,18 +10,28 @@ export const metadata: Metadata = {
     "Engineer-focused SNS staging environment. Real landing page ships in Phase 1.",
 };
 
-// 環境情報はビルド時に env から埋める (サーバー側のみ参照)。
+// NEXT_PUBLIC_* はクライアントバンドルに埋め込まれ、サーバー/クライアント両方で
+// 参照可能な公開値。Sentry の environment / release はクライアントの
+// sentry.client.config.ts も参照するため NEXT_PUBLIC_ で共有する。
 const ENV = process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ?? "local";
 const VERSION = process.env.NEXT_PUBLIC_SENTRY_RELEASE ?? "dev";
 
+type HealthStatus = "ok" | "degraded";
+
 interface HealthResponse {
-  status: string;
+  status: HealthStatus;
   version?: string;
-  db?: string;
+  db?: "ok" | "unreachable";
   time?: string;
 }
 
-async function fetchHealth(): Promise<HealthResponse | { error: string }> {
+interface HealthError {
+  error: string;
+}
+
+type HealthResult = HealthResponse | HealthError;
+
+async function fetchHealth(): Promise<HealthResult> {
   // stg では nginx/ALB 経由で /api/health/ に届く。ローカル Docker Compose
   // では api コンテナの DNS 名で直接呼ぶ。
   const base = process.env.API_BASE_URL ?? "http://api:8000";
@@ -32,16 +42,21 @@ async function fetchHealth(): Promise<HealthResponse | { error: string }> {
       signal: AbortSignal.timeout(3000),
     });
     if (!response.ok) {
-      return { error: `HTTP ${response.status}` };
+      // 詳細 (status text / body) はサーバー側のログにとどめ、画面には HTTP code のみ。
+      console.error(`health fetch HTTP ${response.status}`); // eslint-disable-line no-console
+      return { error: `API returned HTTP ${response.status}` };
     }
     return (await response.json()) as HealthResponse;
   } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
+    // 内部ホスト名 (http://api:8000) や stack trace を画面に出さない
+    // (typescript-reviewer PR #56 HIGH: 情報漏洩対策)。詳細はサーバーログへ。
+    console.error("health fetch failed", err); // eslint-disable-line no-console
+    return { error: "API unavailable" };
   }
 }
 
 export default async function HelloPage() {
-  const health = await fetchHealth();
+  const health: HealthResult = await fetchHealth();
   const isHealthy = "status" in health && health.status === "ok";
 
   return (
