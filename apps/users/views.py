@@ -1,14 +1,21 @@
 import logging
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from djoser.social.views import ProviderAuthView
 from rest_framework import status
+from rest_framework.generics import RetrieveAPIView
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from apps.users.serializers import CustomUserSerializer, PublicProfileSerializer
+
 logger = logging.getLogger(__name__)
+
+User = get_user_model()
 
 
 def set_auth_cookies(
@@ -129,3 +136,47 @@ class LogoutAPIView(APIView):
         response.delete_cookie("refresh")
         response.delete_cookie("logged_in")
         return response
+
+
+class MeView(APIView):
+    """現在ログイン中ユーザーの完全プロフィール (SPEC §2)。
+
+    - ``GET /api/v1/users/me/``: 完全プロフィール返却 (認証必須)
+    - ``PATCH /api/v1/users/me/``: 可変フィールドを部分更新
+
+    CustomUserSerializer の read_only_fields により
+    username / email / is_premium / id / date_joined は PATCH しても
+    silently drop される (DRF 標準挙動)。
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, *args, **kwargs) -> Response:
+        serializer = CustomUserSerializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request: Request, *args, **kwargs) -> Response:
+        serializer = CustomUserSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class PublicProfileView(RetrieveAPIView):
+    """公開プロフィール (SPEC §2.2)。
+
+    ``GET /api/v1/users/<handle>/``: 未ログインでも閲覧可能。
+
+    - ``is_active=False`` のユーザーは 404 として扱う (存在隠蔽)。
+    - lookup は URL の ``username`` (= @handle) で行う。
+    - PublicProfileSerializer で email / is_premium 等の内部 flag を除外する。
+    """
+
+    lookup_field = "username"
+    queryset = User.objects.filter(is_active=True)
+    serializer_class = PublicProfileSerializer
+    permission_classes = [AllowAny]
