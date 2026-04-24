@@ -21,16 +21,32 @@ from rest_framework.parsers import JSONParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from apps.common.cookie_auth import CookieAuthentication, CSRFEnforcingAuthentication
 from apps.tags.models import Tag
 from apps.tags.serializers import (
+    TagCreateResponseSerializer,
     TagCreateSerializer,
     TagDetailSerializer,
     TagListSerializer,
 )
-from apps.tags.validators import find_similar_tags
+from apps.tags.validators import MAX_TAG_LENGTH, find_similar_tags
+
+
+class TagProposeThrottle(UserRateThrottle):
+    """``POST /api/v1/tags/propose/`` 専用のレート制限.
+
+    code-reviewer (PR #135 HIGH #2) 指摘:
+        ``find_similar_tags`` は全 approved タグに対して Levenshtein 距離を
+        Python 側で計算するため、認証済みユーザーの既定 throttle (500/day) だけでは
+        攻撃者が短時間に大量 POST して DB / CPU を消費させる余地が残る。
+        `tag_propose` scope を切って 20/hour に絞り、提案 API 単独で
+        ブルートフォース的な近似検索を抑止する。
+    """
+
+    scope = "tag_propose"
 
 
 class TagListView(ListAPIView):
@@ -56,6 +72,12 @@ class TagListView(ListAPIView):
         queryset = Tag.objects.all()
         q = self.request.query_params.get("q", "").strip()
         if q:
+            # code-reviewer (PR #135 MEDIUM #7) 指摘:
+            #   validators.find_similar_tags 側は呼ばれないが、ORM 側の LIKE も
+            #   ``q`` が極端に長いと遅くなるため、タグ名の最大長で切り詰めて
+            #   DoS 的な入力を無害化する。タグ名は MAX_TAG_LENGTH を超えては
+            #   ヒットし得ないのでセマンティクスも変わらない。
+            q = q[:MAX_TAG_LENGTH]
             # name は小文字保存なので istartswith と startswith は等価だが、
             # 大文字入力でも引けるよう istartswith を使う。
             # display_name は大小混在なので icontains で部分一致にする。
@@ -74,7 +96,10 @@ class TagDetailView(RetrieveAPIView):
     serializer_class = TagDetailSerializer
     permission_classes = [AllowAny]
     authentication_classes: list = []
-    # URL kwarg 名は ``name``。
+    # URL kwarg 名は ``name``。``get_object`` を override しているので
+    # ``lookup_field`` は実際には使われないが、code-reviewer (PR #135 MEDIUM #5)
+    # 指摘どおり「どの column で引いているか」を一目で分かるよう明示する。
+    lookup_field = "name"
     lookup_url_kwarg = "name"
 
     def get_queryset(self) -> QuerySet[Tag]:
@@ -118,6 +143,10 @@ class TagProposeView(APIView):
     # 2 番目に置くことで「Cookie 無し POST でも CSRF を強制しつつ、401 を返す」挙動にする。
     authentication_classes = [CookieAuthentication, CSRFEnforcingAuthentication]
     permission_classes = [IsAuthenticated]
+    # code-reviewer (PR #135 HIGH #2) 指摘: find_similar_tags を Python 側で
+    # 全 approved タグに対し回すため、既定 throttle (user: 500/day) だけでは
+    # 短時間の大量 POST に弱い。専用 scope (20/hour) で抑止する。
+    throttle_classes = [TagProposeThrottle]
     parser_classes = [JSONParser]
     # 他メソッドは 405 で弾く (副作用のある POST だけを受け付ける意図を明示する)。
     http_method_names = ["post", "head", "options"]
@@ -160,12 +189,9 @@ class TagProposeView(APIView):
             is_approved=False,
         )
 
+        # code-reviewer (PR #135 HIGH #3) 指摘: 201 応答も serializer 経由にして
+        # フィールドの単一情報源を保つ (API Schema との乖離を防止)。
         return Response(
-            {
-                "name": tag.name,
-                "display_name": tag.display_name,
-                "usage_count": tag.usage_count,
-                "is_approved": tag.is_approved,
-            },
+            TagCreateResponseSerializer(tag).data,
             status=status.HTTP_201_CREATED,
         )

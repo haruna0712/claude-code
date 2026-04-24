@@ -101,7 +101,26 @@ class TagCreateSerializer(serializers.Serializer):
         return normalized
 
     def validate(self, attrs: dict[str, str]) -> dict[str, str]:
-        """display_name 未指定時に name.capitalize() をデフォルトとして採用する."""
+        """display_name 未指定時に name.capitalize() をデフォルトとして採用する.
+
+        code-reviewer (PR #135 MEDIUM #4) 指摘: 引数の dict を mutate せず、
+        新しい dict を返して不変性を保つ (共通 coding-style.md の方針に沿う)。
+        """
         if not attrs.get("display_name"):
-            attrs["display_name"] = attrs["name"].capitalize()
+            return {**attrs, "display_name": attrs["name"].capitalize()}
         return attrs
+
+
+class TagCreateResponseSerializer(serializers.ModelSerializer):
+    """タグ新規提案 (POST) の 201 応答用 serializer.
+
+    code-reviewer (PR #135 HIGH #3) 指摘:
+        view 側で dict をハードコードして返すとフィールド構成が serializer と
+        二重管理になり、API Schema との乖離を招く。応答を serializer に寄せて
+        フィールド定義の単一情報源を保つ。
+    """
+
+    class Meta:
+        model = Tag
+        fields = ["name", "display_name", "usage_count", "is_approved"]
+        read_only_fields = fields

@@ -218,6 +218,27 @@ class TestTagListView:
         assert data["count"] == 0
         assert data["results"] == []
 
+    def test_empty_q_returns_all_approved(
+        self, api_client: APIClient, tag_factory, list_url: str
+    ) -> None:
+        """``?q=`` (空文字) は絞り込みせず approved 全件を返す.
+
+        code-reviewer (PR #135 MEDIUM #6) 指摘: 空文字 q の挙動を回帰テスト化。
+        """
+        # Arrange: approved 2 件 + unapproved 1 件
+        tag_factory(name="python", is_approved=True)
+        tag_factory(name="rust", is_approved=True)
+        tag_factory(name="hidden", is_approved=False)
+
+        # Act
+        res = api_client.get(list_url, {"q": ""})
+
+        # Assert
+        assert res.status_code == status.HTTP_200_OK
+        names = sorted(r["name"] for r in res.json()["results"])
+        # approved 全件が返り、unapproved は混ざらない
+        assert names == ["python", "rust"]
+
 
 # =============================================================================
 # GET /api/v1/tags/<name>/
@@ -415,6 +436,27 @@ class TestTagProposeView:
         assert res.json()["display_name"] == "Kotlin"
         tag = Tag.all_objects.get(name="kotlin")
         assert tag.display_name == "Kotlin"
+
+    def test_get_propose_returns_405(
+        self,
+        api_client: APIClient,
+        user_factory,
+        propose_url: str,
+    ) -> None:
+        """``GET /api/v1/tags/propose/`` は副作用のある POST 専用なので 405.
+
+        code-reviewer (PR #135 MEDIUM #6) 指摘: ``http_method_names`` で弾いている
+        挙動を回帰テスト化する。
+        """
+        # Arrange: 認証済みでも動作が変わらないことを確認したいので force_authenticate
+        user = user_factory()
+        api_client.force_authenticate(user=user)
+
+        # Act
+        res = api_client.get(propose_url)
+
+        # Assert
+        assert res.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
     def test_csrf_enforced_without_token(
         self,
