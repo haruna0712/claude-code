@@ -27,6 +27,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework import serializers as drf_serializers
 from rest_framework import status, viewsets
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -35,6 +36,7 @@ from rest_framework.response import Response
 
 from apps.common.cookie_auth import CookieAuthentication
 from apps.common.throttling import PostTweetThrottle
+from apps.tweets.managers import TweetQuerySet
 from apps.tweets.models import Tweet
 from apps.tweets.serializers import (
     TweetCreateSerializer,
@@ -71,7 +73,7 @@ class TweetViewSet(viewsets.ModelViewSet):
     # 1. Serializer / Permission / Authentication / Throttle の切替
     # ------------------------------------------------------------------
 
-    def get_serializer_class(self) -> type:
+    def get_serializer_class(self) -> type[drf_serializers.Serializer]:
         if self.action == ACTION_LIST:
             return TweetListSerializer
         if self.action == ACTION_RETRIEVE:
@@ -114,7 +116,7 @@ class TweetViewSet(viewsets.ModelViewSet):
     # 2. Queryset filter (list)
     # ------------------------------------------------------------------
 
-    def get_queryset(self):
+    def get_queryset(self) -> TweetQuerySet:
         """``?author=<username>`` と ``?tag=<name>`` のクエリフィルタを適用する。
 
         ``created_at desc`` は Tweet.Meta.ordering で既定。
@@ -223,7 +225,7 @@ class TweetViewSet(viewsets.ModelViewSet):
         out = TweetDetailSerializer(instance, context=self.get_serializer_context()).data
         return Response(out, status=status.HTTP_200_OK)
 
-    def perform_update(self, serializer) -> None:
+    def perform_update(self, serializer: drf_serializers.Serializer) -> None:
         serializer.save()
 
     # ------------------------------------------------------------------

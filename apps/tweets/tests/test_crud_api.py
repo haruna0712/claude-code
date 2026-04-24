@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Any
 
 import pytest
 from django.urls import reverse
@@ -47,7 +48,7 @@ def detail_url(pk: int) -> str:
     return reverse("tweets-detail", kwargs={"pk": pk})
 
 
-def _image_payload(url: str = "https://cdn.example.com/a.png", order: int = 0) -> dict:
+def _image_payload(url: str = "https://cdn.example.com/a.png", order: int = 0) -> dict[str, Any]:
     return {"image_url": url, "width": 400, "height": 300, "order": order}
 
 
@@ -430,6 +431,22 @@ class TestUpdateTweet:
         # Assert
         assert res.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_patch_exactly_at_window_boundary_succeeds(self, api_client: APIClient) -> None:
+        """編集ウィンドウ境界値: 30 分 - 1 秒前ならまだ編集可能。"""
+        # Arrange
+        author = make_user()
+        tweet = make_tweet(author=author, body="before")
+        # timedelta の引数: seconds=-1 で "30 分 - 1 秒" を表現する
+        past = timezone.now() - timedelta(minutes=TWEET_EDIT_WINDOW_MINUTES, seconds=-1)
+        Tweet.objects.filter(pk=tweet.pk).update(created_at=past)
+        api_client.force_authenticate(user=author)
+
+        # Act
+        res = api_client.patch(detail_url(tweet.pk), {"body": "after"}, format="json")
+
+        # Assert
+        assert res.status_code == status.HTTP_200_OK
+
     def test_patch_after_max_edits_rejected(self, api_client: APIClient) -> None:
         # Arrange: 既に上限回編集済み
         author = make_user()
@@ -443,6 +460,20 @@ class TestUpdateTweet:
         # Assert
         assert res.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_patch_at_edit_count_4_succeeds(self, api_client: APIClient) -> None:
+        """編集回数境界値: 上限 - 1 回目ならまだ編集可能。"""
+        # Arrange
+        author = make_user()
+        tweet = make_tweet(author=author, body="x")
+        Tweet.objects.filter(pk=tweet.pk).update(edit_count=TWEET_MAX_EDIT_COUNT - 1)
+        api_client.force_authenticate(user=author)
+
+        # Act
+        res = api_client.patch(detail_url(tweet.pk), {"body": "y"}, format="json")
+
+        # Assert
+        assert res.status_code == status.HTTP_200_OK
+
     def test_patch_over_max_body_length_rejected(self, api_client: APIClient) -> None:
         # Arrange
         author = make_user()
@@ -454,6 +485,33 @@ class TestUpdateTweet:
 
         # Assert
         assert res.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_patch_soft_deleted_returns_404(self, api_client: APIClient) -> None:
+        """soft-deleted な Tweet への PATCH は 404 (alive queryset から除外)。"""
+        # Arrange
+        author = make_user()
+        tweet = make_tweet(author=author, body="x")
+        tweet.soft_delete()
+        api_client.force_authenticate(user=author)
+
+        # Act
+        res = api_client.patch(detail_url(tweet.pk), {"body": "x"}, format="json")
+
+        # Assert
+        assert res.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_put_method_not_allowed(self, api_client: APIClient) -> None:
+        """PUT は非サポート (PATCH のみ)。"""
+        # Arrange
+        author = make_user()
+        tweet = make_tweet(author=author, body="x")
+        api_client.force_authenticate(user=author)
+
+        # Act
+        res = api_client.put(detail_url(tweet.pk), {"body": "x"}, format="json")
+
+        # Assert
+        assert res.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
 
 # =============================================================================
@@ -504,3 +562,41 @@ class TestDeleteTweet:
         tweet.refresh_from_db()
         assert tweet.is_deleted is True
         assert tweet.deleted_at is not None
+
+    def test_delete_soft_deleted_returns_404(self, api_client: APIClient) -> None:
+        """既に soft-deleted な Tweet への DELETE は 404。"""
+        # Arrange
+        author = make_user()
+        tweet = make_tweet(author=author, body="x")
+        tweet.soft_delete()
+        api_client.force_authenticate(user=author)
+
+        # Act
+        res = api_client.delete(detail_url(tweet.pk))
+
+        # Assert
+        assert res.status_code == status.HTTP_404_NOT_FOUND
+
+
+# =============================================================================
+# Tag handling
+# =============================================================================
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+class TestTagHandling:
+    def test_duplicate_tags_case_insensitive_deduplicated(self, api_client: APIClient) -> None:
+        """大文字小文字違いの重複タグは 1 件にまとめて lower-case で保存される。"""
+        # Arrange
+        user = make_user()
+        api_client.force_authenticate(user=user)
+        make_tag(name="python", is_approved=True)
+        payload = {"body": "hi", "tags": ["Python", "python", "PYTHON"]}
+
+        # Act
+        res = api_client.post(list_url(), payload, format="json")
+
+        # Assert
+        assert res.status_code == status.HTTP_201_CREATED
+        assert res.json()["tags"] == ["python"]

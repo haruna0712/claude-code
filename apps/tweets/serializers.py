@@ -200,6 +200,8 @@ class TweetCreateSerializer(serializers.Serializer):
         if len(unique) > TWEET_MAX_TAGS:
             raise serializers.ValidationError(f"タグは最大 {TWEET_MAX_TAGS} 個まで指定できます。")
 
+        # Tag.objects (= ApprovedTagManager) が既に is_approved=True で絞るが、
+        # defense-in-depth と可読性のため is_approved=True を明示する。
         existing = set(
             Tag.objects.filter(name__in=unique, is_approved=True).values_list("name", flat=True)
         )
@@ -221,7 +223,10 @@ class TweetCreateSerializer(serializers.Serializer):
         tags: list[str] = validated_data.pop("tags", [])
         images: list[dict[str, Any]] = validated_data.pop("images", [])
         author = validated_data.pop("author")
-        body: str = validated_data["body"]
+        # defensive: pop() で取り出しておくことで、以降 validated_data を
+        # Tweet.objects.create(**validated_data) のように unpack しても
+        # 重複キー / 未知フィールドで落ちないようにする。
+        body: str = validated_data.pop("body")
 
         tweet = Tweet.objects.create(author=author, body=body)
 
