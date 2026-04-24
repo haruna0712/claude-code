@@ -91,7 +91,7 @@ def _mock_failure_response(
 @pytest.mark.unit
 class TestGoogleCookieAuthURL:
     def test_url_resolves(self) -> None:
-        assert reverse("google-oauth-cookie") == GOOGLE_COOKIE_URL
+        assert reverse("google-oauth-cookie", kwargs={"provider": "google-oauth2"}) == GOOGLE_COOKIE_URL
 
     def test_url_resolves_with_provider_kwarg(self) -> None:
         """code-reviewer (PR #138 CRITICAL) 回帰テスト.
