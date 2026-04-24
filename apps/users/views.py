@@ -171,6 +171,61 @@ class CustomProviderAuthView(ProviderAuthView):
         return provider_res
 
 
+class GoogleCookieAuthView(ProviderAuthView):
+    """Google OAuth2 callback 処理の Cookie 版 (P1-12 / ADR-0003 / SPEC §1.2).
+
+    djoser 標準の ``ProviderAuthView`` は ``POST /api/v1/auth/o/google-oauth2/?
+    code=...&state=...`` の成功時に ``{access, refresh, user}`` を JSON body
+    で返す。本プロジェクトは ADR-0003 で「JWT は JS から読めない HttpOnly
+    Cookie のみで運搬する」方針のため、本 view は super() の結果から token
+    を取り出し ``set_auth_cookies`` で Cookie に載せ換え、レスポンス body
+    からは ``access`` / ``refresh`` を除去する。
+
+    security-reviewer #84 (SOCIAL_AUTH_PIPELINE) 対応:
+        ``associate_by_email`` はパイプラインから除外済みのため、Google OAuth
+        で初来訪したメールアドレスは常に ``create_user`` で新規ユーザーとして
+        作成される。既存 djoser ユーザーへの Google 連携は別途 settings 画面
+        経由で実装する (本 Issue では実装しない)。
+
+    互換:
+        旧 ``CustomProviderAuthView`` (``/o/<provider>/``) は message 付き body
+        も残す既存挙動のため、移行期間中は両立させる。新規 frontend は
+        ``/o/google-oauth2/cookie/`` を使う。
+    """
+
+    provider_name = "google-oauth2"
+
+    def post(self, request: Request, *args, **kwargs) -> Response:
+        provider_res = super().post(request, *args, **kwargs)
+
+        # ProviderAuthView は成功時 201 CREATED を返す仕様。それ以外 (400/401)
+        # はエラーのままパススルーする。
+        if provider_res.status_code != status.HTTP_201_CREATED:
+            return provider_res
+
+        access_token = provider_res.data.get("access")
+        refresh_token = provider_res.data.get("refresh")
+        user_payload = provider_res.data.get("user")
+
+        if not (access_token and refresh_token):
+            logger.error("Access or refresh token not found in Google OAuth response")
+            return provider_res
+
+        response = Response(
+            {
+                "user": user_payload,
+                "detail": "Google OAuth login successful",
+            },
+            status=status.HTTP_200_OK,
+        )
+        set_auth_cookies(
+            response,
+            access_token=access_token,
+            refresh_token=refresh_token,
+        )
+        return response
+
+
 class LogoutAPIView(APIView):
     """旧 logout view (ADR-0003 移行期間中の互換目的).
 

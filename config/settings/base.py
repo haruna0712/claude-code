@@ -412,7 +412,10 @@ SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.social_auth.associate_user",
     "social_core.pipeline.social_auth.load_extra_data",
     "social_core.pipeline.user.user_details",
-    # "apps.users.pipeline.issue_jwt_and_set_cookie",  # P1-12 で追加
+    # P1-12: 新規ユーザーに needs_onboarding=True を明示的に設定 (SPEC §1.2)。
+    # User モデルの default が将来変わっても onboarding flow が確実に起動するよう
+    # pipeline 内で立てる。既存ユーザーには干渉しない (is_new=True のみ動作)。
+    "apps.users.social_pipeline.set_needs_onboarding",
 )
 
 # ---------------------------------------------------------------------------
