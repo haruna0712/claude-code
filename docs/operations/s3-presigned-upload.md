@@ -70,12 +70,17 @@ const res = await fetch("/api/v1/users/me/avatar-upload-url/", {
 const { upload_url, object_key, public_url } = await res.json();
 
 // 2. 取得した URL に対して直接 PUT (Cookie / Authorization は送らない)
+//    credentials: "omit" を明示することで Cookie (session / CSRF) が S3 に
+//    送られないようにし、S3 側の署名検証 / CORS エラーを避ける。
+//    これを付けないとブラウザが same-site / third-party cookie を送るケースがあり、
+//    presigned URL の署名対象外ヘッダーが混入して "SignatureDoesNotMatch" になる。
 await fetch(upload_url, {
   method: "PUT",
   headers: {
     // サーバー側で署名に含めた値と完全一致させる必要がある。
     "Content-Type": file.type,
   },
+  credentials: "omit",
   body: file,
 });
 
@@ -93,7 +98,9 @@ await fetch("/api/v1/users/me/", {
 
 ### ポイント
 
-- S3 への PUT には `credentials: "omit"` が望ましい (Cookie を送らない)。
+- S3 への PUT には **必ず `credentials: "omit"` を付ける**。上記サンプル参照。
+  Cookie / Authorization header を送ってしまうと署名対象外ヘッダーが混入して
+  `SignatureDoesNotMatch` になるケースがある。
 - `Content-Type` は presigned URL 発行時と **完全に一致** させる。
   ずれると S3 側で `SignatureDoesNotMatch` エラーになる。
 - クライアント側でも事前に「画像か?」「5MB 以下か?」を UI レベルでチェック
