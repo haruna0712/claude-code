@@ -256,6 +256,10 @@ CELERY_WORKERS_SEND_TASKS_EVENTS = True
 # security-reviewer (PR #84) 指摘: stg/prod で COOKIE_SECURE が False のまま起動すると
 # Cookie が HTTP でも送信され、セッション盗聴に繋がる。環境別に fail-fast させる。
 COOKIE_NAME = "access"
+# P1-12a + ADR-0003: refresh token も HttpOnly Cookie に載せる。access (COOKIE_NAME)
+# とはキー名を分けることで、CookieTokenRefreshView が refresh のみを読み、他 API
+# のリクエストに不必要な refresh cookie を送らない設計を取れる。
+REFRESH_COOKIE_NAME = "refresh"
 COOKIE_SAMESITE = "Lax"
 COOKIE_PATH = "/"
 COOKIE_HTTPONLY = True
