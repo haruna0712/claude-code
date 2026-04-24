@@ -290,7 +290,7 @@ class TestCookieLogin:
         user, _password = self._activate(api_client)
         res = api_client.post(
             COOKIE_LOGIN_URL,
-            {"email": user.email, "password": "WrongPassword!42"},
+            {"email": user.email, "password": "WrongPassword!42"},  # pragma: allowlist secret
             format="json",
         )
         assert res.status_code == HTTPStatus.UNAUTHORIZED
@@ -312,7 +312,7 @@ class TestCookieRefresh:
         api_client.post(ACTIVATION_URL, {"uid": uid, "token": token}, format="json")
         login = api_client.post(
             COOKIE_LOGIN_URL,
-            {"email": user.email, "password": "StrongPass!2026"},
+            {"email": user.email, "password": "StrongPass!2026"},  # pragma: allowlist secret
             format="json",
         )
         assert login.status_code == HTTPStatus.OK
@@ -363,7 +363,7 @@ class TestLogout:
         api_client.post(ACTIVATION_URL, {"uid": uid, "token": token}, format="json")
         login = api_client.post(
             COOKIE_LOGIN_URL,
-            {"email": user.email, "password": "StrongPass!2026"},
+            {"email": user.email, "password": "StrongPass!2026"},  # pragma: allowlist secret
             format="json",
         )
         assert login.status_code == HTTPStatus.OK
@@ -450,7 +450,7 @@ class TestPasswordReset:
         assert len(mail.outbox) == 1
         uid, token = _extract_uid_token(mail.outbox[0])
 
-        new_password = "BrandNewPass!2026"
+        new_password = "BrandNewPass!2026"  # pragma: allowlist secret
         res = api_client.post(
             PASSWORD_RESET_CONFIRM_URL,
             {

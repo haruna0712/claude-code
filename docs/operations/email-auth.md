@@ -41,26 +41,26 @@
 
 ## エンドポイント一覧
 
-| ステップ       | Method + Path                                  | レスポンス                            |
-| -------------- | ---------------------------------------------- | ------------------------------------- |
-| signup         | `POST /api/v1/auth/users/`                     | `201` + user JSON (JWT は返さない)    |
-| activation     | `POST /api/v1/auth/users/activation/`          | `204` (body 空、Cookie も set しない) |
-| cookie login   | `POST /api/v1/auth/cookie/create/`             | `200` `{detail: "Login successful"}`  |
-| cookie refresh | `POST /api/v1/auth/cookie/refresh/`            | `200` `{detail: "Token refreshed"}`   |
-| cookie logout  | `POST /api/v1/auth/cookie/logout/`             | `200` `{detail: "Logged out"}`        |
-| password reset | `POST /api/v1/auth/users/reset_password/`      | `204` + メール送信                    |
-| reset confirm  | `POST /api/v1/auth/users/reset_password_confirm/` | `204`                              |
+| ステップ       | Method + Path                                     | レスポンス                            |
+| -------------- | ------------------------------------------------- | ------------------------------------- |
+| signup         | `POST /api/v1/auth/users/`                        | `201` + user JSON (JWT は返さない)    |
+| activation     | `POST /api/v1/auth/users/activation/`             | `204` (body 空、Cookie も set しない) |
+| cookie login   | `POST /api/v1/auth/cookie/create/`                | `200` `{detail: "Login successful"}`  |
+| cookie refresh | `POST /api/v1/auth/cookie/refresh/`               | `200` `{detail: "Token refreshed"}`   |
+| cookie logout  | `POST /api/v1/auth/cookie/logout/`                | `200` `{detail: "Logged out"}`        |
+| password reset | `POST /api/v1/auth/users/reset_password/`         | `204` + メール送信                    |
+| reset confirm  | `POST /api/v1/auth/users/reset_password_confirm/` | `204`                                 |
 
 > 旧 `/api/v1/auth/login/` `/refresh/` `/logout/` は ADR-0003 移行期間中の互換目的
 > で残している。新規 frontend / 自動化フローは `/cookie/*` を使うこと。
 
 ## Cookie 設計 (ADR-0003)
 
-| Cookie       | 役割                                                                                   | HttpOnly | Secure (stg/prod) | SameSite | 寿命   |
-| ------------ | -------------------------------------------------------------------------------------- | -------- | ----------------- | -------- | ------ |
-| `access`     | JWT access token (`settings.COOKIE_NAME`)                                              | yes      | yes               | `Lax`    | 60 分  |
-| `refresh`    | JWT refresh token (`settings.REFRESH_COOKIE_NAME`)                                     | yes      | yes               | `Lax`    | 14 日  |
-| `logged_in`  | JS から読める「ログイン済み」シグナル。値自体に意味はなく、UI の state 判定のみに使う   | **no**   | yes               | `Lax`    | 60 分  |
+| Cookie      | 役割                                                                                  | HttpOnly | Secure (stg/prod) | SameSite | 寿命  |
+| ----------- | ------------------------------------------------------------------------------------- | -------- | ----------------- | -------- | ----- |
+| `access`    | JWT access token (`settings.COOKIE_NAME`)                                             | yes      | yes               | `Lax`    | 60 分 |
+| `refresh`   | JWT refresh token (`settings.REFRESH_COOKIE_NAME`)                                    | yes      | yes               | `Lax`    | 14 日 |
+| `logged_in` | JS から読める「ログイン済み」シグナル。値自体に意味はなく、UI の state 判定のみに使う | **no**   | yes               | `Lax`    | 60 分 |
 
 - `COOKIE_SECURE` は stg/prod で必須 (`settings/base.py` が fail-fast する)。
 - `SameSite=Lax` で CSRF の一次防御、状態変更 API は **DRF の `SessionAuthentication` が CSRF enforcement を担う**
@@ -88,7 +88,7 @@
 - ログインは必ず `POST /cookie/create/` を別途叩く。この時:
   - email + password が一致すること
   - ブラウザが自分で入力した POST であること (CSRF token 経由)
-  の両方が要求される。
+    の両方が要求される。
 - これにより「リンクを踏んだだけで誰かになれる」パスを塞いでいる。
 
 ### テスト
