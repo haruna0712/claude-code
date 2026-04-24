@@ -17,11 +17,11 @@ Markdown source (<=180 chars)
 
 ## 2. 公開 API
 
-| 関数 | 用途 |
-| ---- | ---- |
-| `render_markdown(source) -> str` | 通常のレンダリング (一覧表示・詳細表示) |
-| `extract_plaintext(source) -> str` | OGP description / 検索 index / メール通知 |
-| `get_markdown_html_with_cache_key(source) -> (html, key)` | 将来の Redis cache 用 |
+| 関数                                                      | 用途                                      |
+| --------------------------------------------------------- | ----------------------------------------- |
+| `render_markdown(source) -> str`                          | 通常のレンダリング (一覧表示・詳細表示)   |
+| `extract_plaintext(source) -> str`                        | OGP description / 検索 index / メール通知 |
+| `get_markdown_html_with_cache_key(source) -> (html, key)` | 将来の Redis cache 用                     |
 
 いずれも **入力側の 180 字上限は呼び出し側で保証する前提**。レンダラは
 長さ検証を行わない (その責務は `apps/tweets/models.Tweet.body` の
@@ -50,7 +50,7 @@ allowlist を変更したら **cache key の先頭 (`_RENDER_PIPELINE_VERSION`)
 ## 4. コードブロックと Shiki の分担
 
 - サーバー側 (このモジュール):
-  `` ```python\nprint(1)\n``` `` -> `<pre><code class="python language-python">print(1)\n</code></pre>`
+  ` ```python\nprint(1)\n``` ` -> `<pre><code class="python language-python">print(1)\n</code></pre>`
   (markdown2 の `fenced-code-blocks` + `highlightjs-lang` extra による出力)
 - クライアント側 (Next.js / Shiki):
   `<code class="language-*">` を検出して Shiki で再ハイライトする。
@@ -99,7 +99,7 @@ return html
 `apps/tweets/tests/test_rendering.py` に 47 ケース:
 
 - 基本 syntax (見出し / 強調 / 取り消し線 / コード / リスト)
-- リンクと XSS 防御 (`javascript:` / `data:` / `<script>` / `<iframe>` / on* ハンドラ)
+- リンクと XSS 防御 (`javascript:` / `data:` / `<script>` / `<iframe>` / on\* ハンドラ)
 - Protocol-relative URL 除去 (`<img src="//...">` / `<a href="//...">`)
 - `<span class="...">` の除去 (UI 欺瞞対策)
 - URL 自動リンク (コード中は除外)
