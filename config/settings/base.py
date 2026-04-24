@@ -292,10 +292,20 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ),
+    # P1-11 (#97) + SPEC §14.5: 階層 throttle の rate 定義。
+    # 実際に階層を切り替える責務は ``apps.common.throttling.PostTweetThrottle``。
+    # このマップは DRF が scope 名から rate を引くだけのテーブルに徹する。
     "DEFAULT_THROTTLE_RATES": {
         "anon": "200/day",
         "user": "500/day",
-        "post_tweet": "500/day",  # ScopedRateThrottle で個別参照
+        # legacy: P1-08 以前に scope="post_tweet" で指定されていた互換用。
+        # P1-11 時点で ``throttle_scope = "post_tweet"`` を直接指定している view は
+        # 存在せず、実質 dead entry。削除は破壊的変更になり得るため据え置き。
+        # TODO(Phase2): post_tweet_tier_* へ全面移行済みの確認後、削除する。
+        "post_tweet": "500/day",
+        "post_tweet_tier_1": "100/day",  # 通常ユーザー
+        "post_tweet_tier_2": "500/day",  # アクティブユーザー (Phase 2 で自動昇格)
+        "post_tweet_tier_3": "1000/day",  # プレミアム (User.is_premium)
         # code-reviewer (PR #131 HIGH #2) 指摘: login ブルートフォース対策。
         # apps.users.views.LoginRateThrottle が scope="login" で参照する。
         "login": "5/minute",
@@ -509,7 +519,11 @@ MARKDOWN_BLEACH_ALLOWED_ATTRS = {
     "img": ["src", "alt", "title", "width", "height", "loading"],
     "code": ["class"],  # e.g. language-python (Shiki 用)
     "pre": ["class"],
-    "span": ["class"],  # Shiki のシンタックスハイライト (style は別途拒否)
+    # security-reviewer (PR #134) 指摘: Shiki のシンタックスハイライト span は
+    # クライアント側の JS が描画する (サーバー入力ではない) ため、サーバー側の
+    # bleach allowlist に ``span[class]`` を残しておく必要はない。
+    # クラス衝突による UI 欺瞞 (例: admin-only bedge クラスを悪用) のリスクを
+    # 避けるため、ここからは削除する。
     "div": ["class"],  # シンタックスハイライトのラッパ (highlight 等)
 }
 MARKDOWN_BLEACH_ALLOWED_PROTOCOLS = ["http", "https", "mailto"]  # javascript: を弾く
