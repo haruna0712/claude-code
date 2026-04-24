@@ -8,16 +8,16 @@ Frontend 実装 (別 Issue): P1-16 (TypeScript で同一ロジックを再実装
 
 ## 1. 計算ルール
 
-| 要素               | カウント                                                   |
-| ------------------ | ---------------------------------------------------------- |
-| 通常の文字         | 1 codepoint = 1 字                                         |
-| 全角 / 半角        | 区別しない (どちらも 1 字)                                 |
-| 改行 `\n`          | 1 字                                                       |
-| URL (http/https)   | **一律 23 字** (実際の長さに関わらず、SPEC §3.3)           |
-| Markdown 記号      | **カウントしない** (マーカーのみ除去、中身はカウント)      |
-| コードブロック中身 | 通常カウント (フェンス行 `` ``` `` とインライン `` ` `` 除去) |
-| 絵文字 (BMP 内)    | 1 codepoint = 1 字                                         |
-| 絵文字 ZWJ 連結    | 各 codepoint を 1 字として加算 (grapheme cluster ではない) |
+| 要素               | カウント                                                    |
+| ------------------ | ----------------------------------------------------------- |
+| 通常の文字         | 1 codepoint = 1 字                                          |
+| 全角 / 半角        | 区別しない (どちらも 1 字)                                  |
+| 改行 `\n`          | 1 字                                                        |
+| URL (http/https)   | **一律 23 字** (実際の長さに関わらず、SPEC §3.3)            |
+| Markdown 記号      | **カウントしない** (マーカーのみ除去、中身はカウント)       |
+| コードブロック中身 | 通常カウント (フェンス行 ` ``` ` とインライン `` ` `` 除去) |
+| 絵文字 (BMP 内)    | 1 codepoint = 1 字                                          |
+| 絵文字 ZWJ 連結    | 各 codepoint を 1 字として加算 (grapheme cluster ではない)  |
 
 絵文字は Unicode **codepoint** ベースで数える。Python 標準 `len(str)`
 相当。grapheme cluster 単位で数えたい場合は `regex` パッケージ等の導入が
@@ -27,16 +27,16 @@ Frontend 実装 (別 Issue): P1-16 (TypeScript で同一ロジックを再実装
 
 `apps/tweets/char_count.py`:
 
-| 関数 / 定数                                          | 用途                                   |
-| ---------------------------------------------------- | -------------------------------------- |
-| `count_tweet_chars(source: str) -> int`              | 見た目の文字数を返す                   |
-| `is_tweet_within_limit(source, limit=180) -> bool`   | 上限チェック                           |
-| `URL_LENGTH = 23`                                    | URL 換算の定数                         |
-| `TWEET_MAX_CHARS = 180`                              | ツイート本文の上限                     |
+| 関数 / 定数                                        | 用途                 |
+| -------------------------------------------------- | -------------------- |
+| `count_tweet_chars(source: str) -> int`            | 見た目の文字数を返す |
+| `is_tweet_within_limit(source, limit=180) -> bool` | 上限チェック         |
+| `URL_LENGTH = 23`                                  | URL 換算の定数       |
+| `TWEET_MAX_CHARS = 180`                            | ツイート本文の上限   |
 
 ## 3. 処理フロー
 
-```
+````
 source (Markdown 原文)
   ├─ 1. URL 抽出 (http(s)://...)
   │     - 抽出された URL を placeholder "\x00" 1 字に置換
@@ -64,7 +64,7 @@ source (Markdown 原文)
   │       (URL_LENGTH - 1) × url_count を最終 len に足す
   │
   └─ 4. 最終 len(str) を返す (codepoint 数)
-```
+````
 
 ## 4. エッジケース
 
