@@ -22,9 +22,16 @@ Phase 2 (別 Issue) で予定している拡張:
 
 from __future__ import annotations
 
-from typing import Final
+from typing import Any, Final
 
-from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
+from django.contrib.auth.base_user import AbstractBaseUser
+from django.contrib.auth.models import AnonymousUser
+from rest_framework.request import Request
+from rest_framework.throttling import (
+    ScopedRateThrottle,
+    SimpleRateThrottle,
+    UserRateThrottle,
+)
 
 # -----------------------------------------------------------------------------
 # Scope 定数
@@ -37,7 +44,7 @@ POST_TWEET_TIER_2: Final[str] = "post_tweet_tier_2"
 POST_TWEET_TIER_3: Final[str] = "post_tweet_tier_3"
 
 
-def get_user_throttle_tier(user) -> str:
+def get_user_throttle_tier(user: AbstractBaseUser | AnonymousUser | None) -> str:
     """Tweet 投稿レート階層 scope 名を返す。
 
     Phase 1 では ``is_premium`` のみで判定する。
@@ -58,7 +65,10 @@ def get_user_throttle_tier(user) -> str:
     if user is None or not getattr(user, "is_authenticated", False):
         return POST_TWEET_TIER_1
 
-    if getattr(user, "is_premium", False):
+    # User モデル (apps/users/models.py) には is_premium が必ず存在する契約なので
+    # 認証済みユーザーに対しては直接属性アクセスする。AnonymousUser/None は上の
+    # 分岐で既に弾かれているため、ここに AnonymousUser が到達することはない。
+    if user.is_premium:
         return POST_TWEET_TIER_3
 
     # TODO(Phase2): active ユーザー判定 (直近 7 日 tweet count >= 20 等) で
@@ -89,7 +99,14 @@ class PostTweetThrottle(ScopedRateThrottle):
     # (テスト: test_post_tweet_throttle_scope_attr で契約を固定)
     scope_attr = "throttle_scope"
 
-    def allow_request(self, request, view):
+    def allow_request(self, request: Request, view: Any) -> bool:
+        # 二重防御: Tweet 投稿エンドポイントは認証必須 (view 側で
+        # IsAuthenticated を指定する契約)。万一 permission_classes の設定漏れで
+        # AnonymousUser が到達した場合、ident が IP fallback になり他ユーザーと
+        # bucket が衝突して誤 throttle / 誤通過が起きうるため、ここで明示拒否する。
+        if not getattr(request.user, "is_authenticated", False):
+            return False
+
         # view 側で throttle_scope が明示されていればそれを尊重する
         # (将来的な手動オーバーライドを許すため)。指定が無ければ user から算出。
         view_scope = getattr(view, self.scope_attr, None)
@@ -104,10 +121,15 @@ class PostTweetThrottle(ScopedRateThrottle):
         self.rate = self.get_rate()
         self.num_requests, self.duration = self.parse_rate(self.rate)
 
-        # SimpleRateThrottle.allow_request に委譲 (ScopedRateThrottle は
-        # scope が None のケースを素通ししてしまうため、super ではなく
-        # grandparent に渡して確実に rate limit を効かせる)。
-        return super(ScopedRateThrottle, self).allow_request(request, view)
+        # NOTE: ScopedRateThrottle.allow_request は scope=None で素通りする実装なので、
+        # 祖先 (SimpleRateThrottle) の allow_request に明示委譲する。
+        # DRF 内部実装 (MRO): PostTweetThrottle → ScopedRateThrottle
+        #   → SimpleRateThrottle → BaseThrottle
+        # 依存バージョン: djangorestframework (requirements/base.txt で pin 済み)
+        # super(ScopedRateThrottle, self) だと MRO 上の次のクラス
+        # (= SimpleRateThrottle) を参照するが、実体を明示するほうが読解しやすく、
+        # MRO が将来変わった際のリグレッションを検知しやすいので直接指定する。
+        return SimpleRateThrottle.allow_request(self, request, view)
 
 
 class TieredUserRateThrottle(UserRateThrottle):

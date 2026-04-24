@@ -295,7 +295,10 @@ REST_FRAMEWORK = {
         "anon": "200/day",
         "user": "500/day",
         # legacy: P1-08 以前に scope="post_tweet" で指定されていた互換用。
-        # TODO(Phase2): post_tweet_tier_* へ全面移行したら削除する。
+        # P1-11 時点で ``throttle_scope = "post_tweet"`` を直接指定している view は
+        # 存在せず、実質 dead entry。ただし削除は破壊的変更になり得るため本 PR では
+        # 据え置き、別 PR (後続の cleanup チケット) で削除する方針。
+        # TODO(Phase2): post_tweet_tier_* へ全面移行済みの確認後、削除する。
         "post_tweet": "500/day",
         "post_tweet_tier_1": "100/day",  # 通常ユーザー
         "post_tweet_tier_2": "500/day",  # アクティブユーザー (Phase 2 で自動昇格)

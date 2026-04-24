@@ -138,11 +138,12 @@ class TestPostTweetThrottleAllowRequest:
         return request
 
     def test_regular_user_is_throttled_after_tier_1_limit(self) -> None:
-        """通常ユーザーは 100/day に達した 101 回目で拒否されること。
+        """通常ユーザーは tier_1 (100/day) 上限に達した直後のリクエストで拒否されること。
 
-        100 回叩ききるのは slow なので DEFAULT_THROTTLE_RATES を override して
-        3/day にするテスト変種も考えられるが、ここでは cache の直接操作で
-        「既に上限に達した状態」を作り、境界 1 件の挙動に絞る。
+        実装的には "cache に 100 件の履歴を積んだ状態 = ちょうど上限に達した状態"
+        を人為的に作り、その次に来る 101 件目相当のリクエストで
+        ``allow_request`` が False を返すことを確認する。100 回本物のループを
+        回すのは slow なので、DRF の内部 key (``throttle.key``) を直接 seed する。
         """
         # Arrange: is_premium=False → tier_1 = 100/day。
         user = MagicMock()
@@ -154,15 +155,15 @@ class TestPostTweetThrottleAllowRequest:
         view = _make_view()
 
         throttle = PostTweetThrottle()
-        # 1 回目: 素通り。
+        # 1 回目: 素通り。ここで self.key / self.duration が確定する。
         assert throttle.allow_request(request, view) is True
 
-        # Arrange: cache 上で 100 件すでに積まれている状態を作る。
+        # Arrange: cache 上で 100 件すでに積まれている状態 = 上限到達を再現。
         # allow_request が最後に計算した self.key を再利用できる。
         full_history = [throttle.now] * 100
         cache.set(throttle.key, full_history, throttle.duration)
 
-        # Act: 101 回目の request。
+        # Act: 上限到達後の次の (= 101 件目相当) request。
         throttle2 = PostTweetThrottle()
         allowed = throttle2.allow_request(self._make_request(user), view)
 
@@ -170,6 +171,26 @@ class TestPostTweetThrottleAllowRequest:
         assert allowed is False
         # wait() が None 以外 (= Retry-After 計算可能) を返すこと。
         assert throttle2.wait() is not None
+
+    def test_anonymous_request_is_denied_immediately(self) -> None:
+        """AnonymousUser が到達したら scope 解決前に拒否すること (二重防御)。
+
+        view 側で IsAuthenticated が正しく設定されていれば本来ここには到達しない
+        が、設定漏れなどで AnonymousUser が流れ込んだ場合、IP bucket が別ユーザー
+        と衝突して誤 throttle / 誤通過が起きるため、allow_request の冒頭で
+        明示的に False を返す契約を固定する。
+        """
+        # Arrange: 未認証ユーザー。
+        request = self._make_request(AnonymousUser())
+        view = _make_view()
+
+        # Act
+        throttle = PostTweetThrottle()
+        allowed = throttle.allow_request(request, view)
+
+        # Assert: 冒頭の認証チェックで即拒否され、cache / scope に副作用が
+        # 残らないこと。
+        assert allowed is False
 
     def test_premium_user_can_exceed_tier_1_limit(self) -> None:
         """premium ユーザーは tier_1 (100) を超えても tier_3 (1000) 上限まで通ること。"""
