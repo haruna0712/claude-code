@@ -42,6 +42,22 @@ def _use_locmem_email(settings) -> None:
     settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
 
+@pytest.fixture(autouse=True)
+def _reset_throttle_cache() -> None:
+    """DRF の throttle バケット (SimpleRateThrottle) は Django cache に履歴を保持する.
+
+    `LoginRateThrottle` (scope="login", 5/minute) が導入されたため、テスト間で
+    「同じ IP (127.0.0.1) の連続 login」が throttle に触れてしまい 429 が出る。
+    テストごとに cache を全クリアして状態を切り離す。
+    """
+
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()
+
+
 SIGNUP_URL = "/api/v1/auth/users/"
 ACTIVATION_URL = "/api/v1/auth/users/activation/"
 COOKIE_LOGIN_URL = "/api/v1/auth/cookie/create/"
@@ -365,6 +381,16 @@ class TestLogout:
             assert res.cookies[key]["max-age"] in (0, "0")
 
     def test_logout_blacklists_refresh_token(self, api_client: APIClient) -> None:
+        """logout 後は古い refresh token を Cookie 経由で送っても通らない.
+
+        code-reviewer (PR #131 MEDIUM #6) 指摘対応:
+          旧実装は logout 後の retry を POST body で送っていたが、
+          `CookieTokenRefreshView` は Cookie しか読まないため、body 経由だと
+          そもそも 400 (credentials 無し) に倒れて blacklist チェックを通過しない。
+          実際に blacklist が効いていることを検証するには、別 client に旧 refresh
+          を Cookie として手動で set して /cookie/refresh/ を叩く必要がある。
+        """
+
         from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 
         client, refresh = self._login_and_client(api_client)
@@ -375,8 +401,12 @@ class TestLogout:
 
         # blacklist に 1 件以上入っていること (rotation 中でも 1 件は確実)。
         assert BlacklistedToken.objects.count() >= 1
-        # logout 後、同じ refresh を使った refresh は拒否される。
-        retry = client.post(COOKIE_REFRESH_URL, {"refresh": refresh}, format="json")
+
+        # 別 client を作って、旧 refresh token を Cookie に直接埋めて refresh を叩く。
+        retry_client = APIClient()
+        retry_client.cookies["refresh"] = refresh
+        retry = retry_client.post(COOKIE_REFRESH_URL, {}, format="json")
+        # blacklist 入りなので rotation は拒否される (401 Unauthorized / 400 BadRequest)。
         assert retry.status_code in (
             HTTPStatus.UNAUTHORIZED,
             HTTPStatus.BAD_REQUEST,
@@ -456,3 +486,169 @@ class TestCookieAuthURLs:
         assert reverse("cookie-token-obtain") == "/api/v1/auth/cookie/create/"
         assert reverse("cookie-token-refresh") == "/api/v1/auth/cookie/refresh/"
         assert reverse("cookie-logout") == "/api/v1/auth/cookie/logout/"
+
+
+# -----------------------------------------------------------------------------
+# CSRF enforcement (code-reviewer PR #131 HIGH #1)
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+class TestCSRFEnforcement:
+    """`SessionAuthentication` が authentication_classes に入っているかで
+    CSRF enforcement が走ることを確認する。
+
+    `CookieAuthentication` / `JWTAuthentication` は `enforce_csrf()` を呼ばないため、
+    これらだけだと `APIView.as_view()` 由来の `@csrf_exempt` によって CSRF 検証が
+    スキップされる。SessionAuthentication を 1 つ以上入れておけば DRF が必ず
+    CSRF enforcement を通す。
+    """
+
+    def test_login_without_csrf_token_returns_403(self, api_client: APIClient) -> None:
+        """CSRF token 無しの login POST は 403 で拒否される (SessionAuthentication 入り)."""
+
+        # APIClient は既定で enforce_csrf_checks=False。enforce_csrf を有効にして検証。
+        client = APIClient(enforce_csrf_checks=True)
+        # 認証済みユーザーを作って SessionAuthentication が有効になる状況を作る必要は
+        # 無い: Cookie 無しでも /cookie/create/ に SessionAuthentication が付いて
+        # いれば unsafe method (POST) で CSRF token を要求するはず。
+        res = client.post(
+            COOKIE_LOGIN_URL,
+            {"email": "no-such@example.com", "password": "whatever"},
+            format="json",
+        )
+        # SessionAuthentication が無いと simplejwt 側が 401 を返すが、
+        # CSRF enforcement が有効なら 403 が返る。
+        assert (
+            res.status_code == HTTPStatus.FORBIDDEN
+        ), f"CSRF enforcement が効いていない可能性: status={res.status_code}"
+
+    def test_logout_without_csrf_token_returns_403(self, api_client: APIClient) -> None:
+        """認証済みでも CSRF token 無しなら logout は 403 で拒否される."""
+
+        # 先に通常 client で login まで済ませて cookie を得る。
+        user_payload = _signup_payload()
+        api_client.post(SIGNUP_URL, user_payload, format="json")
+        uid, token = _extract_uid_token(mail.outbox[0])
+        api_client.post(ACTIVATION_URL, {"uid": uid, "token": token}, format="json")
+        login = api_client.post(
+            COOKIE_LOGIN_URL,
+            {"email": user_payload["email"], "password": user_payload["password"]},
+            format="json",
+        )
+        assert login.status_code == HTTPStatus.OK
+
+        # CSRF enforce な client に同じ cookie を引き継いで logout を叩く。
+        csrf_client = APIClient(enforce_csrf_checks=True)
+        csrf_client.cookies = api_client.cookies
+        res = csrf_client.post(COOKIE_LOGOUT_URL, {}, format="json")
+        assert (
+            res.status_code == HTTPStatus.FORBIDDEN
+        ), f"CSRF enforcement が効いていない可能性: status={res.status_code}"
+
+
+# -----------------------------------------------------------------------------
+# Login throttle (code-reviewer PR #131 HIGH #2)
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+class TestLoginThrottle:
+    """`LoginRateThrottle` (scope="login", 5/minute) がブルートフォースを止めることを確認."""
+
+    def test_login_rate_limited_after_five_attempts(self, api_client: APIClient, settings) -> None:
+        # throttle scope を確実に 5/minute にする (他テストのレート上書きを避ける)。
+        settings.REST_FRAMEWORK = {
+            **settings.REST_FRAMEWORK,
+            "DEFAULT_THROTTLE_RATES": {
+                **settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"],
+                "login": "5/minute",
+            },
+        }
+        # throttle の内部 cache を毎テストでクリア (他テスト残骸が誤抑止するのを防ぐ)。
+        from django.core.cache import cache
+
+        cache.clear()
+
+        payload = {"email": "who@example.com", "password": "WrongPassword!1"}
+
+        # 1〜5 回目: credentials 誤りなので 401/400 が返る。throttle はまだ効かない。
+        for i in range(5):
+            res = api_client.post(COOKIE_LOGIN_URL, payload, format="json")
+            assert (
+                res.status_code != HTTPStatus.TOO_MANY_REQUESTS
+            ), f"{i + 1} 回目で既に throttle: {res.status_code}"
+
+        # 6 回目: throttle が発動して 429 を返す。
+        res = api_client.post(COOKIE_LOGIN_URL, payload, format="json")
+        assert (
+            res.status_code == HTTPStatus.TOO_MANY_REQUESTS
+        ), f"6 回目の login が throttle されなかった: status={res.status_code}"
+
+
+# -----------------------------------------------------------------------------
+# Secure cookie (code-reviewer PR #131 MEDIUM #4)
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+class TestSecureCookie:
+    """stg/prod 相当 (COOKIE_SECURE=True) で login / logout が secure flag 付きで
+    Cookie を出すことを確認する。
+    """
+
+    def _signup_activate(self, api_client: APIClient) -> tuple[str, str]:
+        payload = _signup_payload()
+        api_client.post(SIGNUP_URL, payload, format="json")
+        uid, token = _extract_uid_token(mail.outbox[0])
+        api_client.post(ACTIVATION_URL, {"uid": uid, "token": token}, format="json")
+        return payload["email"], payload["password"]
+
+    def test_login_sets_secure_cookie_in_prod(self, api_client: APIClient, settings) -> None:
+        email, password = self._signup_activate(api_client)
+
+        settings.COOKIE_SECURE = True
+        res = api_client.post(
+            COOKIE_LOGIN_URL,
+            {"email": email, "password": password},
+            format="json",
+        )
+        assert res.status_code == HTTPStatus.OK, res.content
+
+        # access / refresh cookie が secure flag 付きで発行されていること。
+        assert res.cookies["access"]["secure"]
+        assert res.cookies["refresh"]["secure"]
+        # logged_in は HttpOnly=False だが、Secure は付ける (HTTP でさえ送らせない)。
+        assert res.cookies["logged_in"]["secure"]
+
+    def test_logout_delete_cookie_carries_secure_and_samesite(
+        self, api_client: APIClient, settings
+    ) -> None:
+        """`_delete_auth_cookie` が secure / samesite を必ず付けることを確認する.
+
+        code-reviewer (PR #131 MEDIUM #3) 指摘対応のレグレッションテスト。
+        """
+
+        email, password = self._signup_activate(api_client)
+        settings.COOKIE_SECURE = True
+
+        login = api_client.post(
+            COOKIE_LOGIN_URL,
+            {"email": email, "password": password},
+            format="json",
+        )
+        assert login.status_code == HTTPStatus.OK
+
+        res = api_client.post(COOKIE_LOGOUT_URL, {}, format="json")
+        assert res.status_code == HTTPStatus.OK
+
+        for name in ("access", "refresh", "logged_in"):
+            cookie = res.cookies[name]
+            # max-age=0 で削除指示。
+            assert cookie["max-age"] in (0, "0")
+            # secure / samesite が削除時にもそのまま付与されていること。
+            assert cookie["secure"]
+            assert cookie["samesite"].lower() == "lax"

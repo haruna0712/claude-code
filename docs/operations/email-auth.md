@@ -63,8 +63,14 @@
 | `logged_in`  | JS から読める「ログイン済み」シグナル。値自体に意味はなく、UI の state 判定のみに使う   | **no**   | yes               | `Lax`    | 60 分  |
 
 - `COOKIE_SECURE` は stg/prod で必須 (`settings/base.py` が fail-fast する)。
-- `SameSite=Lax` で CSRF の一次防御、状態変更 API は Django の CSRF middleware が二次防御。
+- `SameSite=Lax` で CSRF の一次防御、状態変更 API は **DRF の `SessionAuthentication` が CSRF enforcement を担う**
+  (`/cookie/create/` `/cookie/refresh/` `/cookie/logout/` の `authentication_classes` に含める)。
+  DRF の `APIView.as_view()` は内部で `@csrf_exempt` を付与するため、Django の
+  CSRF middleware は view に届かない。`SessionAuthentication` は session を使わなくても
+  CSRF enforcement だけを目的に追加できる (DRF 公式ドキュメントの推奨手順)。
 - refresh は `/cookie/refresh/` と `/cookie/logout/` でしか読まない設計。
+- **login ブルートフォース対策**: `/cookie/create/` には `LoginRateThrottle`
+  (`scope="login"`, `5/minute`) が入っている。同一 IP からの 6 回目以降は `429 Too Many Requests` を返す。
 
 ## security-reviewer #83 (HIGH) 対応メモ
 
