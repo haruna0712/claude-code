@@ -30,6 +30,26 @@ def public_profile_url(handle: str) -> str:
     return reverse("users-public-profile", kwargs={"username": handle})
 
 
+# 公開プロフィール API が返すべきキーの完全集合。PublicProfileSerializer.Meta.fields と
+# 1:1 で揃えることで「新フィールド追加時に公開テストを通したままうっかり PII を
+# 露出する」ケースを exhaustive に検知する (P1-03 review HIGH 対応)。
+EXPECTED_PUBLIC_KEYS = {
+    "username",
+    "display_name",
+    "bio",
+    "avatar_url",
+    "header_url",
+    "github_url",
+    "x_url",
+    "zenn_url",
+    "qiita_url",
+    "note_url",
+    "linkedin_url",
+    "full_name",
+    "date_joined",
+}
+
+
 # =============================================================================
 # GET/PATCH /api/v1/users/me/
 # =============================================================================
@@ -171,6 +191,25 @@ class TestMeEndpoint:
         user.refresh_from_db()
         assert user.is_premium is False
 
+    def test_patch_needs_onboarding_change_is_ignored(
+        self, api_client: APIClient, user_factory, me_url: str
+    ) -> None:
+        # Arrange: needs_onboarding はクライアント側からは変更不可。オンボーディング完了
+        # 判定はサーバー側 (signal / 専用 endpoint) でのみ更新される
+        # (P1-03 review MEDIUM 対応)。
+        user = user_factory(username="ob_hack")
+        # signup 直後なので True のはず。前提が崩れたら即 detect できるよう assert しておく。
+        assert user.needs_onboarding is True
+        api_client.force_authenticate(user=user)
+
+        # Act
+        res = api_client.patch(me_url, data={"needs_onboarding": False}, format="json")
+
+        # Assert: 200 で silently drop (DRF 標準挙動) + DB は True のまま。
+        assert res.status_code == status.HTTP_200_OK
+        user.refresh_from_db()
+        assert user.needs_onboarding is True
+
     def test_patch_rejects_invalid_url(
         self, api_client: APIClient, user_factory, me_url: str
     ) -> None:
@@ -250,10 +289,13 @@ class TestPublicProfileEndpoint:
         # Act
         res = api_client.get(public_profile_url("hide_email"))
 
-        # Assert: email はレスポンスに含まれない (PII 漏洩防止)。
+        # Assert: email はレスポンスに含まれない (PII 漏洩防止)。さらにキー集合そのものが
+        # EXPECTED_PUBLIC_KEYS と完全一致することを exhaustive に検証する
+        # (P1-03 review HIGH 対応)。
         assert res.status_code == status.HTTP_200_OK
         data = res.json()
         assert "email" not in data
+        assert set(data.keys()) == EXPECTED_PUBLIC_KEYS
 
     def test_public_profile_hides_is_premium(self, api_client: APIClient, user_factory) -> None:
         # Arrange: プレミアム状態も公開しない (課金情報は内部 flag)。
@@ -323,3 +365,17 @@ class TestPublicProfileEndpoint:
         assert res.status_code == status.HTTP_200_OK
         assert res.json()["username"] == "target_01"
         assert res.json()["display_name"] == "Target"
+
+    def test_public_profile_handle_lookup_is_case_insensitive(
+        self, api_client: APIClient, user_factory
+    ) -> None:
+        # Arrange: validator 側は大文字小文字を保存するが、URL からの参照は
+        # case-insensitive で解決する (P1-03 review MEDIUM 対応)。
+        user_factory(username="CamelCase_User")
+
+        # Act: 全て小文字で URL を叩く。
+        res = api_client.get(public_profile_url("camelcase_user"))
+
+        # Assert: 200 + 保存時の大文字小文字を維持した username を返す。
+        assert res.status_code == status.HTTP_200_OK
+        assert res.json()["username"] == "CamelCase_User"

@@ -55,11 +55,14 @@ class CustomUserSerializer(UserSerializer):
             "date_joined",
         ]
         # username / email / is_premium は変更不可 (is_premium は Stripe webhook でのみ更新)。
+        # needs_onboarding もクライアント側からは変更不可 — オンボーディング完了判定は
+        # サーバー側 (signal / dedicated endpoint) でのみ更新する (P1-03 review MEDIUM 対応)。
         read_only_fields = [
             "id",
             "email",
             "username",
             "is_premium",
+            "needs_onboarding",
             "date_joined",
         ]
 
@@ -95,4 +98,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             "date_joined",
         ]
         # 公開 API はすべて read_only (PATCH は /me/ 経由のみ)。
-        read_only_fields = fields
+        # ``fields`` と同じ list を参照させると、DRF 内部で片方に mutate が走った
+        # ときに他方まで壊れる可能性がある。独立コピーを持たせる
+        # (P1-03 review HIGH 対応)。
+        read_only_fields = list(fields)
