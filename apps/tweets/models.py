@@ -174,16 +174,20 @@ class Tweet(models.Model):
           インスタンスに読み戻す。
         """
 
-        # new_body の長さは常に検証する (CharField にしたが record_edit は save() を使わないため)
+        # new_body の長さは常に検証する (CharField にしたが record_edit は save() を使わないため)。
+        # code-reviewer MEDIUM: ValidationError の形式を ``{field: message}`` 辞書に
+        # 統一する (clean() 側と揃えて DRF レイヤーでも field-level エラーとして返せる)。
         if len(new_body) > TWEET_BODY_MAX_LENGTH:
-            raise ValidationError(f"本文は {TWEET_BODY_MAX_LENGTH} 字以内で入力してください。")
+            raise ValidationError(
+                {"body": f"本文は {TWEET_BODY_MAX_LENGTH} 字以内で入力してください。"}
+            )
 
         # P1-10: URL 換算 / Markdown 記号除外 ベースの「見た目の文字数」も検証する。
         # raw 文字数が 180 以下でも見た目が 180 を超えるケース (長い URL を
         # 1 字扱いしてコードブロックで装飾等) を拒否する。
         if count_tweet_chars(new_body) > TWEET_MAX_CHARS:
             raise ValidationError(
-                f"本文は URL / Markdown 換算で {TWEET_MAX_CHARS} 字以内にしてください。"
+                {"body": f"本文は URL / Markdown 換算で {TWEET_MAX_CHARS} 字以内にしてください。"}
             )
 
         # 行ロックを取り、ロック後にもう一度 can_edit を評価することで

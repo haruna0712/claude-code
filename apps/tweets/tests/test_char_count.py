@@ -200,6 +200,71 @@ class TestCodeBlocks:
         # `a b c` → "a b c" = 5
         assert count_tweet_chars("`a b c`") == 5
 
+    def test_inline_code_preserves_markdown_markers(self) -> None:
+        # code-reviewer HIGH: インラインコード中の ``**`` や ``_`` は
+        # Markdown マーカーではなくコードの字面としてカウントする。
+        # ``` `**bold**` ``` → 中身 "**bold**" (8 字) がそのまま残る。
+        assert count_tweet_chars("`**bold**`") == 8
+
+    def test_fenced_code_preserves_markdown_markers(self) -> None:
+        # code-reviewer HIGH: フェンスコード中の Markdown マーカーも保護する。
+        # ``` ```py\n**x**\n``` ``` → 中身 "\n**x**\n" (1+5+1=7 字)。
+        assert count_tweet_chars("```py\n**x**\n```") == 7
+
+    def test_inline_code_preserves_underscore(self) -> None:
+        # ``` `a_b_c` ``` → 中身 "a_b_c" (5 字)。
+        assert count_tweet_chars("`a_b_c`") == 5
+
+
+# ---------------------------------------------------------------------------
+# 強調マーカーの単語境界 (snake_case 保護、code-reviewer HIGH)
+# ---------------------------------------------------------------------------
+
+
+class TestEmphasisWordBoundary:
+    def test_snake_case_not_matched_as_emphasis(self) -> None:
+        # code-reviewer HIGH: ``_`` は単語内部では em マーカー扱いしない
+        # (CommonMark 仕様)。``my_var_name`` がそのまま 11 字として数えられる。
+        assert count_tweet_chars("my_var_name") == 11
+
+    def test_multi_underscore_identifier(self) -> None:
+        assert count_tweet_chars("a_b_c") == 5
+
+    def test_snake_case_word(self) -> None:
+        assert count_tweet_chars("snake_case") == 10
+
+    def test_single_underscore_in_word_preserved(self) -> None:
+        assert count_tweet_chars("foo_bar") == 7
+
+    def test_double_underscore_in_word_preserved(self) -> None:
+        # ``foo__bar__baz`` — snake 途中の ``__`` も strong マーカーにしない。
+        assert count_tweet_chars("foo__bar__baz") == 13
+
+    def test_underscore_em_still_works_at_word_boundary(self) -> None:
+        # 前後に空白/開始/終端があれば em マーカーとして振る舞う。
+        # ``_em_`` → "em" (2 字)。
+        assert count_tweet_chars("_em_") == 2
+
+    def test_underscore_strong_still_works_at_word_boundary(self) -> None:
+        assert count_tweet_chars("__bold__") == 4
+
+    def test_underscore_em_surrounded_by_space(self) -> None:
+        # "a _em_ b" → "a em b" (6 字)
+        assert count_tweet_chars("a _em_ b") == 6
+
+
+# ---------------------------------------------------------------------------
+# ZWJ 絵文字 (code-reviewer LOW: codepoint ベースの仕様を明示)
+# ---------------------------------------------------------------------------
+
+
+class TestZwjEmoji:
+    def test_zwj_emoji_counts_codepoints_not_graphemes(self) -> None:
+        # "👨‍👩‍👦" は grapheme としては 1 文字だが、
+        # codepoint 数は 5 (👨 + ZWJ + 👩 + ZWJ + 👦)。
+        # SPEC §3.3 + docstring に従い codepoint 数でカウントする。
+        assert count_tweet_chars("\U0001f468\u200d\U0001f469\u200d\U0001f466") == 5
+
 
 # ---------------------------------------------------------------------------
 # 組み合わせ / 上限チェック
