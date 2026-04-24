@@ -1,9 +1,15 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import URLValidator
 from djoser.serializers import UserCreateSerializer, UserSerializer
 from rest_framework import serializers
 
 from apps.users.validators import validate_handle
+
+# Serializer レベルで URL のスキームを https に限定する validator。
+# djoser UserSerializer を継承している都合で model validators が拾われないため、
+# extra_kwargs で再注入する (apps/users/models.py の _HTTPS_URL_VALIDATOR と同等)。
+_HTTPS_URL_VALIDATOR = URLValidator(schemes=["https"])
 
 User = get_user_model()
 
@@ -65,6 +71,19 @@ class CustomUserSerializer(UserSerializer):
             "needs_onboarding",
             "date_joined",
         ]
+        # djoser UserSerializer 継承時 model field の URLValidator(schemes=["https"]) が
+        # 自動取り込みされないため、extra_kwargs で各 SNS URL に明示的に再注入する
+        # (security-reviewer #131 既知問題の類似パターン対応)。
+        extra_kwargs = {
+            "github_url": {"validators": [_HTTPS_URL_VALIDATOR]},
+            "x_url": {"validators": [_HTTPS_URL_VALIDATOR]},
+            "zenn_url": {"validators": [_HTTPS_URL_VALIDATOR]},
+            "qiita_url": {"validators": [_HTTPS_URL_VALIDATOR]},
+            "note_url": {"validators": [_HTTPS_URL_VALIDATOR]},
+            "linkedin_url": {"validators": [_HTTPS_URL_VALIDATOR]},
+            "avatar_url": {"validators": [_HTTPS_URL_VALIDATOR]},
+            "header_url": {"validators": [_HTTPS_URL_VALIDATOR]},
+        }
 
 
 class PublicProfileSerializer(serializers.ModelSerializer):
