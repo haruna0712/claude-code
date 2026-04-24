@@ -191,9 +191,19 @@ class GoogleCookieAuthView(ProviderAuthView):
         旧 ``CustomProviderAuthView`` (``/o/<provider>/``) は message 付き body
         も残す既存挙動のため、移行期間中は両立させる。新規 frontend は
         ``/o/google-oauth2/cookie/`` を使う。
+
+    code-reviewer (PR #138) 指摘対応:
+        - ``provider_name`` クラス属性は djoser / social-auth から参照されない
+          (``ProviderAuthSerializer.validate()`` が URL kwargs["provider"] を
+          使うため)。混乱を避けるため削除し、URL 側で ``<provider>`` を
+          キャプチャする。
+        - CSRF 保護: 他の Cookie 系 view と揃えて ``CSRFEnforcingAuthentication``
+          を前段に置く (未認証 POST でも CSRF token を必須化)。
+        - Brute-force 対策: ``LoginRateThrottle`` (5/minute) を適用する。
     """
 
-    provider_name = "google-oauth2"
+    authentication_classes = [CSRFEnforcingAuthentication]
+    throttle_classes = [LoginRateThrottle]
 
     def post(self, request: Request, *args, **kwargs) -> Response:
         provider_res = super().post(request, *args, **kwargs)

@@ -29,7 +29,7 @@ from unittest.mock import patch
 import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.urls import reverse
+from django.urls import resolve, reverse
 from rest_framework import status as drf_status
 from rest_framework.response import Response
 from rest_framework.test import APIClient
@@ -92,6 +92,19 @@ def _mock_failure_response(
 class TestGoogleCookieAuthURL:
     def test_url_resolves(self) -> None:
         assert reverse("google-oauth-cookie") == GOOGLE_COOKIE_URL
+
+    def test_url_resolves_with_provider_kwarg(self) -> None:
+        """code-reviewer (PR #138 CRITICAL) 回帰テスト.
+
+        djoser の ``ProviderAuthSerializer.validate()`` は
+        ``self.context["view"].kwargs["provider"]`` を参照するため、URL pattern が
+        ``<provider>`` をキャプチャしないと本番で ``KeyError: 'provider'`` → 500 に
+        なる。URL 解決時に ``kwargs["provider"]`` が ``"google-oauth2"`` で
+        埋まっていることを確認することで、このバグのレグレッションを検出する。
+        """
+
+        match = resolve(GOOGLE_COOKIE_URL)
+        assert match.kwargs["provider"] == "google-oauth2"
 
 
 # -----------------------------------------------------------------------------

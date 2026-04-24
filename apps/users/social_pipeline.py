@@ -42,6 +42,11 @@ def set_needs_onboarding(
     if user is None:
         return {"user": user}
 
+    # defensive: 新規ユーザーが ``needs_onboarding=False`` で作られた場合に
+    # True へ昇格させる。``create_user`` パイプラインステップは User モデルの
+    # ``default=True`` を尊重するが、将来 default 値が変更された/他の pipeline
+    # step が False を書き戻した場合でも、ここで確実に True を立て直すことで
+    # onboarding flow (P1-14) が取りこぼされないようにする。
     if not getattr(user, "needs_onboarding", False):
         user.needs_onboarding = True
         user.save(update_fields=["needs_onboarding"])

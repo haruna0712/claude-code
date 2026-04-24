@@ -418,6 +418,16 @@ SOCIAL_AUTH_PIPELINE = (
     "apps.users.social_pipeline.set_needs_onboarding",
 )
 
+# code-reviewer (PR #138 LOW) 指摘対応:
+#   djoser の ``ProviderAuthSerializer`` は ``redirect_uri`` を受け取り、
+#   ``SOCIAL_AUTH_ALLOWED_REDIRECT_URIS`` 内に含まれるもののみ許可する。
+#   明示的に登録することで、任意 URL への redirect 漏洩 (open redirect) を
+#   防止する。local は localhost:3000 を既定値、stg/prod は env で frontend
+#   URL を上書きする。
+SOCIAL_AUTH_ALLOWED_REDIRECT_URIS = [
+    getenv("SOCIAL_AUTH_ALLOWED_REDIRECT_URI", "http://localhost:3000/auth/google"),
+]
+
 # ---------------------------------------------------------------------------
 # P1-01 + ADR-0003: S3 / django-storages 設定。AWS_S3_BUCKET_NAME が空なら
 # local の FileSystemStorage にフォールバックする。
