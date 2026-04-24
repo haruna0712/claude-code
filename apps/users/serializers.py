@@ -4,6 +4,7 @@ from django.core.validators import URLValidator
 from djoser.serializers import UserCreateSerializer, UserSerializer
 from rest_framework import serializers
 
+from apps.users.s3_presign import ALLOWED_CONTENT_TYPES, MAX_CONTENT_LENGTH
 from apps.users.validators import validate_handle
 
 # Serializer レベルで URL のスキームを https に限定する validator。
@@ -84,6 +85,20 @@ class CustomUserSerializer(UserSerializer):
             "avatar_url": {"validators": [_HTTPS_URL_VALIDATOR]},
             "header_url": {"validators": [_HTTPS_URL_VALIDATOR]},
         }
+
+
+class UploadUrlRequestSerializer(serializers.Serializer):
+    """avatar / header アップロード URL 発行リクエストの検証用 serializer (P1-04).
+
+    ``POST /api/v1/users/me/avatar-upload-url/`` などで使用。
+    - ``content_type`` は WebP / JPEG / PNG のみ許可 (white list)。
+    - ``content_length`` は 1 以上 5 MiB 以下。
+    choices / min_value / max_value は s3_presign 側の定数から生成し、
+    真実の source を 1 箇所に保つ (定数再定義によるドリフトを防止)。
+    """
+
+    content_type = serializers.ChoiceField(choices=sorted(ALLOWED_CONTENT_TYPES))
+    content_length = serializers.IntegerField(min_value=1, max_value=MAX_CONTENT_LENGTH)
 
 
 class PublicProfileSerializer(serializers.ModelSerializer):

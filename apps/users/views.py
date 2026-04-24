@@ -17,7 +17,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.common.cookie_auth import CookieAuthentication, CSRFEnforcingAuthentication
-from apps.users.serializers import CustomUserSerializer, PublicProfileSerializer
+from apps.users.s3_presign import generate_presigned_upload_url
+from apps.users.serializers import (
+    CustomUserSerializer,
+    PublicProfileSerializer,
+    UploadUrlRequestSerializer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -429,3 +434,57 @@ class PublicProfileView(RetrieveAPIView):
         obj = get_object_or_404(queryset, username__iexact=username)
         self.check_object_permissions(self.request, obj)
         return obj
+
+
+# ---------------------------------------------------------------------------
+# P1-04: avatar / header 画像 S3 アップロード URL 発行 (SPEC §2)
+# ---------------------------------------------------------------------------
+
+
+class _BaseUploadUrlView(APIView):
+    """avatar / header で共通する presigned URL 発行ロジック.
+
+    サブクラスは ``kind`` を上書きするだけ。重複したコードを避けるため
+    本体の ``post()`` をここに置き、サブクラスは `kind` 属性のみ持つ。
+
+    認証 / CSRF:
+      - ``CSRFEnforcingAuthentication``: 未認証でも unsafe method に CSRF を強制。
+      - ``CookieAuthentication``: Cookie 経由で JWT を読み、user を解決 + enforce CSRF。
+      - ``IsAuthenticated``: 自分のアップロード先 URL を発行するため認証必須。
+    """
+
+    # サブクラスで "avatar" or "header" に上書きする。
+    kind: str = ""
+
+    authentication_classes = [CSRFEnforcingAuthentication, CookieAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["post", "head", "options"]
+
+    def post(self, request: Request, *args, **kwargs) -> Response:
+        # 1. body validation (content_type / content_length)。
+        request_serializer = UploadUrlRequestSerializer(data=request.data)
+        request_serializer.is_valid(raise_exception=True)
+
+        # 2. presigned URL 発行。s3_presign 側で ValidationError が上がった場合は
+        #    DRF の標準 exception handler で 400 になる。
+        result = generate_presigned_upload_url(
+            user_id=request.user.pk,
+            kind=self.kind,
+            content_type=request_serializer.validated_data["content_type"],
+            content_length=request_serializer.validated_data["content_length"],
+        )
+
+        # 3. object_key / upload_url / expires_at / public_url を返す。
+        return Response(result.to_dict(), status=status.HTTP_200_OK)
+
+
+class AvatarUploadUrlView(_BaseUploadUrlView):
+    """``POST /api/v1/users/me/avatar-upload-url/``: avatar 用 presigned URL 発行."""
+
+    kind = "avatar"
+
+
+class HeaderUploadUrlView(_BaseUploadUrlView):
+    """``POST /api/v1/users/me/header-upload-url/``: header 用 presigned URL 発行."""
+
+    kind = "header"
