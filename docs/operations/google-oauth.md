@@ -47,10 +47,10 @@
 
 ## エンドポイント
 
-| Method | Path                                        | View                   | 役割                                   |
-| ------ | ------------------------------------------- | ---------------------- | -------------------------------------- |
-| POST   | `/api/v1/auth/o/google-oauth2/cookie/`      | `GoogleCookieAuthView` | P1-12: Cookie 化レスポンス (新 frontend) |
-| POST   | `/api/v1/auth/o/google-oauth2/`             | `CustomProviderAuthView` | 旧: body に `message` を付ける互換経路  |
+| Method | Path                                   | View                     | 役割                                     |
+| ------ | -------------------------------------- | ------------------------ | ---------------------------------------- |
+| POST   | `/api/v1/auth/o/google-oauth2/cookie/` | `GoogleCookieAuthView`   | P1-12: Cookie 化レスポンス (新 frontend) |
+| POST   | `/api/v1/auth/o/google-oauth2/`        | `CustomProviderAuthView` | 旧: body に `message` を付ける互換経路   |
 
 新規 frontend は必ず `/o/google-oauth2/cookie/` を使う。旧 `/o/google-oauth2/`
 は ADR-0003 移行期間中の互換用のため維持しているが、将来 deprecate 予定。
@@ -117,11 +117,11 @@ SOCIAL_AUTH_PIPELINE = (
 `apps/users/views.py::set_auth_cookies` 参照。Google OAuth Cookie も email
 login と同じ 3 種を set する:
 
-| Cookie 名    | HttpOnly | SameSite | Secure (prod) | 用途                                   |
-| ------------ | -------- | -------- | ------------- | -------------------------------------- |
-| `access`     | yes      | Lax      | yes           | 短寿命 JWT (API 認証)                  |
-| `refresh`    | yes      | Lax      | yes           | 長寿命 JWT (rotation)                  |
-| `logged_in`  | no       | Lax      | yes           | JS から「認証済み」を読む UI フラグ用  |
+| Cookie 名   | HttpOnly | SameSite | Secure (prod) | 用途                                  |
+| ----------- | -------- | -------- | ------------- | ------------------------------------- |
+| `access`    | yes      | Lax      | yes           | 短寿命 JWT (API 認証)                 |
+| `refresh`   | yes      | Lax      | yes           | 長寿命 JWT (rotation)                 |
+| `logged_in` | no       | Lax      | yes           | JS から「認証済み」を読む UI フラグ用 |
 
 ## トラブルシュート
 
