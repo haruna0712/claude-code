@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from apps.tweets.rendering import (
+    _compute_cache_key,
     extract_plaintext,
     get_markdown_html_with_cache_key,
     render_markdown,
@@ -152,6 +153,42 @@ class TestLinksAndXss:
         assert "nofollow" in html
         assert "noopener" in html
 
+    def test_protocol_relative_img_src_is_stripped(self) -> None:
+        """``<img src="//evil.example/track.gif">`` は bleach の protocols allowlist
+        を素通りしてしまうため、後段で src 属性を除去していること。
+
+        (PR #134 review HIGH): トラッキングピクセル埋め込み対策。
+        """
+        html = render_markdown('<img src="//evil.example/track.gif" alt="x">')
+        assert 'src="//evil.example/track.gif"' not in html
+        assert "//evil.example/track.gif" not in html
+
+    def test_protocol_relative_a_href_is_stripped(self) -> None:
+        """``<a href="//evil.example">`` の href も除去されること。
+
+        (PR #134 review HIGH): リンクジャック対策。
+        """
+        html = render_markdown('<a href="//evil.example">click</a>')
+        assert 'href="//evil.example"' not in html
+        assert "//evil.example" not in html
+        # タグ自体とテキストは残っていても良い (inert になるだけ)
+        assert "click" in html
+
+    def test_protocol_relative_markdown_image_is_stripped(self) -> None:
+        """Markdown 記法経由でも protocol-relative URL は除去されること。"""
+        html = render_markdown("![cat](//evil.example/cat.png)")
+        assert "//evil.example/cat.png" not in html
+
+    def test_span_class_attribute_is_stripped(self) -> None:
+        """``<span class="admin-badge">`` の class は除去されること。
+
+        (PR #134 review MEDIUM): Shiki は client 側で span を挿入するので
+        server 側で span[class] を許可する必要はない。UI 欺瞞対策。
+        """
+        html = render_markdown('<span class="admin-badge">VIP</span>')
+        assert 'class="admin-badge"' not in html
+        assert "VIP" in html
+
 
 # ---------------------------------------------------------------------------
 # URL 自動リンク (linkify)
@@ -225,6 +262,36 @@ class TestExtractPlaintext:
         plain = extract_plaintext("<script>alert(1)</script>")
         assert "<script" not in plain
 
+    def test_extract_plaintext_removes_script_body(self) -> None:
+        """``<script>`` の中身 (``alert(1)``) も残らないこと。
+
+        (PR #134 review HIGH): bleach の strip=True は tag を消すが text は
+        残すため、OGP description などに script 内容が漏出する。
+        """
+        plain = extract_plaintext("hi <script>alert(1)</script> bye")
+        assert "alert(1)" not in plain
+        assert "<script" not in plain
+        assert "hi" in plain
+        assert "bye" in plain
+
+    def test_extract_plaintext_removes_style_body(self) -> None:
+        """``<style>`` ブロックの中身 (CSS) も残らないこと。"""
+        plain = extract_plaintext("pre <style>body{color:red}</style> post")
+        assert "body{color:red}" not in plain
+        assert "<style" not in plain
+        assert "pre" in plain
+        assert "post" in plain
+
+    def test_extract_plaintext_removes_noscript_body(self) -> None:
+        """``<noscript>`` の中身 (JS 無効時のフォールバック) も残らないこと。"""
+        plain = extract_plaintext(
+            "ok <noscript>enable javascript now</noscript> end",
+        )
+        assert "enable javascript now" not in plain
+        assert "<noscript" not in plain
+        assert "ok" in plain
+        assert "end" in plain
+
 
 # ---------------------------------------------------------------------------
 # cache key
@@ -258,3 +325,55 @@ class TestCacheKey:
         html_direct = render_markdown(source)
         html_tuple, _ = get_markdown_html_with_cache_key(source)
         assert html_direct == html_tuple
+
+    def test_compute_cache_key_directly_is_stable(self) -> None:
+        """``_compute_cache_key`` を直接呼んでも決定的かつ長さ仕様を満たす。"""
+        key1 = _compute_cache_key("hello")
+        key2 = _compute_cache_key("hello")
+        assert key1 == key2
+        assert len(key1) == 16
+        int(key1, 16)
+
+    def test_cache_key_changes_with_attrs_change(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """ATTRS allowlist を変更すると cache key も変わること。
+
+        (PR #134 review MEDIUM): tags を弄らず attrs だけ絞った場合でも、
+        古い (= 緩い allowlist で作った) cache を踏まないようにするため。
+        """
+        from django.conf import settings as django_settings
+
+        source = "some source"
+        key_before = _compute_cache_key(source)
+
+        new_attrs = dict(django_settings.MARKDOWN_BLEACH_ALLOWED_ATTRS)
+        new_attrs["a"] = ["href"]  # rel / target / title を落としてみる
+        monkeypatch.setattr(
+            django_settings,
+            "MARKDOWN_BLEACH_ALLOWED_ATTRS",
+            new_attrs,
+        )
+
+        key_after = _compute_cache_key(source)
+        assert key_before != key_after
+
+    def test_cache_key_changes_with_protocols_change(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """PROTOCOLS allowlist を変更しても cache key が変わること。"""
+        from django.conf import settings as django_settings
+
+        source = "some source"
+        key_before = _compute_cache_key(source)
+
+        monkeypatch.setattr(
+            django_settings,
+            "MARKDOWN_BLEACH_ALLOWED_PROTOCOLS",
+            ["https"],  # mailto / http を落としてみる
+        )
+
+        key_after = _compute_cache_key(source)
+        assert key_before != key_after

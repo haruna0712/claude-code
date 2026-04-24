@@ -27,6 +27,8 @@ docs/operations/markdown.md に将来的な Redis キャッシュ戦略もまと
 from __future__ import annotations
 
 import hashlib
+import json
+import re
 from typing import Any
 
 import bleach
@@ -65,15 +67,61 @@ _LINKIFY_REL_VALUES = ("nofollow", "noopener")
 # cache key の衝突を避けるためのバージョンタグ。
 # bleach allowlist を変えたが source は不変、という状況で古い cache を
 # 踏まないよう、ハッシュ計算にこのタグを混ぜ込む。
-_RENDER_PIPELINE_VERSION = "p1-09-v1"
+#
+# v2 (PR #134 review 吸収): protocol-relative URL の除去 / scripting block
+# の前処理 / ATTRS & PROTOCOLS を cache key 材料に追加 のため bump。
+_RENDER_PIPELINE_VERSION = "p1-09-v2"
 
 # cache key の文字数。SHA-256 の前半 16 文字 = 64bit 相当で衝突率は実用上十分。
 _CACHE_KEY_HEX_LENGTH = 16
+
+# security-reviewer (PR #134) 指摘: bleach の ``protocols`` allowlist は
+# ``javascript:`` など明示スキームしか見ないため ``//evil.example/x.gif`` の
+# ような protocol-relative URL を素通りさせ、トラッキングピクセル / CSRF
+# フォーム POST 踏み台に悪用される。``src``/``href`` 属性値がスラッシュ 2 個
+# で始まるパターンを bleach 後段で潰す。
+_PROTOCOL_RELATIVE_ATTR_RE = re.compile(
+    r'\s(src|href)="//[^"]*"',
+    re.IGNORECASE,
+)
+
+# security-reviewer (PR #134) 指摘: bleach.clean(strip=True) はタグを剥がすが
+# text 内容 (例: ``<script>alert(1)</script>`` の ``alert(1)``) はそのまま
+# 残してしまう。``extract_plaintext`` では OGP description や全文検索 index
+# に使うため、scripting 意図の文字列自体を混入させない。``<script>``
+# ``<style>`` ``<noscript>`` は開始タグ〜終了タグまでを前処理で丸ごと除去。
+_SCRIPTING_BLOCK_RE = re.compile(
+    r"<(script|style|noscript)\b[^>]*>.*?</\1\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 # ---------------------------------------------------------------------------
 # 内部ユーティリティ
 # ---------------------------------------------------------------------------
+
+
+def _strip_protocol_relative_urls(html: str) -> str:
+    """``src="//..."`` / ``href="//..."`` 属性を除去する。
+
+    bleach.clean 後段で呼ぶ前提。属性値のみ削除し、タグ自体は残す
+    (``<img>`` / ``<a>`` の構造を壊さないほうがエスケープ漏れの面で安全)。
+    該当属性が消えた ``<a>`` は inert になり、``<img>`` は何もロードしない。
+    """
+    if not html:
+        return html
+    return _PROTOCOL_RELATIVE_ATTR_RE.sub("", html)
+
+
+def _strip_scripting_blocks(source: str) -> str:
+    """``<script>``/``<style>``/``<noscript>`` ブロックを中身ごと除去する。
+
+    ``extract_plaintext`` 用の前処理。bleach は strip=True でもタグ内テキスト
+    を残すので、プレーンテキスト化前に regex でブロック全体を削る。
+    """
+    if not source:
+        return source
+    return _SCRIPTING_BLOCK_RE.sub("", source)
 
 
 def _linkify_callback(attrs: dict, new: bool = False) -> dict:
@@ -135,6 +183,10 @@ def render_markdown(source: str) -> str:
         strip_comments=True,
     )
 
+    # bleach の protocols allowlist は ``//evil.example/x`` 形式を素通りさせるため
+    # ここで追加フィルタをかける。
+    sanitized = _strip_protocol_relative_urls(sanitized)
+
     linkified = bleach.linkify(
         sanitized,
         callbacks=[_linkify_callback],
@@ -163,6 +215,11 @@ def extract_plaintext(source: str) -> str:
     converter = _build_markdown()
     rendered_html = converter.convert(source)
 
+    # bleach.clean(strip=True) はタグ内のテキストを残すため、スクリプト意図
+    # の文字列 (``alert(1)`` など) が OGP description に漏れる。ブロック
+    # 全体を除去してから plain text 化する。
+    rendered_html = _strip_scripting_blocks(rendered_html)
+
     plain = bleach.clean(
         rendered_html,
         tags=[],
@@ -184,7 +241,9 @@ def get_markdown_html_with_cache_key(source: str) -> tuple[str, str]:
 
     cache_key は以下を材料に SHA-256 を取った先頭 16 文字で生成する:
         - ``source`` 本文
-        - ``settings.MARKDOWN_BLEACH_ALLOWED_TAGS`` (allowlist の変更検知)
+        - ``settings.MARKDOWN_BLEACH_ALLOWED_TAGS`` (tag allowlist 変更検知)
+        - ``settings.MARKDOWN_BLEACH_ALLOWED_ATTRS`` (attr allowlist 変更検知)
+        - ``settings.MARKDOWN_BLEACH_ALLOWED_PROTOCOLS`` (protocol allowlist 変更検知)
         - pipeline version tag (bleach の allowlist 以外の変更検知)
 
     今回は Redis と繋ぎ込まず、呼び出し側が cache を導入したときに
@@ -196,9 +255,35 @@ def get_markdown_html_with_cache_key(source: str) -> tuple[str, str]:
 
 
 def _compute_cache_key(source: str) -> str:
-    """cache key を決定的に計算する。"""
+    """cache key を決定的に計算する。
+
+    ハッシュ材料:
+        - ``source`` 本文
+        - ``MARKDOWN_BLEACH_ALLOWED_TAGS`` (allowlist 変更検知)
+        - ``MARKDOWN_BLEACH_ALLOWED_ATTRS`` (属性 allowlist 変更検知)
+        - ``MARKDOWN_BLEACH_ALLOWED_PROTOCOLS`` (プロトコル allowlist 変更検知)
+        - ``_RENDER_PIPELINE_VERSION`` (上記以外のロジック変更検知)
+
+    ATTRS / PROTOCOLS も材料に含めることで、tags を変えずに属性や
+    プロトコルだけ絞った場合でも古い (= 緩い allowlist で生成された)
+    キャッシュを踏まない。
+    """
     digest = hashlib.sha256()
     digest.update(source.encode("utf-8"))
-    digest.update(str(settings.MARKDOWN_BLEACH_ALLOWED_TAGS).encode("utf-8"))
+    digest.update(
+        json.dumps(sorted(settings.MARKDOWN_BLEACH_ALLOWED_TAGS)).encode("utf-8"),
+    )
+    digest.update(
+        json.dumps(
+            settings.MARKDOWN_BLEACH_ALLOWED_ATTRS,
+            sort_keys=True,
+            default=list,
+        ).encode("utf-8"),
+    )
+    digest.update(
+        json.dumps(sorted(settings.MARKDOWN_BLEACH_ALLOWED_PROTOCOLS)).encode(
+            "utf-8",
+        ),
+    )
     digest.update(_RENDER_PIPELINE_VERSION.encode("utf-8"))
     return digest.hexdigest()[:_CACHE_KEY_HEX_LENGTH]
