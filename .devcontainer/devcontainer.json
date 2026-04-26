@@ -63,6 +63,13 @@
     // 別 PC でこのレポジトリを開いた場合は、その PC で 1 度だけ
     // `aws configure` を打ち直す必要がある (volume はホストごとに独立)。
     "source=claude-code-aws,target=/home/node/.aws,type=volume",
+    // gh CLI の認証情報 (`/home/node/.config/gh/hosts.yml`) を含む XDG config
+    // ディレクトリの永続化。`gh auth login` を一度通せば、devcontainer リビルド
+    // を跨いで認証が残る。`claude-code-aws` と同様、`${devcontainerId}` を含めない
+    // 固定名にして devcontainer.json 編集の影響を受けないようにする。
+    // `/home/node/.config` 全体を載せているのは、将来 gh 以外のツール (op /
+    // direnv 等) が同じディレクトリに設定を書いた時にも自動で永続化されるため。
+    "source=claude-code-config-xdg,target=/home/node/.config,type=volume",
     "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
   ],
   "containerEnv": {
