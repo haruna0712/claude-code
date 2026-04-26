@@ -70,10 +70,10 @@ module "data" {
 
   db_master_password = module.secrets.db_password_value
 
-  rds_instance_class        = var.rds_instance_class
-  rds_allocated_storage_gb  = var.rds_allocated_storage_gb
-  rds_multi_az              = var.rds_multi_az
-  rds_skip_final_snapshot   = var.rds_skip_final_snapshot
+  rds_instance_class       = var.rds_instance_class
+  rds_allocated_storage_gb = var.rds_allocated_storage_gb
+  rds_multi_az             = var.rds_multi_az
+  rds_skip_final_snapshot  = var.rds_skip_final_snapshot
 
   redis_node_type = var.redis_node_type
 }
@@ -142,9 +142,9 @@ module "edge" {
   environment = "stg"
   project     = var.project
 
-  domain_name        = var.domain_name
-  app_subdomain      = var.app_subdomain
-  webhook_subdomain  = var.webhook_subdomain
+  domain_name       = var.domain_name
+  app_subdomain     = var.app_subdomain
+  webhook_subdomain = var.webhook_subdomain
 
   alb_dns_name = module.compute.alb_dns_name
   alb_zone_id  = module.compute.alb_zone_id
@@ -171,8 +171,10 @@ module "observability" {
   ecs_service_name_map = module.compute.service_names
   ecs_cluster_name     = module.compute.ecs_cluster_name
 
-  alb_arn_suffix = module.compute.alb_arn_suffix
+  alb_arn_suffix    = module.compute.alb_arn_suffix
+  enable_alb_alarms = true
 
-  rds_instance_identifier    = module.data.rds_instance_id
-  rds_allocated_storage_gb   = var.rds_allocated_storage_gb
+  rds_instance_identifier  = module.data.rds_instance_id
+  rds_allocated_storage_gb = var.rds_allocated_storage_gb
+  enable_rds_alarms        = true
 }

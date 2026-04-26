@@ -57,15 +57,32 @@ variable "ecs_service_name_map" {
 }
 
 variable "alb_arn_suffix" {
-  description = "ALB の `arn_suffix` (5xx エラー率アラーム用)。未指定なら ALB アラームをスキップ。"
+  description = "ALB の `arn_suffix` (5xx エラー率アラーム用)。"
   type        = string
   default     = ""
 }
 
 variable "rds_instance_identifier" {
-  description = "RDS インスタンス識別子 (CPU / 容量アラーム用)。未指定なら RDS アラームをスキップ。"
+  description = "RDS インスタンス識別子 (CPU / 容量アラーム用)。"
   type        = string
   default     = ""
+}
+
+# NOTE: Terraform は `for_each = var.X == "" ? toset([]) : toset(["this"])`
+# のように `var.X` (= 別 module の output で apply 時にしか決まらない値) を
+# 使うと plan 時にキー集合が確定せずエラーにする。toggle は別変数として
+# 静的に渡し、`alb_arn_suffix` / `rds_instance_identifier` は dimensions 等の
+# resource attribute としてだけ使う (これらは unknown 文字列でも plan は通る)。
+variable "enable_alb_alarms" {
+  description = "ALB 5xx 等のアラームを作成するか。caller が ALB を作る時のみ true に。"
+  type        = bool
+  default     = false
+}
+
+variable "enable_rds_alarms" {
+  description = "RDS CPU / FreeStorageSpace アラームを作成するか。caller が RDS を作る時のみ true に。"
+  type        = bool
+  default     = false
 }
 
 variable "rds_allocated_storage_gb" {
