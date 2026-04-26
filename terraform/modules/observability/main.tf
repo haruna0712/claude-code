@@ -94,11 +94,18 @@ resource "aws_cloudwatch_metric_alarm" "ecs_service_cpu" {
 
 # ---------------------------------------------------------------------------
 # RDS CPU / FreeStorageSpace Alarms
-# rds_instance_identifier が未指定なら作らない。
+# `enable_rds_alarms` で作成可否を切り替える。
+#
+# NOTE: 当初 `count = var.rds_instance_identifier == "" ? 0 : 1` だったが、
+# `var.rds_instance_identifier` が module.data の output (= apply 時に決まる)
+# のため plan 時に "Invalid count argument" になる。`for_each = ... == "" ? ...`
+# でも同じく Terraform は値が unknown なら for_each set を確定できないと判断
+# してエラーにする。caller 側で「アラームを作る/作らない」を静的に判断する
+# `enable_rds_alarms` (bool) を別変数として渡すのが Terraform 推奨パターン。
 # ---------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
-  count = var.rds_instance_identifier == "" ? 0 : 1
+  for_each = var.enable_rds_alarms ? toset(["this"]) : toset([])
 
   alarm_name          = "${local.prefix}-rds-cpu-high"
   alarm_description   = "RDS CPU > 80% for 15 minutes"
@@ -122,7 +129,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "rds_storage" {
-  count = var.rds_instance_identifier == "" ? 0 : 1
+  for_each = var.enable_rds_alarms ? toset(["this"]) : toset([])
 
   alarm_name          = "${local.prefix}-rds-storage-low"
   alarm_description   = "RDS FreeStorageSpace < ${floor(var.rds_free_storage_threshold_ratio * 100)}% of ${var.rds_allocated_storage_gb}GB"
@@ -151,7 +158,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_storage" {
 # ---------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "alb_5xx_rate" {
-  count = var.alb_arn_suffix == "" ? 0 : 1
+  for_each = var.enable_alb_alarms ? toset(["this"]) : toset([])
 
   alarm_name          = "${local.prefix}-alb-5xx-rate-high"
   alarm_description   = "ALB HTTPCode_Target_5XX_Count > 1% of total requests"
