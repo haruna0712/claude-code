@@ -66,9 +66,26 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
 # Set `DEVCONTAINER` environment variable to help with orientation
 ENV DEVCONTAINER=true
 
-# Create workspace and config directories and set permissions
-RUN mkdir -p /workspace /home/node/.claude && \
-  chown -R node:node /workspace /home/node/.claude
+# Create workspace and config directories and set permissions.
+#
+# `/home/node/.aws` (#162) and `/home/node/.config` (#163) are mounted as named
+# volumes at container start. Docker's behavior for an EMPTY named volume is to
+# seed it from the image's directory at the mount point, including ownership.
+# By pre-creating these directories with `node:node` ownership here, the first
+# `aws configure` / `gh auth login` on a freshly-built devcontainer (any host)
+# can write without "permission denied" errors. Without this seeding, Docker
+# defaults the volume's root inode to `root:root` and the `node` user is locked
+# out — see PR #16x for the regression report.
+RUN mkdir -p \
+  /workspace \
+  /home/node/.claude \
+  /home/node/.aws \
+  /home/node/.config && \
+  chown -R node:node \
+  /workspace \
+  /home/node/.claude \
+  /home/node/.aws \
+  /home/node/.config
 
 WORKDIR /workspace
 
