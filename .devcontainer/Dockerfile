@@ -115,6 +115,23 @@ RUN ARCH=$(dpkg --print-architecture) && \
   rm -rf /tmp/awscliv2.zip /tmp/aws && \
   aws --version
 
+# Install Terraform (matches the version used by .github/workflows/cd-stg.yml
+# so local plan output matches CI output exactly). Bump TERRAFORM_VERSION in
+# devcontainer.json to upgrade; keep in sync with cd-stg.yml.
+ARG TERRAFORM_VERSION=1.9.5
+RUN ARCH=$(dpkg --print-architecture) && \
+  case "$ARCH" in \
+    amd64) TF_ARCH=amd64 ;; \
+    arm64) TF_ARCH=arm64 ;; \
+    *) echo "Unsupported architecture for terraform: $ARCH" && exit 1 ;; \
+  esac && \
+  curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_${TF_ARCH}.zip" -o /tmp/terraform.zip && \
+  unzip -q /tmp/terraform.zip -d /tmp/ && \
+  sudo mv /tmp/terraform /usr/local/bin/terraform && \
+  sudo chmod +x /usr/local/bin/terraform && \
+  rm /tmp/terraform.zip && \
+  terraform version
+
 # Set up non-root user
 USER node
 
