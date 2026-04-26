@@ -157,7 +157,11 @@ resource "aws_elasticache_subnet_group" "this" {
 }
 
 resource "aws_elasticache_parameter_group" "redis7" {
-  name_prefix = "${local.prefix}-redis7-"
+  # NOTE: aws_elasticache_parameter_group は `name_prefix` をサポートしない
+  # (aws_db_parameter_group とは仕様が異なる。AWS provider 5.x で確認)。
+  # 固定 `name` を使い、parameter 値変更で再作成が必要な時は
+  # create_before_destroy + 別名を経由する 2 段 apply で対応する。
+  name        = "${local.prefix}-redis7"
   family      = "redis7"
   description = "Redis 7 parameters for stg (Channels layer + Celery broker + cache)"
 
