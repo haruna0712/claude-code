@@ -183,16 +183,31 @@ iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 # Then allow only specific outbound traffic to allowed domains
 iptables -A OUTPUT -m set --match-set allowed-domains dst -j ACCEPT
 
+# Allow outbound HTTP(S) to any destination so claude tools (WebFetch /
+# documentation lookups) can read arbitrary blog / docs URLs without
+# requiring per-domain firewall additions.
+#
+# Security trade-off: the sandbox no longer blocks data exfiltration over
+# 80/443 to attacker-controlled hosts. This is acceptable in this project
+# because Claude already has GitHub write + AWS Admin credentials, so the
+# attack surface is governed by what those credentials can do, not by what
+# IPs Claude can reach. Other ports (SSH outbound, SMB, Redis, custom
+# protocols) remain blocked, and inbound traffic is still fully DROP'd.
+iptables -A OUTPUT -p tcp --dport 443 -j ACCEPT
+iptables -A OUTPUT -p tcp --dport 80 -j ACCEPT
+
 # Explicitly REJECT all other outbound traffic for immediate feedback
 iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
 
 echo "Firewall configuration complete"
 echo "Verifying firewall rules..."
+# 80/443 全開を許容しているので、example.com には到達できる前提で逆判定する。
+# ここが失敗するときは TCP/443 自体が止まっているか DNS が壊れている。
 if curl --connect-timeout 5 https://example.com >/dev/null 2>&1; then
-    echo "ERROR: Firewall verification failed - was able to reach https://example.com"
-    exit 1
+    echo "Firewall verification passed - reachable to https://example.com as expected (443 open)"
 else
-    echo "Firewall verification passed - unable to reach https://example.com as expected"
+    echo "ERROR: Firewall verification failed - cannot reach https://example.com (443 should be open)"
+    exit 1
 fi
 
 # Verify GitHub API access
