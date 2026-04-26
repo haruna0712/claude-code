@@ -223,7 +223,9 @@ resource "aws_security_group" "ecs" {
     from_port   = 0
     to_port     = 0
     cidr_blocks = ["0.0.0.0/0"]
-    description = "Outbound to RDS / Redis / VPC Endpoints / fck-nat -> Internet"
+    # NOTE: AWS Security Group description は `[0-9A-Za-z_ .:/()#,@\[\]+=&;{}!$*-]` のみ。
+    # `>` は弾かれるため矢印ではなく `then` で接続する。
+    description = "Outbound to RDS / Redis / VPC Endpoints / fck-nat then Internet"
   }
 
   tags = merge(local.default_tags, { Name = "${local.prefix}-ecs-sg" })
