@@ -77,9 +77,17 @@ done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
 # Source: https://docs.aws.amazon.com/general/latest/gr/aws-ip-ranges.html
 #
 # AWS_REGIONS_ALLOWED can be overridden at firewall-init time by setting
-# the env var (comma-separated). Defaults to ap-northeast-1 (this project's
-# stg/prod region) plus GLOBAL (region-less services like IAM / Route53).
-AWS_REGIONS_ALLOWED="${AWS_REGIONS_ALLOWED:-ap-northeast-1,GLOBAL}"
+# the env var (comma-separated). Defaults to:
+#   - ap-northeast-1 (this project's stg/prod region)
+#   - us-east-1      (CloudFront control plane lives here even though
+#                     CloudFront is a "global" service; ACM certs that
+#                     CloudFront consumes also have to be issued in us-east-1)
+#   - GLOBAL         (region-less services like IAM / Route53)
+#
+# Without us-east-1, `terraform plan` against this stack will hang forever
+# on `cloudfront:ListCachePolicies` because the SDK cannot reach the
+# CloudFront API endpoint (which resolves to a us-east-1 IP).
+AWS_REGIONS_ALLOWED="${AWS_REGIONS_ALLOWED:-ap-northeast-1,us-east-1,GLOBAL}"
 echo "Fetching AWS IP ranges (regions: ${AWS_REGIONS_ALLOWED})..."
 aws_ranges=""
 for attempt in 1 2 3; do
