@@ -23,11 +23,13 @@ locals {
     var.tags,
   )
 
+  # NOTE: S3 tag values are restricted to letters, numbers, spaces, and the chars
+  # + - = . _ : / @ . Parentheses and commas are NOT allowed and cause InvalidTag.
   buckets = {
-    media    = { name = "${local.prefix}-media", purpose = "user-uploaded content (avatars, tweet images, DM attachments)" }
+    media    = { name = "${local.prefix}-media", purpose = "user-uploaded content - avatars / tweet images / DM attachments" }
     static   = { name = "${local.prefix}-static", purpose = "Next.js static assets via CloudFront" }
     backup   = { name = "${local.prefix}-backup", purpose = "RDS / Meilisearch / app-level backups" }
-    alb_logs = { name = "${local.prefix}-alb-logs", purpose = "ALB access logs (F-02)" }
+    alb_logs = { name = "${local.prefix}-alb-logs", purpose = "ALB access logs - F-02" }
   }
 
   # ap-northeast-1 Elastic Load Balancing service account (AWS 公式 account ID)。
