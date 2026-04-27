@@ -353,9 +353,25 @@ resource "aws_launch_template" "fcknat" {
   image_id      = local.fck_nat_ami_id
   instance_type = var.fck_nat_instance_type
 
-  network_interfaces {
-    network_interface_id = aws_network_interface.fcknat[0].id
-  }
+  # NOTE: launch template に `network_interfaces.network_interface_id` を
+  # 直接指定すると、AWS は LT の subnet 拘束と ASG `vpc_zone_identifier`
+  # の同時指定を「a network interface may not specify both a network
+  # interface ID and a subnet」で拒否する。そのため LT は SG だけ持たせ、
+  # 事前に作っておいた ENI は AMI 起動後に user-data で **secondary
+  # ENI として attach する** のが fck-nat の公式パターン。ENI を持つこと
+  # で source/dest check の無効化や EIP の事前割り当てを保ったまま、
+  # ASG による self-heal (instance 入れ替わり時に ENI 再アタッチ) が動く。
+  vpc_security_group_ids = [aws_security_group.fcknat.id]
+
+  user_data = base64encode(<<-EOT
+    #!/bin/bash
+    set -euo pipefail
+    cat > /etc/fck-nat.conf <<EOF
+    eni_id=${aws_network_interface.fcknat[0].id}
+    EOF
+    systemctl restart fck-nat.service
+  EOT
+  )
 
   metadata_options {
     http_tokens   = "required" # IMDSv2 必須
