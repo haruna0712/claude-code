@@ -205,6 +205,25 @@ RUN CLAUDE_CONFIG_DIR=/home/node/.claude claude mcp add --scope user serena -- \
     CLAUDE_CONFIG_DIR=/home/node/.claude claude mcp add --scope user playwright -- \
     npx -y @playwright/mcp --browser chrome
 
+# Register HashiCorp Agent Skills marketplace + install Terraform-related plugins
+# at user scope. Same lifecycle / volume seeding as the MCP block above.
+#
+# Curated picks for this project:
+#   - terraform-code-generation: HashiCorp HCL style guide + Terraform tests.
+#     Catches anti-patterns like `count = unknown_var ? 0 : 1` early.
+#   - terraform-module-generation: module design + Stacks + monolith refactoring.
+#     Useful as we add aws_ecs_service / Phase 2+ modules.
+#
+# Skipped intentionally:
+#   - terraform-provider-development: we consume the AWS provider, don't author one
+#   - packer-builders / packer-hcp: project does not use Packer
+#
+# To add other plugins at runtime: `/plugin install <name>@hashicorp` from inside
+# Claude Code, or via CLI: `claude plugin install <name>@hashicorp --scope user`.
+RUN CLAUDE_CONFIG_DIR=/home/node/.claude claude plugin marketplace add hashicorp/agent-skills --scope user && \
+    CLAUDE_CONFIG_DIR=/home/node/.claude claude plugin install terraform-code-generation@hashicorp --scope user && \
+    CLAUDE_CONFIG_DIR=/home/node/.claude claude plugin install terraform-module-generation@hashicorp --scope user
+
 # Seed Claude Code user settings with Stop/Notification hooks that emit BEL
 # (paired with VS Code's terminal.integrated.enableBell=true). Goes onto the
 # named volume via seeding on first container start.
