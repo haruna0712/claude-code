@@ -81,15 +81,15 @@ resource "aws_db_parameter_group" "postgres15" {
 resource "aws_db_instance" "this" {
   identifier = "${local.prefix}-postgres"
 
-  engine                 = "postgres"
-  engine_version         = var.rds_engine_version
-  instance_class         = var.rds_instance_class
-  allocated_storage      = var.rds_allocated_storage_gb
-  max_allocated_storage  = var.rds_max_allocated_storage_gb > 0 ? var.rds_max_allocated_storage_gb : null
-  storage_type           = "gp3"
-  iops                   = var.rds_storage_iops
-  storage_throughput     = var.rds_storage_throughput_mbs
-  storage_encrypted      = true
+  engine                = "postgres"
+  engine_version        = var.rds_engine_version
+  instance_class        = var.rds_instance_class
+  allocated_storage     = var.rds_allocated_storage_gb
+  max_allocated_storage = var.rds_max_allocated_storage_gb > 0 ? var.rds_max_allocated_storage_gb : null
+  storage_type          = "gp3"
+  iops                  = var.rds_storage_iops
+  storage_throughput    = var.rds_storage_throughput_mbs
+  storage_encrypted     = true
   # KMS は AWS managed key (aws/rds)。prod で CMK 移行時は kms_key_id を variable 化する。
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
@@ -102,26 +102,29 @@ resource "aws_db_instance" "this" {
   # AWS RDS 側で手動 password 変更した場合、次回 terraform apply で
   # "in-place update" が走るため、lifecycle.ignore_changes でガードする。
 
-  port     = 5432
-  db_name  = "sns"
+  port    = 5432
+  db_name = "sns"
 
-  multi_az                = var.rds_multi_az
-  publicly_accessible     = false
+  multi_az                   = var.rds_multi_az
+  publicly_accessible        = false
   auto_minor_version_upgrade = true
 
   backup_retention_period = var.rds_backup_retention_days
-  backup_window           = "18:00-19:00" # JST 03:00-04:00
+  backup_window           = "18:00-19:00"         # JST 03:00-04:00
   maintenance_window      = "Wed:19:00-Wed:20:00" # JST 水曜 04:00-05:00
 
   deletion_protection = var.rds_deletion_protection
   skip_final_snapshot = var.rds_skip_final_snapshot
-  # final_snapshot_identifier は timestamp() を使わず固定名にする
+  # final_snapshot_identifier は timestamp() を使わず suffix 変数で外から制御する
   # (database-reviewer PR #50 MEDIUM: timestamp() は毎 plan で差分を生む)。
-  # 実行時刻は copy_tags_to_snapshot で引き継いだ tags + AWS 側の作成時刻から追える。
-  # teardown を複数回行う場合は手動で snapshot 名を別にする (e.g. `final_snapshot_identifier`
-  # 変数化は本モジュールでは未対応、必要になれば追加)。
-  final_snapshot_identifier = var.rds_skip_final_snapshot ? null : "${local.prefix}-postgres-final"
-  copy_tags_to_snapshot     = true
+  # apply→destroy を繰り返す環境では `-var=final_snapshot_identifier_suffix=YYYYMMDDhhmmss`
+  # を destroy 直前に渡して `DBSnapshotAlreadyExists` を回避する。
+  final_snapshot_identifier = var.rds_skip_final_snapshot ? null : (
+    var.final_snapshot_identifier_suffix == ""
+    ? "${local.prefix}-postgres-final"
+    : "${local.prefix}-postgres-final-${var.final_snapshot_identifier_suffix}"
+  )
+  copy_tags_to_snapshot = true
 
   performance_insights_enabled          = true
   performance_insights_retention_period = 7 # stg は 7 日、prod は 731 (2 年) を別途指定
@@ -203,8 +206,8 @@ resource "aws_elasticache_cluster" "this" {
   # stg は AUTH token 無効 (SG で十分守る)。prod では
   # replication group + transit encryption + at-rest encryption + auth_token が推奨で、
   # 別モジュール (data_replication) で提供する前提。
-  snapshot_retention_limit = 0 # stg は snapshot なし (Redis は壊れても再作成で OK)
-  apply_immediately        = false
+  snapshot_retention_limit   = 0 # stg は snapshot なし (Redis は壊れても再作成で OK)
+  apply_immediately          = false
   auto_minor_version_upgrade = true
 
   maintenance_window = "thu:19:00-thu:20:00" # JST 木曜 04:00-05:00

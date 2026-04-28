@@ -123,6 +123,23 @@ variable "rds_skip_final_snapshot" {
   default     = false
 }
 
+variable "final_snapshot_identifier_suffix" {
+  description = <<-EOT
+    final snapshot identifier に付与する suffix。
+    空の場合は "<project>-<env>-postgres-final"。
+    apply→destroy を複数回繰り返す環境では `DBSnapshotAlreadyExists` を避けるため、
+    destroy 直前に `-var=final_snapshot_identifier_suffix=$(date +%Y%m%d%H%M%S)` を渡す。
+    timestamp() を使わない理由: 毎 plan で差分が出るため (database-reviewer PR #50 MEDIUM)。
+  EOT
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9-]*$", var.final_snapshot_identifier_suffix))
+    error_message = "final_snapshot_identifier_suffix は英数字とハイフンのみ。"
+  }
+}
+
 # ---------- ElastiCache ----------
 
 variable "redis_engine_version" {
