@@ -223,7 +223,12 @@ data "aws_iam_policy_document" "alb_logs_write" {
     }
   }
 
-  # ELB が ACL "bucket-owner-full-control" を付けて PutObject するケースの許可
+  # ELB が ACL "bucket-owner-full-control" を付けて PutObject するケースの許可。
+  # ap-northeast-1 はレガシーリージョンで、ELB ログ配信は AWS アカウント
+  # principal (582318560864) を使う必要がある。`logdelivery.elasticloadbalancing.amazonaws.com`
+  # service principal は新しいリージョン向けで、ap-northeast-1 では拒否され
+  # access log の有効化が失敗する (F-02 監査ログを失う)。
+  # 参考: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/enable-access-logging.html
   statement {
     sid     = "AllowELBLoggingDeliveryAcl"
     effect  = "Allow"
@@ -232,8 +237,8 @@ data "aws_iam_policy_document" "alb_logs_write" {
     resources = [aws_s3_bucket.this["alb_logs"].arn]
 
     principals {
-      type        = "Service"
-      identifiers = ["logdelivery.elasticloadbalancing.amazonaws.com"]
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${local.elb_service_account_ap_northeast_1}:root"]
     }
   }
 }
