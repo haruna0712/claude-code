@@ -52,6 +52,18 @@ variable "rds_skip_final_snapshot" {
   default = false
 }
 
+variable "rds_deletion_protection" {
+  description = "RDS の deletion_protection。stg は teardown を頻繁にやるので default false。prod は true で上書き必須。"
+  type        = bool
+  default     = false
+}
+
+variable "final_snapshot_identifier_suffix" {
+  description = "RDS final snapshot 名の suffix。teardown を複数回行う前に `-var=final_snapshot_identifier_suffix=$(date +%Y%m%d%H%M%S)` を渡す。"
+  type        = string
+  default     = ""
+}
+
 # ---------- ElastiCache オーバーライド ----------
 
 variable "redis_node_type" {

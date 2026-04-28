@@ -70,10 +70,12 @@ module "data" {
 
   db_master_password = module.secrets.db_password_value
 
-  rds_instance_class       = var.rds_instance_class
-  rds_allocated_storage_gb = var.rds_allocated_storage_gb
-  rds_multi_az             = var.rds_multi_az
-  rds_skip_final_snapshot  = var.rds_skip_final_snapshot
+  rds_instance_class               = var.rds_instance_class
+  rds_allocated_storage_gb         = var.rds_allocated_storage_gb
+  rds_multi_az                     = var.rds_multi_az
+  rds_skip_final_snapshot          = var.rds_skip_final_snapshot
+  rds_deletion_protection          = var.rds_deletion_protection
+  final_snapshot_identifier_suffix = var.final_snapshot_identifier_suffix
 
   redis_node_type = var.redis_node_type
 }
