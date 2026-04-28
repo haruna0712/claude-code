@@ -115,3 +115,17 @@ variable "enable_vpc_endpoints" {
   type        = bool
   default     = true
 }
+
+# ---------- WAF (CloudFront 前段) ----------
+
+variable "enable_waf" {
+  description = "CloudFront に WAFv2 を紐付けるか。stg で負荷試験を回す時だけ false にしてテスト後に戻す。"
+  type        = bool
+  default     = true
+}
+
+variable "waf_rate_limit_per_5min" {
+  description = "WAF rate-based rule の閾値 (1 IP あたり 5 分間のリクエスト数)。デフォルト 2000。"
+  type        = number
+  default     = 2000
+}

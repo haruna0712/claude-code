@@ -73,6 +73,26 @@ variable "additional_alb_record" {
   default     = false
 }
 
+variable "enable_waf" {
+  description = <<-EOT
+    CloudFront に WAFv2 を紐付けるか。デフォルト true。
+    stg で負荷試験 (k6 / Locust) を回す時だけ false にして、テスト後に true に戻す運用。
+    AWSManagedRulesCommonRuleSet + KnownBadInputs + AmazonIpReputation + 2000 req/5min/IP の rate-based rule を有効化する。
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "waf_rate_limit_per_5min" {
+  description = "rate-based rule の閾値 (1 IP あたり 5 分間のリクエスト数)。デフォルト 2000 = 約 6.7 req/sec/IP。"
+  type        = number
+  default     = 2000
+  validation {
+    condition     = var.waf_rate_limit_per_5min >= 100 && var.waf_rate_limit_per_5min <= 20000000
+    error_message = "AWS WAFv2 rate-based rule の有効レンジは 100 〜 20,000,000。"
+  }
+}
+
 variable "tags" {
   description = "全リソース共通タグ"
   type        = map(string)

@@ -153,6 +153,9 @@ module "edge" {
 
   media_bucket_regional_domain  = module.storage.bucket_regional_domains["media"]
   static_bucket_regional_domain = module.storage.bucket_regional_domains["static"]
+
+  enable_waf              = var.enable_waf
+  waf_rate_limit_per_5min = var.waf_rate_limit_per_5min
 }
 
 # ---------------------------------------------------------------------------

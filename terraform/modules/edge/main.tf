@@ -178,6 +178,10 @@ resource "aws_cloudfront_distribution" "this" {
   aliases             = [local.app_fqdn]
   http_version        = "http2and3"
 
+  # WAFv2 web ACL (CLOUDFRONT scope は us-east-1 のみ作成可)。
+  # var.enable_waf = false の時は null を渡して紐付けを外す (負荷試験時のみ)。
+  web_acl_id = var.enable_waf ? aws_wafv2_web_acl.cloudfront[0].arn : null
+
   # -------- Origins --------
   origin {
     origin_id   = "alb"
@@ -337,4 +341,129 @@ resource "aws_route53_record" "webhook" {
     zone_id                = var.alb_zone_id
     evaluate_target_health = true
   }
+}
+
+# ---------------------------------------------------------------------------
+# WAFv2 web ACL (CLOUDFRONT scope)
+#
+# CLOUDFRONT scope の web ACL は us-east-1 のみで作成可能。`provider = aws.us_east_1`
+# を明示する。
+#
+# ルール構成:
+#   priority 1: AWSManagedRulesCommonRuleSet     (OWASP 系の汎用シグネチャ)
+#   priority 2: AWSManagedRulesKnownBadInputsRuleSet (既知の悪意ある入力)
+#   priority 3: AWSManagedRulesAmazonIpReputationList (脅威 IP リスト)
+#   priority 10: rate-based rule                 (1 IP あたり 5 分間で var.waf_rate_limit_per_5min まで)
+#
+# 監視:
+#   各ルールの sampled_requests_enabled = true で AWS Console 側のサンプル閲覧を有効化。
+#   metric_name は `${local.prefix}-cf-<rule>` で CloudWatch にエクスポート。
+# ---------------------------------------------------------------------------
+resource "aws_wafv2_web_acl" "cloudfront" {
+  count    = var.enable_waf ? 1 : 0
+  provider = aws.us_east_1
+
+  name        = "${local.prefix}-cloudfront"
+  description = "WAF for ${local.prefix} CloudFront distribution"
+  scope       = "CLOUDFRONT"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "AWSManagedRulesCommonRuleSet"
+    priority = 1
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      sampled_requests_enabled   = true
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.prefix}-cf-common"
+    }
+  }
+
+  rule {
+    name     = "AWSManagedRulesKnownBadInputsRuleSet"
+    priority = 2
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesKnownBadInputsRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      sampled_requests_enabled   = true
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.prefix}-cf-bad-inputs"
+    }
+  }
+
+  rule {
+    name     = "AWSManagedRulesAmazonIpReputationList"
+    priority = 3
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesAmazonIpReputationList"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      sampled_requests_enabled   = true
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.prefix}-cf-ip-rep"
+    }
+  }
+
+  rule {
+    name     = "RateLimitPerIp"
+    priority = 10
+
+    action {
+      block {}
+    }
+
+    statement {
+      rate_based_statement {
+        limit              = var.waf_rate_limit_per_5min
+        aggregate_key_type = "IP"
+      }
+    }
+
+    visibility_config {
+      sampled_requests_enabled   = true
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.prefix}-cf-rate-limit"
+    }
+  }
+
+  visibility_config {
+    sampled_requests_enabled   = true
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${local.prefix}-cloudfront-acl"
+  }
+
+  tags = merge(local.default_tags, { Name = "${local.prefix}-cloudfront-waf" })
 }
