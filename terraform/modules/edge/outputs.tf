@@ -31,7 +31,7 @@ output "cloudfront_distribution_arn" {
     `AWS:SourceArn` 条件に渡す (OAC 推奨パターン、architect PR #52 MEDIUM:
     旧 `cloudfront_oac_arn` はリネームした)。
   EOT
-  value = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${aws_cloudfront_distribution.this.id}"
+  value       = "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/${aws_cloudfront_distribution.this.id}"
 }
 
 # 旧 output 名との後方互換 (storage モジュールがまだ `cloudfront_oac_arn` 参照)
@@ -60,6 +60,11 @@ output "app_fqdn" {
 
 output "webhook_fqdn" {
   value = local.webhook_fqdn
+}
+
+output "waf_web_acl_arn" {
+  description = "CloudFront に紐付けた WAFv2 web ACL ARN。enable_waf = false の時は null。"
+  value       = var.enable_waf ? aws_wafv2_web_acl.cloudfront[0].arn : null
 }
 
 data "aws_caller_identity" "current" {}
