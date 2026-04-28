@@ -96,6 +96,9 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
+    # apps.common は P2-02 で pg_bigm / pg_trgm の CreateExtension migration を
+    # ホストするため正式登録。models 自体は当面空。
+    "apps.common",
     "apps.users",
     # Phase 0 scaffold (P0-04). Models/URLs are populated in later phases
     # — see docs/ROADMAP.md for ownership of each app.
@@ -103,6 +106,8 @@ LOCAL_APPS = [
     "apps.tags",
     "apps.follows",
     "apps.reactions",
+    # P2-08: TL 配信 (永続モデルを持たない、サービス層のみ).
+    "apps.timeline",
     "apps.boxes",
     "apps.notifications",
     "apps.dm",
@@ -318,8 +323,16 @@ REST_FRAMEWORK = {
         # 厳しい scope="tag_propose" を用意し DoS 的な連投を抑制する。
         # apps.tags.views.TagProposeThrottle が参照する。
         "tag_propose": "20/hour",
+        # P2-04 (sec MEDIUM): リアクション spam 対策。
+        # toggle (post → delete → post) を高速で繰り返すと signals 連打 + DB 書き込みが
+        # 集中するため、user 単位で 60/min に制限する。
+        # apps.reactions.views.ReactionThrottle が参照する。
+        "reaction": "60/min",
     },
 }
+
+# P2-07 (sec CRITICAL #1): OGP fetch の User-Agent. 環境変数で override 可能。
+OGP_USER_AGENT = getenv("OGP_USER_AGENT", "SNS-OGP-Bot/1.0")
 
 # P1-01 + ADR-0003 準拠:
 # - ALGORITHM              : HS256 を明示 (security-reviewer PR #84 指摘)

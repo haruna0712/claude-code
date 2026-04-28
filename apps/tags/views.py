@@ -195,3 +195,25 @@ class TagProposeView(APIView):
             TagCreateResponseSerializer(tag).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class TrendingTagsView(APIView):
+    """GET /api/v1/tags/trending/
+
+    Celery Beat (30min) で集計した Top 10 トレンドタグを返す.
+    Redis ``trending:tags`` から読み出すだけなので軽量。未ログイン閲覧可。
+    P2-09 / GitHub #184。
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        from django.core.cache import cache
+
+        from apps.tags.tasks import TRENDING_CACHE_KEY, aggregate_trending_tags
+
+        payload = cache.get(TRENDING_CACHE_KEY)
+        if payload is None:
+            # キャッシュが空 (Beat 未起動 or 24h 内のツイート無し): 同期 fallback。
+            payload = aggregate_trending_tags()
+        return Response({"results": payload or []})

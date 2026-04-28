@@ -88,19 +88,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    # P2-02: pg_bigm を含むカスタム Postgres image を使うため、`services:` の
+    # `image:` 直接指定をやめて step 内で `docker build` してから sidecar 起動する。
+    # ローカル (`docker/local/postgres/Dockerfile`) と CI でビルド過程を共通化。
+    # redis は標準 image のままで良いので services のままにする。
     services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: ci
-          POSTGRES_PASSWORD: ci # pragma: allowlist secret
-          POSTGRES_DB: ci
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U ci"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
       redis:
         image: redis:7-alpine
         ports: ["6379:6379"]
@@ -130,6 +122,35 @@ jobs:
       CELERY_RESULT_BACKEND: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
+      # P2-02: pg_bigm 入り Postgres を sidecar コンテナとして起動。
+      # `services:` の image 直指定だと apt install が出来ないため、
+      # docker build → docker run 方式で代替する。
+      - name: Build pg_bigm-enabled Postgres image
+        run: docker build -t ci-postgres-bigm ./docker/local/postgres
+      - name: Start Postgres sidecar
+        run: |
+          docker run -d \
+            --name postgres \
+            -e POSTGRES_USER=ci \
+            -e POSTGRES_PASSWORD=ci \
+            -e POSTGRES_DB=ci \
+            -p 5432:5432 \
+            --health-cmd "pg_isready -U ci" \
+            --health-interval 5s \
+            --health-timeout 3s \
+            --health-retries 20 \
+            ci-postgres-bigm
+          # health check が green になるまで wait。最大 60s。
+          for i in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' postgres 2>/dev/null || echo "starting")
+            if [ "$status" = "healthy" ]; then
+              echo "Postgres is healthy"
+              break
+            fi
+            echo "Waiting for postgres ($i/30, status=$status)..."
+            sleep 2
+          done
+          docker exec postgres pg_isready -U ci
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

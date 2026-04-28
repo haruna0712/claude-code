@@ -11,3 +11,7 @@ class TweetsConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.tweets"
+
+    def ready(self) -> None:
+        """P2-05: signals を import するだけで @receiver が登録される."""
+        from apps.tweets import signals  # noqa: F401
