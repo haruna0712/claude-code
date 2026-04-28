@@ -77,7 +77,8 @@ module "data" {
   rds_deletion_protection          = var.rds_deletion_protection
   final_snapshot_identifier_suffix = var.final_snapshot_identifier_suffix
 
-  redis_node_type = var.redis_node_type
+  redis_node_type  = var.redis_node_type
+  redis_auth_token = module.secrets.redis_auth_token_value
 }
 
 # ---------------------------------------------------------------------------

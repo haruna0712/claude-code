@@ -154,10 +154,32 @@ variable "redis_node_type" {
   default     = "cache.t4g.micro"
 }
 
-variable "redis_num_cache_nodes" {
-  description = "stg は Single-node の 1。prod は replication group で 2+ (別モジュールで拡張)"
+variable "redis_replicas_per_node_group" {
+  description = "シャードあたりの read replica 数。stg は 0 (Single-AZ コスト優先)、prod は 1+ で Multi-AZ failover を有効化推奨。"
+  type        = number
+  default     = 0
+}
+
+variable "redis_num_node_groups" {
+  description = "シャード数。1 で cluster mode disabled。Phase 3+ で水平分割が必要になったら増やす。"
   type        = number
   default     = 1
+}
+
+variable "redis_auth_token" {
+  description = <<-EOT
+    Redis AUTH token (sensitive)。secrets モジュールの redis_auth_token_value を渡す。
+    transit_encryption_enabled = true を有効化する以上、空文字列は許容しない
+    (validation で強制)。手動ローテートは aws elasticache modify-replication-group で
+    `--auth-token-update-strategy ROTATE` を指定する運用。
+  EOT
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(var.redis_auth_token) >= 16 && length(var.redis_auth_token) <= 128
+    error_message = "Redis AUTH token は 16-128 文字必須 (ElastiCache 制約)。"
+  }
 }
 
 variable "tags" {

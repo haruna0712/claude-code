@@ -29,3 +29,14 @@ output "db_password_value" {
   value       = var.generate_random_values ? random_password.generated["django/db-password"].result : null
   sensitive   = true
 }
+
+output "redis_auth_token_arn" {
+  description = "Redis AUTH token の ARN。アプリ側 (Django/Celery) が起動時に SecretsManager から fetch する。"
+  value       = aws_secretsmanager_secret.generated["redis/auth-token"].arn
+}
+
+output "redis_auth_token_value" {
+  description = "Redis AUTH token の現在値。data モジュールへ初回 apply 時に渡す用途で sensitive。"
+  value       = var.generate_random_values ? random_password.generated["redis/auth-token"].result : null
+  sensitive   = true
+}
