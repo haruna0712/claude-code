@@ -88,6 +88,22 @@ class User(AbstractUser):
         help_text=_("S3 URL to the user's header image. Must be https://."),
     )
 
+    # ---- カウンタ (P2-03: signals で transaction.on_commit + reconciliation Beat) ----
+    # database-reviewer HIGH (db H-1): post_save / post_delete signals は commit 前に
+    # 発火するためロールバックで drift する。 ``apps/follows/signals.py`` では
+    # ``transaction.on_commit`` でコミット後に ``F() + 1 / - 1`` を発行する。
+    # ``GREATEST(... - 1, 0)`` ガードを入れた reconciliation Beat も併設する。
+    followers_count = models.PositiveIntegerField(
+        verbose_name=_("Followers Count"),
+        default=0,
+        help_text=_("Number of users following this user (denormalized via Follow signals)."),
+    )
+    following_count = models.PositiveIntegerField(
+        verbose_name=_("Following Count"),
+        default=0,
+        help_text=_("Number of users this user follows."),
+    )
+
     # ---- 課金 / オンボーディング ----
     is_premium = models.BooleanField(
         verbose_name=_("Is Premium"),

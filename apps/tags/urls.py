@@ -14,12 +14,19 @@ from __future__ import annotations
 
 from django.urls import URLPattern, path
 
-from apps.tags.views import TagDetailView, TagListView, TagProposeView
+from apps.tags.views import (
+    TagDetailView,
+    TagListView,
+    TagProposeView,
+    TrendingTagsView,
+)
 
 # ``include()`` を使っていないため URLResolver は登場しない。
 # code-reviewer (PR #135 LOW) 指摘で未使用 import を削除。
 urlpatterns: list[URLPattern] = [
     path("", TagListView.as_view(), name="tags-list"),
     path("propose/", TagProposeView.as_view(), name="tags-propose"),
+    # P2-09: trending は <name> より具体的なので前に置く
+    path("trending/", TrendingTagsView.as_view(), name="tags-trending"),
     path("<str:name>/", TagDetailView.as_view(), name="tags-detail"),
 ]
