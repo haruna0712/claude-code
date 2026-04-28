@@ -191,21 +191,42 @@ resource "aws_elasticache_parameter_group" "redis7" {
   tags = local.default_tags
 }
 
-resource "aws_elasticache_cluster" "this" {
-  cluster_id           = "${local.prefix}-redis"
-  engine               = "redis"
-  engine_version       = var.redis_engine_version
-  node_type            = var.redis_node_type
-  num_cache_nodes      = var.redis_num_cache_nodes
+# Redis は cluster ではなく replication_group を使う。Single-node でも
+# replication_group は起動できる (num_node_groups=1, replicas_per_node_group=0)。
+# その代わり以下の prod 必須機能が常に有効化できる:
+#   - transit_encryption_enabled (TLS): セッション/Celery payload を VPC 内で暗号化
+#   - at_rest_encryption_enabled: ノード退役時の物理ディスクからの読み出しを防ぐ
+#   - auth_token: SG 突破時の最後の防衛線。secrets モジュールから sensitive で受け取る
+#   - automatic_failover_enabled: 後で replicas を増やすだけで切替可能
+# stg/prod を同じモジュールで賄え、prod 化時は replicas を増やすだけで済む。
+resource "aws_elasticache_replication_group" "this" {
+  replication_group_id = "${local.prefix}-redis"
+  description          = "Redis 7 for ${var.environment} (Channels + Celery + cache)"
+
+  engine         = "redis"
+  engine_version = var.redis_engine_version
+  node_type      = var.redis_node_type
+
+  num_node_groups         = var.redis_num_node_groups
+  replicas_per_node_group = var.redis_replicas_per_node_group
+
   parameter_group_name = aws_elasticache_parameter_group.redis7.name
   port                 = 6379
 
   subnet_group_name  = aws_elasticache_subnet_group.this.name
   security_group_ids = [var.redis_security_group_id]
 
-  # stg は AUTH token 無効 (SG で十分守る)。prod では
-  # replication group + transit encryption + at-rest encryption + auth_token が推奨で、
-  # 別モジュール (data_replication) で提供する前提。
+  # 暗号化と AUTH は常に有効。defense-in-depth で SG だけに依存しない。
+  transit_encryption_enabled = true
+  at_rest_encryption_enabled = true
+  auth_token                 = var.redis_auth_token
+  auth_token_update_strategy = "ROTATE"
+
+  # replicas が 1 以上なら failover/Multi-AZ を有効化。
+  # 0 (stg default) では AWS 側が拒否するので明示的に false。
+  automatic_failover_enabled = var.redis_replicas_per_node_group >= 1
+  multi_az_enabled           = var.redis_replicas_per_node_group >= 1
+
   snapshot_retention_limit   = 0 # stg は snapshot なし (Redis は壊れても再作成で OK)
   apply_immediately          = false
   auto_minor_version_upgrade = true

@@ -34,19 +34,31 @@ output "rds_arn" {
 }
 
 output "redis_id" {
-  value = aws_elasticache_cluster.this.id
+  value = aws_elasticache_replication_group.this.id
 }
 
 output "redis_primary_endpoint" {
-  description = "Redis primary endpoint (Single-node なので cluster_address とほぼ同じ)"
-  value       = aws_elasticache_cluster.this.cache_nodes[0].address
+  description = "Redis primary endpoint (writes 用)。replication_group の primary endpoint。"
+  value       = aws_elasticache_replication_group.this.primary_endpoint_address
+}
+
+output "redis_reader_endpoint" {
+  description = "Redis reader endpoint (replicas へのラウンドロビン)。replicas が 0 なら primary と同じ挙動。"
+  value       = aws_elasticache_replication_group.this.reader_endpoint_address
 }
 
 output "redis_port" {
-  value = aws_elasticache_cluster.this.port
+  value = aws_elasticache_replication_group.this.port
 }
 
 output "redis_connection_url" {
-  description = "Django settings / Celery に渡す REDIS_URL"
-  value       = "redis://${aws_elasticache_cluster.this.cache_nodes[0].address}:${aws_elasticache_cluster.this.port}/0"
+  description = <<-EOT
+    Django settings / Celery に渡す REDIS_URL。
+    rediss:// (TLS) + AUTH token 埋め込み。sensitive。
+    アプリ側で SecretsManager から auth-token を fetch して
+    redis://primary_endpoint:port/0 + ssl=True を組み立てる方が
+    本来は望ましいが、stg は簡略化のためここで完成形を返す。
+  EOT
+  value       = "rediss://:${var.redis_auth_token}@${aws_elasticache_replication_group.this.primary_endpoint_address}:${aws_elasticache_replication_group.this.port}/0"
+  sensitive   = true
 }

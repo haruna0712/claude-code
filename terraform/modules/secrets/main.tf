@@ -35,17 +35,21 @@ locals {
   generated_secrets = {
     "django/secret-key"  = { description = "Django SECRET_KEY", length = 64, special = true }
     "django/db-password" = { description = "RDS master password", length = 40, special = false } # RDS の制約で記号制限あり
+    # ElastiCache Redis AUTH token。長さ 16-128 文字、特殊文字制約あり
+    # (NG: / @ " whitespace)。英数字のみで生成して安全側に倒す。
+    # data モジュールが transit_encryption_enabled = true を強制するため必須。
+    "redis/auth-token" = { description = "ElastiCache Redis AUTH token", length = 64, special = false }
   }
 
   # Placeholder グループ: terraform は枠だけ作る
   placeholder_secrets = {
-    "sentry/dsn"             = "Sentry Django/Celery DSN (https://...@sentry.io/...)"
-    "mailgun/api-key"        = "Mailgun API key (Phase 1 以降で利用)"
-    "mailgun/signing-key"    = "Mailgun webhook signing key"
-    "stripe/secret-key"      = "Stripe Secret Key (sk_test_... / sk_live_...)"
-    "stripe/webhook-secret"  = "Stripe webhook signing secret (whsec_...)"
-    "openai/api-key"         = "OpenAI API key (Phase 7 Bot 要約)"
-    "anthropic/api-key"      = "Anthropic API key (Phase 8 記事下書き AI)"
+    "sentry/dsn"            = "Sentry Django/Celery DSN (https://...@sentry.io/...)"
+    "mailgun/api-key"       = "Mailgun API key (Phase 1 以降で利用)"
+    "mailgun/signing-key"   = "Mailgun webhook signing key"
+    "stripe/secret-key"     = "Stripe Secret Key (sk_test_... / sk_live_...)"
+    "stripe/webhook-secret" = "Stripe webhook signing secret (whsec_...)"
+    "openai/api-key"        = "OpenAI API key (Phase 7 Bot 要約)"
+    "anthropic/api-key"     = "Anthropic API key (Phase 8 記事下書き AI)"
   }
 }
 
