@@ -83,6 +83,10 @@
           {
             "type": "command",
             "command": "for t in /dev/pts/[0-9]*; do [ -w \"$t\" ] && printf '\\a' > \"$t\"; done; true"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/export-claude-session.py\" --quiet >/dev/null 2>&1 || true"
           }
         ]
       }
