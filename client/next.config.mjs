@@ -12,6 +12,10 @@ const nextConfig = {
 	pageExtensions: isDevelopment
 		? ["dev.tsx", "dev.ts", "tsx", "ts", "jsx", "js"]
 		: ["tsx", "ts", "jsx", "js"],
+	// Docker production image (`docker/production/Dockerfile`) が
+	// `.next/standalone` をコピーするため必要。
+	// https://nextjs.org/docs/app/api-reference/config/next-config-js/output
+	output: "standalone",
 };
 
 // Sentry webpack plugin options. DSN やプロジェクト設定は env 経由。

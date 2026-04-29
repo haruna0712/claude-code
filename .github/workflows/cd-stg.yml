@@ -92,10 +92,13 @@ jobs:
           cache-from: type=registry,ref=${{ vars.ECR_FRONTEND_REPOSITORY }}:buildcache-stg
           cache-to: type=registry,ref=${{ vars.ECR_FRONTEND_REPOSITORY }}:buildcache-stg,mode=max
           provenance: false
+          # NOTE: Sentry DSN secret 未登録時 next.config.mjs が throw するため
+          # NEXT_PUBLIC_SENTRY_ENVIRONMENT は意図的に渡さない (環境=local 扱いで build が通る)。
+          # ハルナさんが GitHub Secrets に NEXT_PUBLIC_SENTRY_DSN を登録した後、
+          # build-args に `NEXT_PUBLIC_SENTRY_ENVIRONMENT=stg` を戻すこと。
           build-args: |
             NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL || format('{0}/api/v1', vars.SMOKE_URL) }}
             NEXT_PUBLIC_SENTRY_DSN=${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
-            NEXT_PUBLIC_SENTRY_ENVIRONMENT=stg
             NEXT_PUBLIC_SENTRY_RELEASE=${{ env.IMAGE_TAG }}
 
       # ---------- Nginx ----------
