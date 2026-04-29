@@ -28,7 +28,13 @@ COPY --from=deps /app/node_modules ./node_modules
 
 COPY . ${APP_HOME}
 
-COPY .env.production .env.production
+# .env.production は build args で動的に生成する。NEXT_PUBLIC_* vars は
+# Next.js が build 時に bundle に inline するため、CD パイプラインから
+# `--build-arg NEXT_PUBLIC_API_BASE_URL=...` で渡す。
+ARG NEXT_PUBLIC_API_BASE_URL=""
+ARG NEXT_PUBLIC_SENTRY_DSN=""
+RUN printf "NEXT_PUBLIC_API_BASE_URL=%s\nNEXT_PUBLIC_SENTRY_DSN=%s\n" \
+    "${NEXT_PUBLIC_API_BASE_URL}" "${NEXT_PUBLIC_SENTRY_DSN}" > .env.production
 
 RUN npm run build
 
