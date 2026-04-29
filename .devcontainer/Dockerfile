@@ -76,6 +76,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libcairo2 \
     libasound2 \
+    # CJK fonts: 日本語 UI を Playwright スクリーンショットで正しく描画する。
+    # 無いと headless Chromium のフォント fallback で `□` (tofu) になる。
+    # fonts-noto-cjk = Noto Sans / Serif CJK (JP/KR/SC/TC) ~80MB。
+    fonts-noto-cjk \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Ensure default node user has access to /usr/local/share
