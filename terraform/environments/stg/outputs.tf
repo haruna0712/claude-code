@@ -67,3 +67,27 @@ output "acm_alb_arn" {
   description = "二段階 apply 時に terraform.tfvars の alb_certificate_arn_override に設定"
   value       = module.edge.acm_alb_arn
 }
+
+# ---------------------------------------------------------------------------
+# cd-stg.yml が GitHub Variables に設定する値 (services モジュール経由)
+# ---------------------------------------------------------------------------
+
+output "ecs_services_csv" {
+  description = "GitHub Variables の ECS_SERVICES に貼る (カンマ区切りで django/next/celery-worker/celery-beat)"
+  value       = module.services.service_names_csv
+}
+
+output "ecs_migrate_task_definition" {
+  description = "GitHub Variables の ECS_MIGRATE_TASK_DEFINITION に貼る (family 名、最新 revision が常に使われる)"
+  value       = module.services.migrate_task_definition_family
+}
+
+output "ecs_private_subnets_csv" {
+  description = "GitHub Variables の ECS_PRIVATE_SUBNETS に貼る"
+  value       = join(",", module.network.private_subnet_ids)
+}
+
+output "ecs_security_group_id" {
+  description = "GitHub Variables の ECS_SECURITY_GROUP に貼る"
+  value       = module.network.ecs_security_group_id
+}

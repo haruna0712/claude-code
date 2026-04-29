@@ -70,5 +70,5 @@ output "service_names" {
     将来 aws_ecs_service を本 module で管理するようになったら、そちらから
     直接参照する。現状は命名規約を先に固定するためマップを出している。
   EOT
-  value = { for svc in var.ecs_services : svc => "${local.prefix}-${svc}" }
+  value       = { for svc in var.ecs_services : svc => "${local.prefix}-${svc}" }
 }
