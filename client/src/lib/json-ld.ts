@@ -21,8 +21,9 @@
  * ```
  */
 
-const LINE_SEPARATOR = " ";
-const PARAGRAPH_SEPARATOR = " ";
+// eslint `no-multi-str` 回避のため char code で表現する。
+const LINE_SEPARATOR = String.fromCharCode(0x2028);
+const PARAGRAPH_SEPARATOR = String.fromCharCode(0x2029);
 
 /**
  * Serialize a JSON-LD payload to a string that is safe to inline inside

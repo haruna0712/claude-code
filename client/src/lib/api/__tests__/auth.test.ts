@@ -68,8 +68,8 @@ describe("auth helpers", () => {
 				username: "alice",
 				first_name: "Alice",
 				last_name: "Liddell",
-				password: "secret12",
-				re_password: "secret12",
+				password: "secret12", // pragma: allowlist secret
+				re_password: "secret12", // pragma: allowlist secret
 			},
 			client,
 		);
@@ -97,8 +97,8 @@ describe("auth helpers", () => {
 			{
 				uid: "U",
 				token: "T",
-				new_password: "newpass12",
-				re_new_password: "newpass12",
+				new_password: "newpass12", // pragma: allowlist secret
+				re_new_password: "newpass12", // pragma: allowlist secret
 			},
 			client,
 		);

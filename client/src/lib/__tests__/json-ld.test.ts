@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { stringifyJsonLd } from "@/lib/json-ld";
 
-const LS = " ";
-const PS = " ";
+const LS = String.fromCharCode(0x2028);
+const PS = String.fromCharCode(0x2029);
 
 describe("stringifyJsonLd (security-reviewer Phase 1 CRITICAL fix)", () => {
 	it("escapes </script> breakout sequences", () => {

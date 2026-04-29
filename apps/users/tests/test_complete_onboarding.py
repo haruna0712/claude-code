@@ -88,9 +88,7 @@ class TestCompleteOnboardingEndpoint:
         user = user_factory(username="onboarding_04")
         api_client.force_authenticate(user=user)
 
-        res = api_client.post(
-            onboarding_url, data={"display_name": "   "}, format="json"
-        )
+        res = api_client.post(onboarding_url, data={"display_name": "   "}, format="json")
 
         assert res.status_code == status.HTTP_400_BAD_REQUEST
         user.refresh_from_db()
@@ -111,9 +109,7 @@ class TestCompleteOnboardingEndpoint:
         assert res.status_code == status.HTTP_400_BAD_REQUEST
         assert "display_name" in res.data or "bio" in res.data
 
-    def test_requires_authentication(
-        self, api_client: APIClient, onboarding_url: str
-    ) -> None:
+    def test_requires_authentication(self, api_client: APIClient, onboarding_url: str) -> None:
         res = api_client.post(onboarding_url, data={"display_name": "x"}, format="json")
         assert res.status_code in (
             status.HTTP_401_UNAUTHORIZED,
