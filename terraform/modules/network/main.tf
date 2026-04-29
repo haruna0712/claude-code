@@ -194,6 +194,7 @@ resource "aws_security_group" "ecs" {
   # ALB -> ECS の実ポートに絞って最小権限化 (architect PR #47 HIGH):
   # - nginx (Django への proxy) 80
   # - Next.js SSR 3000
+  # - gunicorn (Django 直接、stg では nginx sidecar なし) 8000
   # - Daphne (Channels WebSocket) 8001
   # コンテナ間の lateral movement を避けるため 0-65535 全開は採用しない。
   ingress {
@@ -209,6 +210,13 @@ resource "aws_security_group" "ecs" {
     to_port         = 3000
     security_groups = [aws_security_group.alb.id]
     description     = "From ALB to Next.js SSR"
+  }
+  ingress {
+    protocol        = "tcp"
+    from_port       = 8000
+    to_port         = 8000
+    security_groups = [aws_security_group.alb.id]
+    description     = "From ALB to gunicorn (Django, no nginx sidecar in stg)"
   }
   ingress {
     protocol        = "tcp"

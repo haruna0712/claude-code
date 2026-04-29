@@ -44,7 +44,11 @@ locals {
     { name = "DJANGO_ADMIN_URL", value = "admin/" },
     { name = "COOKIE_SECURE", value = "True" },
     { name = "CORS_ALLOWED_ORIGINS", value = var.cors_allowed_origins },
-    { name = "ALLOWED_HOSTS", value = var.domain },
+    # ALB target group health check は target IP を Host ヘッダに使うため (例
+    # `Host: 10.0.12.176:8000`)、stg では VPC CIDR の各 IP を網羅できないので
+    # `*` を追加して DisallowedHost を回避。Phase 2 で Django 側に health-check
+    # 専用 middleware (ALLOWED_HOSTS bypass) を入れたら厳密化する。
+    { name = "ALLOWED_HOSTS", value = "${var.domain},*" },
   ]
 
   # Django / Celery 共通の機密注入。ARN を直接 secrets ブロックに渡す。
