@@ -3,17 +3,28 @@
 
 各セッションは ~/.claude/projects/<project>/<session-uuid>.jsonl に
 全イベントが JSONL で保存されている。本スクリプトは:
+
   1. 最新の JSONL (もしくは引数指定の session id) を読む
   2. user/assistant メッセージとツール使用を時系列に整形
   3. プロジェクト直下 conversations/<date>-<short-uuid>.md に出力
+
+差分追加 (incremental append) モード:
+  Stop hook が呼ばれるたびに、前回処理した JSONL の byte offset を
+  conversations/.cursor-<short-uuid> に記録しておき、次回はそこから先だけを
+  読んで markdown ファイル末尾に append する。
+
+  - 初回 (cursor / md 不在): 全レコードを読んでヘッダ付き .md を新規作成
+  - 2 回目以降: cursor 位置から read → 新規分だけ整形 → .md に append
+  - --force: cursor を無視して頭から full 再生成
 
 Stop hook (.claude/settings.json) から呼ばれる前提だが、コマンドラインからも
 直接実行できる。
 
 Usage:
-  scripts/export-claude-session.py                        # 最新セッションを export
+  scripts/export-claude-session.py                        # 最新セッションを export (差分のみ)
   scripts/export-claude-session.py <session-uuid>         # 特定セッションを export
   scripts/export-claude-session.py --list                 # 最近 10 件のセッション一覧
+  scripts/export-claude-session.py --force                # cursor 無視、全部書き直す
 """
 
 from __future__ import annotations
@@ -21,9 +32,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -38,6 +48,8 @@ SESSION_DIR = Path.home() / ".claude" / "projects" / "-workspace"
 # 出力先 (プロジェクト直下)。CLAUDE_PROJECT_DIR が立ってない場合は CWD を採用。
 PROJECT_DIR = Path(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd()))
 OUTPUT_DIR = PROJECT_DIR / "conversations"
+
+JST = timezone(timedelta(hours=9))
 
 # 入力タグ (ハルナさんの実プロンプトと区別するもの) — markdown 出力時にスキップ。
 SKIP_PREFIXES = (
@@ -71,7 +83,6 @@ def find_latest_session() -> Path:
 
 
 def find_session_by_id(session_id: str) -> Path:
-    # Allow short prefixes (first 8 chars typical UUID prefix)
     matches = list(SESSION_DIR.glob(f"{session_id}*.jsonl"))
     if not matches:
         sys.exit(f"No JSONL matches for session id '{session_id}' in {SESSION_DIR}")
@@ -95,16 +106,36 @@ def list_recent_sessions(n: int = 10) -> None:
         print(f"  {p.stem[:8]}  {mtime}  {size_kb:>6} KB  {p.name}")
 
 
+def parse_jsonl_lines(lines: Iterable[str]) -> Iterable[dict[str, Any]]:
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            yield json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+
 def parse_jsonl(path: Path) -> Iterable[dict[str, Any]]:
     with path.open() as f:
+        yield from parse_jsonl_lines(f)
+
+
+def read_jsonl_from_offset(path: Path, offset: int) -> tuple[list[dict[str, Any]], int]:
+    """offset から末尾までを読み、(records, new_offset) を返す。"""
+    records: list[dict[str, Any]] = []
+    with path.open() as f:
+        f.seek(offset)
         for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                yield json.loads(line)
-            except json.JSONDecodeError:
-                continue
+            line_stripped = line.strip()
+            if line_stripped:
+                try:
+                    records.append(json.loads(line_stripped))
+                except json.JSONDecodeError:
+                    pass
+        new_offset = f.tell()
+    return records, new_offset
 
 
 def format_timestamp(iso: str) -> str:
@@ -113,11 +144,7 @@ def format_timestamp(iso: str) -> str:
         return "?"
     try:
         dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-        # JST = UTC+9
-        from datetime import timedelta
-
-        jst = dt.astimezone(timezone(timedelta(hours=9)))
-        return jst.strftime("%H:%M:%S")
+        return dt.astimezone(JST).strftime("%H:%M:%S")
     except (ValueError, TypeError):
         return iso[:19]
 
@@ -126,8 +153,7 @@ def is_real_user_text(text: str) -> bool:
     """system reminder / bash-output / tool result 等は本物のユーザー発言ではない。"""
     if not text or not text.strip():
         return False
-    t = text.lstrip()
-    return not t.startswith(SKIP_PREFIXES)
+    return not text.lstrip().startswith(SKIP_PREFIXES)
 
 
 def truncate(s: str, limit: int = 600) -> str:
@@ -140,8 +166,6 @@ def render_tool_use(name: str, tool_input: dict[str, Any]) -> str:
     """ツール呼び出し input の人間可読サマリ。"""
     if name == "Bash":
         cmd = tool_input.get("command", "")
-        desc = tool_input.get("description", "")
-        head = desc if desc else cmd.split("\n", 1)[0][:80]
         return f"```bash\n{truncate(cmd, 800)}\n```"
     if name in ("Read", "Write", "Edit"):
         path = tool_input.get("file_path", "?")
@@ -174,7 +198,6 @@ def render_tool_result(content: Any) -> str:
     if isinstance(content, str):
         return truncate(content)
     if isinstance(content, list):
-        # may be list of {type:'text', text:'...'}
         parts = []
         for c in content:
             if isinstance(c, dict) and c.get("type") == "text":
@@ -184,41 +207,46 @@ def render_tool_result(content: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Main rendering
+# Rendering
 # ---------------------------------------------------------------------------
 
 
-def render_session(session_path: Path) -> str:
-    """JSONL を markdown 文字列に変換する。"""
-    records = list(parse_jsonl(session_path))
+def render_header(session_path: Path, first_ts: str | None) -> str:
+    """セッション最初に 1 度だけ出力するヘッダ。"""
     session_id = session_path.stem
     short_id = session_id[:8]
+    if first_ts:
+        start_date = (
+            datetime.fromisoformat(first_ts.replace("Z", "+00:00"))
+            .astimezone(JST)
+            .strftime("%Y-%m-%d")
+        )
+    else:
+        start_date = "unknown-date"
 
-    # 開始日時を最初の record の timestamp から取得
-    first_ts = next(
-        (r.get("timestamp") for r in records if r.get("timestamp")),
-        None,
-    )
-    start_date = (
-        datetime.fromisoformat(first_ts.replace("Z", "+00:00"))
-        .astimezone(timezone.max)
-        .strftime("%Y-%m-%d")
-        if first_ts
-        else "unknown-date"
-    )
+    lines = [
+        f"# Claude Code セッションログ — {short_id}\n",
+        f"> セッション ID: `{session_id}`",
+        f"> 開始: {start_date}",
+        f"> 元ファイル: `{session_path}`",
+        "",
+        "_ハルナさんとの対話を時系列に並べた読み物。"
+        "Tool 呼び出しは折りたたみ。Stop hook で差分追加されます。_",
+        "",
+        "---",
+        "",
+    ]
+    return "\n".join(lines)
 
+
+def render_records(records: list[dict[str, Any]]) -> str:
+    """JSONL レコード列を markdown 文字列に変換する (ヘッダ無し)。
+
+    tool_use → tool_result の対応付けは引数の records 範囲内でのみ行う。
+    Stop hook 単位での tool_use と tool_result は同一 turn なので同一 batch
+    に収まり、cross-batch 状態を持ち越す必要はない。
+    """
     out: list[str] = []
-    out.append(f"# Claude Code セッションログ — {short_id}\n")
-    out.append(f"> セッション ID: `{session_id}`")
-    out.append(f"> 開始: {start_date}")
-    out.append(
-        f"> 自動生成: {datetime.now(timezone(__import__('datetime').timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S')} JST"
-    )
-    out.append(f"> 元ファイル: `{session_path}`")
-    out.append(f"\n_ハルナさんとの対話を時系列に並べた読み物。Tool 呼び出しは折りたたみ。_\n")
-    out.append("---\n")
-
-    # Tool use ID → tool name map (for matching tool_result later)
     tool_use_map: dict[str, str] = {}
 
     for rec in records:
@@ -232,9 +260,8 @@ def render_session(session_path: Path) -> str:
                 if is_real_user_text(content):
                     out.append(f"## 👤 User · {ts}\n")
                     out.append(content.strip())
-                    out.append("\n")
+                    out.append("")
             elif isinstance(content, list):
-                # tool_result が混じってる
                 for block in content:
                     if not isinstance(block, dict):
                         continue
@@ -243,16 +270,17 @@ def render_session(session_path: Path) -> str:
                         tu_name = tool_use_map.get(tu_id, "Tool")
                         result = render_tool_result(block.get("content", ""))
                         if result.strip():
-                            out.append(f"<details><summary>📤 {tu_name} result</summary>\n")
+                            out.append(
+                                f"<details><summary>📤 {tu_name} result</summary>\n"
+                            )
                             out.append("```\n" + result + "\n```\n")
                             out.append("</details>\n")
                     elif block.get("type") == "text":
-                        # 一部 user-as-text wrapped block
                         text = block.get("text", "")
                         if is_real_user_text(text):
                             out.append(f"## 👤 User · {ts}\n")
                             out.append(text.strip())
-                            out.append("\n")
+                            out.append("")
 
         elif rtype == "assistant":
             content = msg.get("content", [])
@@ -267,7 +295,7 @@ def render_session(session_path: Path) -> str:
                     if text.strip():
                         out.append(f"## 🤖 Assistant · {ts}\n")
                         out.append(text)
-                        out.append("\n")
+                        out.append("")
                 elif btype == "tool_use":
                     name = block.get("name", "Tool")
                     tu_id = block.get("id", "")
@@ -277,37 +305,77 @@ def render_session(session_path: Path) -> str:
                     out.append(summary)
                     out.append("\n</details>\n")
 
-        # 他の type (system, attachment, file-history-snapshot, etc) は無視
-
-    out.append("\n---\n")
-    out.append(f"_End of session log. {len(records)} JSONL records processed._\n")
-
     return "\n".join(out)
 
 
-def export_session(session_path: Path) -> Path:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+# ---------------------------------------------------------------------------
+# Export (incremental)
+# ---------------------------------------------------------------------------
 
-    # 出力ファイル名: <YYYY-MM-DD>-<short-uuid>.md
+
+def output_paths(session_path: Path) -> tuple[Path, Path]:
+    """(markdown 出力先, cursor sidecar) を返す。"""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    short_id = session_path.stem[:8]
+
+    # ヘッダ用: 最初の timestamp から日付を決定 (JST 換算)
     first_ts = None
     for rec in parse_jsonl(session_path):
         if rec.get("timestamp"):
             first_ts = rec["timestamp"]
             break
-
     if first_ts:
-        date = datetime.fromisoformat(first_ts.replace("Z", "+00:00")).strftime(
-            "%Y-%m-%d"
+        date = (
+            datetime.fromisoformat(first_ts.replace("Z", "+00:00"))
+            .astimezone(JST)
+            .strftime("%Y-%m-%d")
         )
     else:
         date = datetime.fromtimestamp(session_path.stat().st_mtime).strftime("%Y-%m-%d")
 
-    short_id = session_path.stem[:8]
-    out_path = OUTPUT_DIR / f"{date}-{short_id}.md"
+    md_path = OUTPUT_DIR / f"{date}-{short_id}.md"
+    cursor_path = OUTPUT_DIR / f".cursor-{short_id}"
+    return md_path, cursor_path
 
-    md = render_session(session_path)
-    out_path.write_text(md, encoding="utf-8")
-    return out_path
+
+def export_session(session_path: Path, force: bool = False) -> tuple[Path, int, bool]:
+    """差分追加で markdown を更新する。
+
+    Returns:
+        (md_path, num_new_records_appended, was_full_regenerate)
+    """
+    md_path, cursor_path = output_paths(session_path)
+
+    # cursor 読み取り (force / md 不在 / cursor 不在 → full regenerate)
+    is_full = force or not md_path.exists() or not cursor_path.exists()
+    offset = 0 if is_full else int(cursor_path.read_text().strip() or "0")
+
+    # 新規レコード読み取り
+    new_records, new_offset = read_jsonl_from_offset(session_path, offset)
+
+    if not new_records and not is_full:
+        # 何も追加することがない (Stop hook が空打ちされたケース等)
+        cursor_path.write_text(str(new_offset))
+        return md_path, 0, False
+
+    md_body = render_records(new_records)
+
+    if is_full:
+        first_ts = next(
+            (r.get("timestamp") for r in new_records if r.get("timestamp")),
+            None,
+        )
+        header = render_header(session_path, first_ts)
+        md_path.write_text(header + md_body, encoding="utf-8")
+    else:
+        # append
+        with md_path.open("a", encoding="utf-8") as f:
+            if md_body.strip():
+                # 既存末尾と境界を空行で区切る
+                f.write("\n" + md_body)
+
+    cursor_path.write_text(str(new_offset))
+    return md_path, len(new_records), is_full
 
 
 # ---------------------------------------------------------------------------
@@ -317,7 +385,7 @@ def export_session(session_path: Path) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Export Claude Code session JSONL to markdown."
+        description="Export Claude Code session JSONL to markdown (incremental append)."
     )
     parser.add_argument(
         "session_id",
@@ -328,6 +396,11 @@ def main() -> int:
         "--list",
         action="store_true",
         help="List recent sessions and exit.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Ignore cursor and regenerate the full markdown from scratch.",
     )
     parser.add_argument(
         "--quiet",
@@ -345,9 +418,10 @@ def main() -> int:
     else:
         path = find_latest_session()
 
-    out = export_session(path)
+    out, n_new, was_full = export_session(path, force=args.force)
     if not args.quiet:
-        print(f"Exported: {out}")
+        mode = "full regenerate" if was_full else "incremental append"
+        print(f"Exported ({mode}, {n_new} new records): {out}")
     return 0
 
 
