@@ -265,6 +265,21 @@ module "github_oidc" {
   allowed_refs = [
     "repo:haruna0712/claude-code:ref:refs/heads/main",
   ]
+
+  # ECR push (build job)
+  ecr_repository_arns = values(module.compute.ecr_repository_arns)
+
+  # ECS update-service / run-task (deploy / migrate jobs)
+  ecs_cluster_arn = module.compute.ecs_cluster_arn
+
+  # iam:PassRole for task definition's execution_role / task_role
+  ecs_task_role_arns = [
+    module.compute.ecs_task_execution_role_arn,
+    module.compute.ecs_task_role_arn,
+  ]
+
+  # Secrets Manager (cd-stg は describe で revision 確認等に使う)
+  secrets_arn_prefix = "arn:aws:secretsmanager:ap-northeast-1:${data.aws_caller_identity.current.account_id}:secret:sns/stg/*"
 }
 
 # ---------------------------------------------------------------------------
