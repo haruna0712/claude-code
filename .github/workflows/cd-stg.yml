@@ -127,20 +127,51 @@ jobs:
           role-session-name: gha-cd-stg-migrate-${{ github.run_id }}
 
       # Phase 0.5 では django / celery の task definition がまだ ECS に登録
-      # されていないため、`|| true` でスキップしてもパイプラインは進める。
-      # Phase 1 で aws_ecs_service が作られた後、以下を有効化する:
-      #
-      # - name: Trigger migration task
-      #   run: |
-      #     aws ecs run-task \
-      #       --cluster ${{ vars.ECS_CLUSTER }} \
-      #       --task-definition sns-stg-django-migrate \
-      #       --launch-type FARGATE \
-      #       --network-configuration "awsvpcConfiguration={subnets=[${{ vars.ECS_PRIVATE_SUBNETS }}],securityGroups=[${{ vars.ECS_SECURITY_GROUP }}]}" \
-      #       --wait
-      - name: Placeholder — migration not yet wired
+      # F1-2 (security-reviewer Phase 1 CRITICAL): placeholder を本実装に置換。
+      # ECS task definition `sns-stg-django-migrate` (terraform 側で定義) を
+      # `run-task` で起動して migration を流す。タスクが定義されていない環境
+      # では `vars.ECS_MIGRATE_TASK_DEFINITION` 未設定で skip する (新規 stg /
+      # 復旧フェーズ用)。
+      - name: Run Django migrations on ECS
+        if: vars.ECS_MIGRATE_TASK_DEFINITION != '' && vars.ECS_PRIVATE_SUBNETS != '' && vars.ECS_SECURITY_GROUP != ''
+        env:
+          CLUSTER: ${{ vars.ECS_CLUSTER }}
+          TASK_DEF: ${{ vars.ECS_MIGRATE_TASK_DEFINITION }}
+          SUBNETS: ${{ vars.ECS_PRIVATE_SUBNETS }}
+          SECGROUP: ${{ vars.ECS_SECURITY_GROUP }}
+          IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
         run: |
-          echo "::warning::Phase 0.5: migration step is a placeholder until Phase 1 wires aws_ecs_service"
+          set -euo pipefail
+          # 直近の image tag を環境変数として container override で渡す。
+          # 同一 task definition の中で migrate コンテナだけが該当する。
+          task_arn=$(aws ecs run-task \
+            --cluster "$CLUSTER" \
+            --task-definition "$TASK_DEF" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECGROUP],assignPublicIp=DISABLED}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"django\",\"environment\":[{\"name\":\"IMAGE_TAG\",\"value\":\"$IMAGE_TAG\"}]}]}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+          echo "Migration task: $task_arn"
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$task_arn"
+          # exit code を取得してジョブ成否に反映
+          exit_code=$(aws ecs describe-tasks \
+            --cluster "$CLUSTER" \
+            --tasks "$task_arn" \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+          if [ "$exit_code" != "0" ]; then
+            echo "::error::Migration task exited with code $exit_code"
+            aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task_arn" \
+              --query 'tasks[0].stoppedReason' --output text
+            exit 1
+          fi
+          echo "Migration completed successfully"
+
+      - name: Skip migration (ECS migrate task definition not configured)
+        if: vars.ECS_MIGRATE_TASK_DEFINITION == ''
+        run: |
+          echo "::warning::ECS_MIGRATE_TASK_DEFINITION が未設定のため migration を skip。stg 初回 apply 後に GitHub Variables に登録すること。"
 
   # -----------------------------------------------------------------------
   # 3. ECS サービス更新 (Rolling Update)
@@ -157,22 +188,41 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: gha-cd-stg-deploy-${{ github.run_id }}
 
-      # Phase 0.5 時点では aws_ecs_service が未定義。Phase 1 で追加される
-      # サービスに対して下記のような update-service を実行する。
-      - name: Placeholder — services not yet wired
+      # F1-2: ECS service rolling update を本実装。
+      # 対象 service 一覧は env var `ECS_SERVICES` (カンマ区切り) で指定。
+      # 例: "sns-stg-django,sns-stg-next,sns-stg-daphne,sns-stg-celery-worker,sns-stg-celery-beat"
+      - name: Force new deployment on ECS services
+        if: vars.ECS_CLUSTER != '' && vars.ECS_SERVICES != ''
+        env:
+          CLUSTER: ${{ vars.ECS_CLUSTER }}
+          SERVICES: ${{ vars.ECS_SERVICES }}
         run: |
-          echo "::warning::Phase 0.5: ECS service rolling update is a placeholder until Phase 1 defines aws_ecs_service for django/next/daphne/celery-worker/celery-beat"
+          set -euo pipefail
+          IFS=',' read -ra SERVICE_LIST <<< "$SERVICES"
+          for svc in "${SERVICE_LIST[@]}"; do
+            svc="${svc// /}"  # trim spaces
+            [ -z "$svc" ] && continue
+            echo "Triggering rolling update on service: $svc"
+            aws ecs update-service \
+              --cluster "$CLUSTER" \
+              --service "$svc" \
+              --force-new-deployment \
+              --no-cli-pager > /dev/null
+          done
+          # Rolling update が steady state に到達するまで wait (最大 10 分)。
+          # 5 サービス並列で wait しても AWS CLI が直列処理するので体感 5-8 min。
+          for svc in "${SERVICE_LIST[@]}"; do
+            svc="${svc// /}"
+            [ -z "$svc" ] && continue
+            echo "Waiting for $svc to be stable..."
+            aws ecs wait services-stable --cluster "$CLUSTER" --services "$svc"
+            echo "$svc is stable"
+          done
 
-      # 有効化する時のテンプレ:
-      # - name: Force new deployment
-      #   run: |
-      #     for service in django next daphne celery-worker celery-beat; do
-      #       aws ecs update-service \
-      #         --cluster ${{ vars.ECS_CLUSTER }} \
-      #         --service "sns-stg-$service" \
-      #         --force-new-deployment \
-      #         --no-cli-pager
-      #     done
+      - name: Skip deploy (ECS services not configured)
+        if: vars.ECS_CLUSTER == '' || vars.ECS_SERVICES == ''
+        run: |
+          echo "::warning::ECS_CLUSTER または ECS_SERVICES が未設定のためデプロイを skip。stg 初回 apply 後に GitHub Variables に登録すること。"
 
   # -----------------------------------------------------------------------
   # 4. Smoke test
@@ -182,13 +232,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: deploy
     steps:
+      # F1-2: continue-on-error を削除して smoke 失敗で job を fail させる。
+      # SMOKE_URL 未設定の場合は明示的に skip する step を別建てにし、設定漏れと
+      # 実行失敗を CI 上で区別できるようにする。
       - name: curl /api/health/
-        # TODO(Phase1): `continue-on-error: true` を外して smoke 失敗で job を
-        # 落とすこと。Phase 0.5 では SMOKE_URL 未設定 + ECS サービス未配線で
-        # 常時失敗するので warning 止まりにしている。追跡 Issue: Phase 1 着手
-        # 時の `[P1-XX] Harden cd-stg.yml smoke test` で対応。
         if: vars.SMOKE_URL != ''
         run: |
+          set -euo pipefail
           url="${{ vars.SMOKE_URL }}/api/health/"
           echo "Hitting $url"
           for i in 1 2 3 4 5; do
@@ -201,7 +251,11 @@ jobs:
           done
           echo "::error::Health check failed after 5 attempts"
           exit 1
-        continue-on-error: true
+
+      - name: Skip smoke test (SMOKE_URL not configured)
+        if: vars.SMOKE_URL == ''
+        run: |
+          echo "::warning::SMOKE_URL が未設定のため smoke を skip。stg 初回 apply + DNS 委任完了後に GitHub Variables に登録すること。"
       - name: Smoke test skipped notice
         if: vars.SMOKE_URL == ''
         run: |

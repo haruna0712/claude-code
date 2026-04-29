@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
+import { stringifyJsonLd } from "@/lib/json-ld";
 
 interface PublicProfile {
 	username: string;
@@ -104,7 +105,10 @@ export default async function ProfilePage({ params }: PageProps) {
 		<main className="mx-auto max-w-3xl px-4 pb-10">
 			<script
 				type="application/ld+json"
-				dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+				// security-reviewer Phase 1 CRITICAL: profile.bio / display_name は
+				// ユーザー生成コンテンツで `</script>` が含まれうるため stringifyJsonLd で
+				// </ をエスケープする。
+				dangerouslySetInnerHTML={{ __html: stringifyJsonLd(jsonLd) }}
 			/>
 
 			{profile.header_url && (

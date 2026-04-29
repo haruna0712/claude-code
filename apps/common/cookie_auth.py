@@ -85,8 +85,17 @@ class CookieAuthentication(JWTAuthentication):
             validated_token = self.get_validated_token(raw_token)
             user = self.get_user(validated_token)
         except TokenError as e:
-            logger.error("Token validation error: %s", e)
-            return None
+            # security-reviewer Phase 1 post-hoc HIGH:
+            # `return None` だと DRF からは「認証情報なし」扱いになり、`AnonymousUser`
+            # としてリクエストが素通りしてしまう。期限切れ / 改竄 / 鍵ローテ後の旧
+            # トークンを「素通り」させると、IsAuthenticated が無い endpoint で
+            # 認証バイパスの温床になる。401 を返すように `AuthenticationFailed` を投げる。
+            #
+            # NOTE: ヘッダ / Cookie に「トークンが含まれていない」ケース (raw_token=None)
+            # はこの分岐に到達せず上で `return None` する。ここで弾くのは「トークンは
+            # あるが invalid」のケースのみ。
+            logger.warning("token_invalid", extra={"reason": str(e)})
+            raise exceptions.AuthenticationFailed("Invalid or expired token.") from e
 
         if from_cookie:
             # Cookie 経由でしか JWT が届かないケースに限り CSRF を enforcement する。

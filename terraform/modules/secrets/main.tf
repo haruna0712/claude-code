@@ -39,6 +39,10 @@ locals {
     # (NG: / @ " whitespace)。英数字のみで生成して安全側に倒す。
     # data モジュールが transit_encryption_enabled = true を強制するため必須。
     "redis/auth-token" = { description = "ElastiCache Redis AUTH token", length = 64, special = false }
+    # F1-3: SimpleJWT の SIGNING_KEY。settings.base.py で stg/prod は fail-fast
+    # するため、未設定だと ECS タスクが起動直後に ImproperlyConfigured で落ちる。
+    # 64 文字英数記号で十分な entropy を確保する。
+    "django/jwt-signing-key" = { description = "SimpleJWT signing key (HS256)", length = 64, special = true }
   }
 
   # Placeholder グループ: terraform は枠だけ作る
@@ -50,6 +54,10 @@ locals {
     "stripe/webhook-secret" = "Stripe webhook signing secret (whsec_...)"
     "openai/api-key"        = "OpenAI API key (Phase 7 Bot 要約)"
     "anthropic/api-key"     = "Anthropic API key (Phase 8 記事下書き AI)"
+    # F1-3 (P1-12): Google OAuth client_id / secret。Google Cloud Console から
+    # 取得した値を `aws secretsmanager put-secret-value` で書き込む。
+    "google/oauth-client-id"     = "Google OAuth2 Client ID (from Google Cloud Console)"
+    "google/oauth-client-secret" = "Google OAuth2 Client Secret (from Google Cloud Console)"
   }
 }
 
