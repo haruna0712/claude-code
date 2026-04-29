@@ -124,7 +124,7 @@ export default function TweetEditForm({
 					{charCount} / {TWEET_MAX_CHARS} |{" "}
 					{policy.isEditable
 						? `残り編集回数 ${policy.editsRemaining} / 時間 ${formatMinutes(policy.msRemaining)}`
-						: reasonMessage ?? ""}
+						: (reasonMessage ?? "")}
 				</div>
 			</div>
 

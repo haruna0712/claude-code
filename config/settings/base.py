@@ -273,6 +273,33 @@ if SENTRY_ENVIRONMENT in ("stg", "production") and not COOKIE_SECURE:
         "set env COOKIE_SECURE=True (ADR-0003)."
     )
 
+# F1-5: Django 標準 Cookie の Secure フラグ。CSRF/Session Cookie は本来 SPA + Cookie
+# JWT 構成で session を持たない設計だが、Django admin / djoser が session/CSRF を使う
+# ため必須化する。COOKIE_SECURE と同じ env を共有してフラグの drift を防ぐ。
+CSRF_COOKIE_SECURE = COOKIE_SECURE
+SESSION_COOKIE_SECURE = COOKIE_SECURE
+CSRF_COOKIE_HTTPONLY = False  # CSRF token は JS が読む必要があるので HttpOnly 不可
+CSRF_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+
+# F1-6: CORS 設定。Next.js frontend からの cross-origin リクエストを許可。
+# stg/prod では env CORS_ALLOWED_ORIGINS (カンマ区切り) を必須化。
+# local では空のままで django-cors-headers の default 動作 (全 origin 拒否) になるが、
+# DEBUG=True の場合は同一 origin (localhost:3000) 経由が前提なのでこれで OK。
+CORS_ALLOWED_ORIGINS = [
+    o.strip() for o in getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
+]
+CORS_ALLOW_CREDENTIALS = True  # HttpOnly Cookie で JWT を送るため必須
+
+if SENTRY_ENVIRONMENT in ("stg", "production") and not CORS_ALLOWED_ORIGINS:
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured(
+        f"CORS_ALLOWED_ORIGINS must be set in {SENTRY_ENVIRONMENT}. "
+        "Pass a comma-separated list of allowed origins via env."
+    )
+
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (

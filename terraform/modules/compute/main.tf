@@ -42,15 +42,15 @@ locals {
       protocol = "HTTP"
       # F-10: 軽量 /api/healthz route handler を叩く。SSR フルレンダを 30s ごとに
       # 起動しないため ALB 側のコストも Next.js 側の負荷も下がる。
-      health   = "/api/healthz"
-      sticky   = false
+      health = "/api/healthz"
+      sticky = false
     }
     daphne = {
       port     = 8001
       protocol = "HTTP"
       health   = "/ws/health/"
       # WebSocket 再接続を同じタスクに張り付かせるため sticky (ARCHITECTURE §3.4)
-      sticky   = true
+      sticky = true
     }
   }
 }

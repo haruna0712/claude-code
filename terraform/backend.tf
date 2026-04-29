@@ -12,7 +12,7 @@
 
 terraform {
   backend "s3" {
-    bucket         = "sns-stg-tf-state"
+    bucket = "sns-stg-tf-state"
     # key は環境ごとに override (terraform init -backend-config="key=stg/terraform.tfstate")
     key            = "UNSET-override-with-backend-config"
     region         = "ap-northeast-1"

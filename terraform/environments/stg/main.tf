@@ -160,6 +160,52 @@ module "edge" {
 }
 
 # ---------------------------------------------------------------------------
+# 6.5. ECS Services (Phase 1 stg deployment)
+# ---------------------------------------------------------------------------
+#
+# Phase 1 完了後の stg 起動に必要な ECS task definition + service を追加する。
+# F1-2 で cd-stg.yml の placeholder を本実装に切替えたが、その実装が機能する
+# ために必要な ECS resource をここで作成する。
+#
+# 含まれる: django / next / celery-worker / celery-beat の 4 service +
+#          django-migrate (one-shot task definition)。
+# 含まれない: daphne (Phase 3 DM 実装と同時に追加)。
+
+module "services" {
+  source = "../../modules/services"
+
+  project     = var.project
+  environment = "stg"
+  aws_region  = "ap-northeast-1"
+
+  # compute モジュールから受け取る
+  ecs_cluster_arn              = module.compute.ecs_cluster_arn
+  ecs_task_execution_role_arn  = module.compute.ecs_task_execution_role_arn
+  ecs_task_execution_role_name = module.compute.ecs_task_execution_role_name
+  ecs_task_role_arn            = module.compute.ecs_task_role_arn
+  ecs_task_role_name           = module.compute.ecs_task_role_name
+  ecr_repository_urls          = module.compute.ecr_repository_urls
+  target_group_arns            = module.compute.target_group_arns
+
+  # network モジュールから
+  private_subnet_ids    = module.network.private_subnet_ids
+  ecs_security_group_id = module.network.ecs_security_group_id
+
+  # secrets モジュールから (path → ARN map)
+  secret_arns = module.secrets.secret_arns
+
+  # data モジュールから
+  rds_endpoint       = module.data.rds_endpoint
+  redis_url_template = module.data.redis_connection_url
+
+  # アプリ config
+  domain               = "${var.app_subdomain}.${var.domain_name}"
+  cors_allowed_origins = "https://${var.app_subdomain}.${var.domain_name}"
+
+  tags = local.common_tags
+}
+
+# ---------------------------------------------------------------------------
 # 7. Observability (Log Groups + Alarms + SNS Topic)
 # ---------------------------------------------------------------------------
 

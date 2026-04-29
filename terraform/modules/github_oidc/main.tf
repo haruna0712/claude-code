@@ -84,9 +84,9 @@ data "aws_iam_policy_document" "trust" {
 }
 
 resource "aws_iam_role" "github_actions" {
-  name               = "${local.prefix}-github-actions"
-  description        = "Assumed by GitHub Actions via OIDC for stg deploy"
-  assume_role_policy = data.aws_iam_policy_document.trust.json
+  name                 = "${local.prefix}-github-actions"
+  description          = "Assumed by GitHub Actions via OIDC for stg deploy"
+  assume_role_policy   = data.aws_iam_policy_document.trust.json
   max_session_duration = 3600
 
   tags = local.default_tags
@@ -187,9 +187,9 @@ data "aws_iam_policy_document" "ecs_deploy" {
   # 対して PassedToService=ecs-tasks.amazonaws.com で絞る暫定運用
   # (security-reviewer PR #57 HIGH)。
   statement {
-    sid     = "EcsPassRole"
-    effect  = "Allow"
-    actions = ["iam:PassRole"]
+    sid       = "EcsPassRole"
+    effect    = "Allow"
+    actions   = ["iam:PassRole"]
     resources = length(var.ecs_task_role_arns) > 0 ? var.ecs_task_role_arns : ["*"]
     condition {
       test     = "StringEquals"

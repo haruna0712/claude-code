@@ -67,9 +67,7 @@ def set_auth_cookies(
     response.set_cookie(settings.COOKIE_NAME, access_token, **cookie_settings)
 
     if refresh_token:
-        refresh_token_lifetime = settings.SIMPLE_JWT[
-            "REFRESH_TOKEN_LIFETIME"
-        ].total_seconds()
+        refresh_token_lifetime = settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()
         refresh_cookie_settings = cookie_settings.copy()
         refresh_cookie_settings["max_age"] = refresh_token_lifetime
         response.set_cookie(
@@ -105,6 +103,12 @@ def _delete_auth_cookie(response: Response, name: str) -> None:
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
+    # F1-7 (security-reviewer Phase 1 HIGH):
+    # 旧互換 /auth/login/ にも LoginRateThrottle (5/min) を適用。
+    # 既定 AnonRateThrottle (200/day) との 14400 倍差を埋めて
+    # ブルートフォース猶予を新フロー (/cookie/create/) と揃える。
+    throttle_classes = [LoginRateThrottle]
+
     def post(self, request: Request, *args, **kwargs) -> Response:
         token_res = super().post(request, *args, **kwargs)
 
@@ -131,6 +135,10 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 
 class CustomTokenRefreshView(TokenRefreshView):
+    # F1-7: refresh も同じ scope で抑制 (5/min)。短時間に refresh を連打する操作は
+    # 通常の利用シナリオでは発生しない。
+    throttle_classes = [LoginRateThrottle]
+
     def post(self, request: Request, *args, **kwargs) -> Response:
         refresh_token = request.COOKIES.get("refresh")
 
@@ -158,9 +166,7 @@ class CustomTokenRefreshView(TokenRefreshView):
                 refresh_res.data["message"] = (
                     "Access or refresh tokens not found in refresh response data"
                 )
-                logger.error(
-                    "Access or refresh token not found in refresh response data"
-                )
+                logger.error("Access or refresh token not found in refresh response data")
 
         return refresh_res
 
@@ -188,9 +194,7 @@ class CustomProviderAuthView(ProviderAuthView):
                 provider_res.data["message"] = (
                     "Access or refresh token not found in provider response"
                 )
-                logger.error(
-                    "Access or refresh token not found in provider response data"
-                )
+                logger.error("Access or refresh token not found in provider response data")
 
         return provider_res
 
@@ -282,9 +286,7 @@ class LogoutAPIView(APIView):
                 token = RefreshToken(refresh_token)
                 token.blacklist()
             except TokenError as exc:
-                logger.warning(
-                    "Legacy logout called with invalid refresh token: %s", exc
-                )
+                logger.warning("Legacy logout called with invalid refresh token: %s", exc)
 
         response = Response(status=status.HTTP_204_NO_CONTENT)
         _delete_auth_cookie(response, settings.COOKIE_NAME)
@@ -506,9 +508,7 @@ class CompleteOnboardingView(APIView):
         display_name = serializers.CharField(
             max_length=50, required=True, allow_blank=False, trim_whitespace=True
         )
-        bio = serializers.CharField(
-            max_length=160, required=False, allow_blank=True, default=""
-        )
+        bio = serializers.CharField(max_length=160, required=False, allow_blank=True, default="")
 
     def post(self, request: Request, *args, **kwargs) -> Response:
         serializer = self._Serializer(data=request.data)

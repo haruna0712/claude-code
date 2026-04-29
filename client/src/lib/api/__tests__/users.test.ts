@@ -63,7 +63,10 @@ describe("users API", () => {
 			const body = JSON.parse(config.data);
 			expect(body.display_name).toBe("Alice");
 			expect(body.bio).toBeUndefined();
-			return [200, { id: "u1", display_name: "Alice", needs_onboarding: false }];
+			return [
+				200,
+				{ id: "u1", display_name: "Alice", needs_onboarding: false },
+			];
 		});
 		await completeOnboarding({ display_name: "Alice" }, client);
 	});

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
+import { stringifyJsonLd } from "@/lib/json-ld";
 
 interface PageProps {
 	params: { id: string };
@@ -112,8 +113,9 @@ export default async function TweetDetailPage({ params }: PageProps) {
 		<main className="mx-auto max-w-2xl px-6 py-10">
 			<script
 				type="application/ld+json"
-				// generateMetadata + schema.org payload; no user input interpolated as HTML.
-				dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+				// security-reviewer Phase 1 CRITICAL: tweet.body はユーザー生成コンテンツで
+				// `</script>` が含まれうるため stringifyJsonLd で </ をエスケープする。
+				dangerouslySetInnerHTML={{ __html: stringifyJsonLd(jsonLd) }}
 			/>
 			<article className="rounded-lg border bg-card p-6 shadow-sm">
 				<header className="mb-4 flex items-center gap-3">

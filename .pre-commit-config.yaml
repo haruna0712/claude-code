@@ -27,7 +27,9 @@ repos:
       - id: check-yaml
         args: [--allow-multiple-documents]
       - id: check-json
-        exclude: ^client/cache/
+        # devcontainer.json は JSONC (JSON with Comments) 仕様で // コメントが
+        # 公式に許容されている。check-json は plain JSON しか parse できないので除外。
+        exclude: ^(client/cache/|\.devcontainer/devcontainer\.json$)
       - id: check-toml
       - id: check-added-large-files
         args: [--maxkb=500]

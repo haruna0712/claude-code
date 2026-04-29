@@ -15,7 +15,7 @@ test.describe("Phase 1 golden path", () => {
 		const stamp = Date.now();
 		const handle = `e2e_${stamp}`;
 		const email = `${handle}@example.com`;
-		const password = "supersecret12";
+		const password = "supersecret12"; // pragma: allowlist secret
 
 		// 1. Sign up.
 		await page.goto("/register");
