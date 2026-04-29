@@ -51,6 +51,33 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
   apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin docker-buildx-plugin && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Playwright Chromium runtime dependencies. Without these, the Playwright MCP
+# server (registered below) fails on first browser_navigate with errors like
+# `error while loading shared libraries: libnspr4.so: cannot open shared
+# object file`. The chromium binary itself is preinstalled later as the node
+# user via `npx playwright install chromium` into /home/node/.cache/.
+#
+# Package list mirrors `npx playwright install-deps chromium` for Debian
+# bookworm (node:20 base). Update if upstream Playwright bumps deps.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libnspr4 \
+    libnss3 \
+    libdbus-1-3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Ensure default node user has access to /usr/local/share
 RUN mkdir -p /usr/local/share/npm-global && \
   chown -R node:node /usr/local/share
@@ -180,6 +207,17 @@ RUN sed -i "/^export LANG='en_US.UTF-8'$/d; /^export LANGUAGE='en_US:en'$/d; /^e
 # Install Claude
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
+# Preinstall Playwright's Chromium browser into /home/node/.cache/ms-playwright
+# so the playwright MCP server (registered below with --browser chromium) can
+# launch immediately without runtime download. System libs were installed via
+# apt earlier in this Dockerfile.
+#
+# `--with-deps` is intentionally NOT used here: the apt block above is the
+# canonical source of system deps and `--with-deps` would re-run apt as a
+# non-root user and fail. Browser binary download from cdn.playwright.dev is
+# allowed during build (firewall is only active at container start).
+RUN npx -y playwright@latest install chromium
+
 # Install curated ECC assets into /home/node/.claude/.
 # At runtime the named-volume mount at /home/node/.claude/ is seeded from this
 # path on first container creation (Docker copies image content into empty
@@ -203,7 +241,7 @@ RUN CLAUDE_CONFIG_DIR=/home/node/.claude claude mcp add --scope user serena -- \
     CLAUDE_CONFIG_DIR=/home/node/.claude claude mcp add --scope user context7 -- \
     npx -y @upstash/context7-mcp@latest && \
     CLAUDE_CONFIG_DIR=/home/node/.claude claude mcp add --scope user playwright -- \
-    npx -y @playwright/mcp --browser chrome
+    npx -y @playwright/mcp --browser chromium
 
 # Register HashiCorp Agent Skills marketplace + install Terraform-related plugins
 # at user scope. Same lifecycle / volume seeding as the MCP block above.
