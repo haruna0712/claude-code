@@ -184,8 +184,13 @@ module "services" {
   ecs_task_execution_role_name = module.compute.ecs_task_execution_role_name
   ecs_task_role_arn            = module.compute.ecs_task_role_arn
   ecs_task_role_name           = module.compute.ecs_task_role_name
-  ecr_repository_urls          = module.compute.ecr_repository_urls
-  target_group_arns            = module.compute.target_group_arns
+  # compute モジュールの ECR repos は infra 観点 (backend/frontend/nginx) で命名されているが、
+  # services モジュールはアプリ観点 (django/next) で参照したい。ここで rename map を作る。
+  ecr_repository_urls = {
+    django = module.compute.ecr_repository_urls["backend"]
+    next   = module.compute.ecr_repository_urls["frontend"]
+  }
+  target_group_arns = module.compute.target_group_arns
 
   # network モジュールから
   private_subnet_ids    = module.network.private_subnet_ids
