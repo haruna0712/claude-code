@@ -35,6 +35,8 @@ locals {
     { name = "POSTGRES_PORT", value = "5432" },
     { name = "POSTGRES_DB", value = var.rds_database_name },
     { name = "POSTGRES_USER", value = var.rds_username },
+    # RDS が pg_hba.conf で暗号化接続のみ受け付けるため libpq 環境変数で SSL 強制
+    { name = "PGSSLMODE", value = "require" },
     { name = "REDIS_URL", value = var.redis_url_template },
     { name = "CELERY_BROKER_URL", value = var.redis_url_template },
     { name = "CELERY_RESULT_BACKEND", value = var.redis_url_template },
