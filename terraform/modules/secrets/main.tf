@@ -57,7 +57,7 @@ locals {
     # F1-3 (P1-12): Google OAuth client_id / secret。Google Cloud Console から
     # 取得した値を `aws secretsmanager put-secret-value` で書き込む。
     "google/oauth-client-id"     = "Google OAuth2 Client ID (from Google Cloud Console)"
-    "google/oauth-client-secret" = "Google OAuth2 Client Secret (from Google Cloud Console)"
+    "google/oauth-client-secret" = "Google OAuth2 Client Secret (from Google Cloud Console)" # pragma: allowlist secret
   }
 }
 

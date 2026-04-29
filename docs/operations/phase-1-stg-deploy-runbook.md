@@ -60,7 +60,7 @@ git push origin main   # cd-stg ワークフローをトリガー
 - GitHub Actions → `CD stg` ワークフローが走る
 - 各 job が **緑** になっていることを確認
   - build (backend / frontend / nginx すべて push 完了)
-  - migrate (``wait`` モードで完走、exit 0)
+  - migrate (`wait` モードで完走、exit 0)
   - deploy (5 サービスすべて rolling update)
   - smoke-test (`GET /api/health/` が 200)
 
@@ -78,18 +78,18 @@ aws ecs update-service \
 `stg.<domain>` 上で以下のシナリオを順に実施し、すべて想定通りであることを
 確認します:
 
-| # | シナリオ | 期待 |
-|---|---------|------|
-| 1 | `/register` でサインアップ | 「確認メールを送信しました」トースト + `/login?email=...` に遷移 |
-| 2 | メール (Mailgun/SES) を開き activation リンクを踏む | `/activate/...` → `/login` に遷移 |
-| 3 | `/login` で email + password 入力 → ログイン | `/onboarding` に遷移 |
-| 4 | `/onboarding` で表示名 + 自己紹介を入力 → 「はじめる」 | `/` に遷移 |
-| 5 | `/` の Composer でツイート「こんにちは 🎉」を投稿 | トースト「投稿しました」 |
-| 6 | `/u/<handle>` に遷移 | いま投稿したツイートが表示される |
-| 7 | `/tweet/<id>` に遷移 | 本文 + avatar + created_at が表示、OGP タグが `<head>` に出ている |
-| 8 | `/tag/<name>` (存在するタグ) に遷移 | タグに紐づくツイートが見える |
-| 9 | Google OAuth でログイン | `/` に遷移、再ログインできる |
-| 10 | アバター画像アップロード (P1-15) | 5MB 超は reject、300×300 JPEG は WebP で S3 PUT → profile 反映 |
+| #   | シナリオ                                               | 期待                                                              |
+| --- | ------------------------------------------------------ | ----------------------------------------------------------------- |
+| 1   | `/register` でサインアップ                             | 「確認メールを送信しました」トースト + `/login?email=...` に遷移  |
+| 2   | メール (Mailgun/SES) を開き activation リンクを踏む    | `/activate/...` → `/login` に遷移                                 |
+| 3   | `/login` で email + password 入力 → ログイン           | `/onboarding` に遷移                                              |
+| 4   | `/onboarding` で表示名 + 自己紹介を入力 → 「はじめる」 | `/` に遷移                                                        |
+| 5   | `/` の Composer でツイート「こんにちは 🎉」を投稿      | トースト「投稿しました」                                          |
+| 6   | `/u/<handle>` に遷移                                   | いま投稿したツイートが表示される                                  |
+| 7   | `/tweet/<id>` に遷移                                   | 本文 + avatar + created_at が表示、OGP タグが `<head>` に出ている |
+| 8   | `/tag/<name>` (存在するタグ) に遷移                    | タグに紐づくツイートが見える                                      |
+| 9   | Google OAuth でログイン                                | `/` に遷移、再ログインできる                                      |
+| 10  | アバター画像アップロード (P1-15)                       | 5MB 超は reject、300×300 JPEG は WebP で S3 PUT → profile 反映    |
 
 各ステップを完了したらチェックボックスを Issue にコピペして埋めてください。
 

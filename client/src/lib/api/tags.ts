@@ -19,5 +19,5 @@ export async function searchTags(
 		{ params: { q: query } },
 	);
 	const data = res.data;
-	return Array.isArray(data) ? data : data.results ?? [];
+	return Array.isArray(data) ? data : (data.results ?? []);
 }
