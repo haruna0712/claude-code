@@ -81,9 +81,9 @@ variable "rds_database_name" {
 }
 
 variable "rds_username" {
-  description = "Database master username for the application's connection string."
+  description = "Database master username for the application's connection string. Defaults match the data module's `db_master_username` variable (= 'postgres')."
   type        = string
-  default     = "sns"
+  default     = "postgres"
 }
 
 variable "redis_url_template" {
