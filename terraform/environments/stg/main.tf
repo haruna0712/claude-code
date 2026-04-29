@@ -239,8 +239,8 @@ module "services" {
   # secrets モジュールから (path → ARN map)
   secret_arns = module.secrets.secret_arns
 
-  # data モジュールから
-  rds_endpoint       = module.data.rds_endpoint
+  # data モジュールから (rds_endpoint は host:port 形式なので port なしの rds_address を渡す)
+  rds_endpoint       = module.data.rds_address
   redis_url_template = module.data.redis_connection_url
 
   # アプリ config
