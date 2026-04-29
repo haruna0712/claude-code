@@ -79,7 +79,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # CJK fonts: 日本語 UI を Playwright スクリーンショットで正しく描画する。
     # 無いと headless Chromium のフォント fallback で `□` (tofu) になる。
     # fonts-noto-cjk = Noto Sans / Serif CJK (JP/KR/SC/TC) ~80MB。
+    # fonts-noto-color-emoji = 🎉 など絵文字。CJK パッケージとは別なので両方入れる。
     fonts-noto-cjk \
+    fonts-noto-color-emoji \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Ensure default node user has access to /usr/local/share
