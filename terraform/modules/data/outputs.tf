@@ -59,6 +59,10 @@ output "redis_connection_url" {
     redis://primary_endpoint:port/0 + ssl=True を組み立てる方が
     本来は望ましいが、stg は簡略化のためここで完成形を返す。
   EOT
-  value       = "rediss://:${var.redis_auth_token}@${aws_elasticache_replication_group.this.primary_endpoint_address}:${aws_elasticache_replication_group.this.port}/0"
+  # `?ssl_cert_reqs=CERT_REQUIRED` は kombu/celery の rediss:// 必須パラメータ。
+  # 無いと `ValueError: A rediss:// URL must have parameter ssl_cert_reqs ...` で
+  # celery worker が起動失敗する (django redis cache 側は redis-py がデフォルトで
+  # CERT_REQUIRED 扱いするので問題ない)。
+  value       = "rediss://:${var.redis_auth_token}@${aws_elasticache_replication_group.this.primary_endpoint_address}:${aws_elasticache_replication_group.this.port}/0?ssl_cert_reqs=CERT_REQUIRED"
   sensitive   = true
 }
