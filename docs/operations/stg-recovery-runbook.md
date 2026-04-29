@@ -83,6 +83,7 @@ done
 ```
 
 **判断基準:**
+
 - 残存 = terraform import で取り込む候補 (Route53 hosted zone, ECR, IAM/OIDC role, S3 backup bucket, CloudFront など作り直しコストが高いもの)
 - 削除予約 = restore-secret + import / force-delete どちらかを選ぶ
 - 不存在 = terraform apply で新規作成 (VPC, RDS, ElastiCache 等)
@@ -93,10 +94,10 @@ done
 
 destroy 後 7 日 recovery 中のシークレットは **2 つの選択肢**:
 
-| Option | 手順 | メリット | デメリット |
-|---|---|---|---|
-| **A: 値を残す** | `restore-secret` + `terraform import` で state に取り込む | 既存の Redis AUTH token / Django SECRET_KEY を維持、サービス再起動不要 | terraform random_password との整合に注意 |
-| **B: 値を新規生成** | `force-delete-without-recovery` で完全削除 → terraform apply で新規 | シンプル、stg なら影響軽微 | Redis を絡めると client が切断 (stg は単体なので OK) |
+| Option              | 手順                                                                | メリット                                                               | デメリット                                           |
+| ------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------- |
+| **A: 値を残す**     | `restore-secret` + `terraform import` で state に取り込む           | 既存の Redis AUTH token / Django SECRET_KEY を維持、サービス再起動不要 | terraform random_password との整合に注意             |
+| **B: 値を新規生成** | `force-delete-without-recovery` で完全削除 → terraform apply で新規 | シンプル、stg なら影響軽微                                             | Redis を絡めると client が切断 (stg は単体なので OK) |
 
 **stg では Option B (force-delete) を推奨**: シンプルで 7日 recovery を待つ必要なし。Option A は本番 (prod) で必要になる手順として参考。
 
@@ -173,6 +174,7 @@ sleep 30
 ## 3. terraform apply フロー
 
 destroy 前と異なる点:
+
 - **services モジュールが新規追加** (PR #196 で導入: ECS task definition + service)
 - **secrets module に新エントリ** (jwt-signing-key, google/oauth-client-{id,secret})
 
@@ -243,19 +245,19 @@ aws secretsmanager put-secret-value --secret-id sns/stg/mailgun/signing-key \
 
 Settings → Secrets and variables → Actions → Variables (Repository):
 
-| Name | Value (terraform output から取得) |
-|---|---|
-| `AWS_REGION` | `ap-northeast-1` |
-| `AWS_DEPLOY_ROLE_ARN` | `aws iam list-roles --query "Roles[?contains(RoleName,'github-actions')].Arn" --output text` |
-| `ECR_BACKEND_REPOSITORY` | `<account>.dkr.ecr.ap-northeast-1.amazonaws.com/sns-stg-django` |
-| `ECR_FRONTEND_REPOSITORY` | `<account>.dkr.ecr.ap-northeast-1.amazonaws.com/sns-stg-next` |
-| `ECR_NGINX_REPOSITORY` | `<account>.dkr.ecr.ap-northeast-1.amazonaws.com/sns-stg-nginx` (将来追加用) |
-| `ECS_CLUSTER` | `sns-stg-cluster` |
-| `ECS_SERVICES` | `terraform output -raw ecs_services_csv` |
-| `ECS_MIGRATE_TASK_DEFINITION` | `terraform output -raw ecs_migrate_task_definition` |
-| `ECS_PRIVATE_SUBNETS` | `terraform output -raw ecs_private_subnets_csv` |
-| `ECS_SECURITY_GROUP` | `terraform output -raw ecs_security_group_id` |
-| `SMOKE_URL` | `https://stg.<your-domain>` |
+| Name                          | Value (terraform output から取得)                                                            |
+| ----------------------------- | -------------------------------------------------------------------------------------------- |
+| `AWS_REGION`                  | `ap-northeast-1`                                                                             |
+| `AWS_DEPLOY_ROLE_ARN`         | `aws iam list-roles --query "Roles[?contains(RoleName,'github-actions')].Arn" --output text` |
+| `ECR_BACKEND_REPOSITORY`      | `<account>.dkr.ecr.ap-northeast-1.amazonaws.com/sns-stg-django`                              |
+| `ECR_FRONTEND_REPOSITORY`     | `<account>.dkr.ecr.ap-northeast-1.amazonaws.com/sns-stg-next`                                |
+| `ECR_NGINX_REPOSITORY`        | `<account>.dkr.ecr.ap-northeast-1.amazonaws.com/sns-stg-nginx` (将来追加用)                  |
+| `ECS_CLUSTER`                 | `sns-stg-cluster`                                                                            |
+| `ECS_SERVICES`                | `terraform output -raw ecs_services_csv`                                                     |
+| `ECS_MIGRATE_TASK_DEFINITION` | `terraform output -raw ecs_migrate_task_definition`                                          |
+| `ECS_PRIVATE_SUBNETS`         | `terraform output -raw ecs_private_subnets_csv`                                              |
+| `ECS_SECURITY_GROUP`          | `terraform output -raw ecs_security_group_id`                                                |
+| `SMOKE_URL`                   | `https://stg.<your-domain>`                                                                  |
 
 GitHub CLI でまとめて設定:
 
@@ -283,6 +285,7 @@ gh run watch --exit-status
 ```
 
 **期待される job の流れ:**
+
 1. **build**: Docker image を ECR に push (~5 分)
 2. **migrate**: `aws ecs run-task` で `sns-stg-django-migrate` を起動 → Django migrations を実行 (~2 分)
 3. **deploy**: 4 service を `force-new-deployment` + `services-stable` 待機 (~5-8 分)
@@ -292,13 +295,13 @@ gh run watch --exit-status
 
 ## 6. トラブルシュート
 
-| 症状 | 原因 | 対処 |
-|---|---|---|
-| `restore-secret` が `ResourceNotFoundException` | 既に完全削除済 | 何もせず terraform apply で新規作成 |
-| terraform import が `Error: resource address ... does not exist` | for_each キーの quote 忘れ | `terraform import 'module.X.Y.Z["key"]' arn` (シングルクォートで囲む) |
-| ECS task が起動直後に exit | Secrets Manager の値未設定 (Sentry DSN 等) | `aws secretsmanager put-secret-value` で値を入れて service を再起動 |
-| ALB target group が unhealthy | Django container の health check (`/api/health/`) が 503 | RDS migrations 未実行の可能性 → migrate job のログ確認 |
-| `aws ecs wait services-stable` がタイムアウト | image pull 失敗 / health check 失敗 | CloudWatch logs `/ecs/sns-stg/<service>` を確認 |
+| 症状                                                             | 原因                                                     | 対処                                                                  |
+| ---------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------- |
+| `restore-secret` が `ResourceNotFoundException`                  | 既に完全削除済                                           | 何もせず terraform apply で新規作成                                   |
+| terraform import が `Error: resource address ... does not exist` | for_each キーの quote 忘れ                               | `terraform import 'module.X.Y.Z["key"]' arn` (シングルクォートで囲む) |
+| ECS task が起動直後に exit                                       | Secrets Manager の値未設定 (Sentry DSN 等)               | `aws secretsmanager put-secret-value` で値を入れて service を再起動   |
+| ALB target group が unhealthy                                    | Django container の health check (`/api/health/`) が 503 | RDS migrations 未実行の可能性 → migrate job のログ確認                |
+| `aws ecs wait services-stable` がタイムアウト                    | image pull 失敗 / health check 失敗                      | CloudWatch logs `/ecs/sns-stg/<service>` を確認                       |
 
 ---
 
