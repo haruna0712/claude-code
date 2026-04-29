@@ -136,6 +136,9 @@ resource "aws_ecs_task_definition" "django" {
       name      = "django"
       image     = "${var.ecr_repository_urls["django"]}:${var.image_tag}"
       essential = true
+      # Dockerfile (docker/production/django/Dockerfile) は ENTRYPOINT=/entrypoint のみで
+      # CMD 未設定。/start (gunicorn 起動 + migrate + collectstatic) を明示指定する。
+      command = ["/start"]
       portMappings = [
         { containerPort = 8000, protocol = "tcp" }
       ]
