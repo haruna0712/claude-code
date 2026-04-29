@@ -132,7 +132,7 @@ jobs:
           docker run -d \
             --name postgres \
             -e POSTGRES_USER=ci \
-            -e POSTGRES_PASSWORD=ci \
+            -e POSTGRES_PASSWORD=ci `# pragma: allowlist secret` \
             -e POSTGRES_DB=ci \
             -p 5432:5432 \
             --health-cmd "pg_isready -U ci" \

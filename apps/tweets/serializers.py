@@ -228,7 +228,12 @@ class TweetCreateSerializer(serializers.Serializer):
         # 重複キー / 未知フィールドで落ちないようにする。
         body: str = validated_data.pop("body")
 
-        tweet = Tweet.objects.create(author=author, body=body)
+        # validated_data に残っている view 由来の kwargs (type / quote_of /
+        # reply_to / repost_of) を Tweet.objects.create に通す。これがないと
+        # Quote/Reply のときに type=ORIGINAL のまま Tweet が作られて signal
+        # が `quote_count` / `reply_count` を更新せず test_actions_api の
+        # `test_quote_creates_with_body_201` 等が落ちる (P2-06 残バグ)。
+        tweet = Tweet.objects.create(author=author, body=body, **validated_data)
 
         if tags:
             # validate_tags で存在確認済みなので、dict 経由で一括取得する

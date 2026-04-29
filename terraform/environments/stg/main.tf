@@ -279,7 +279,8 @@ module "github_oidc" {
   ]
 
   # Secrets Manager (cd-stg は describe で revision 確認等に使う)
-  secrets_arn_prefix = "arn:aws:secretsmanager:ap-northeast-1:${data.aws_caller_identity.current.account_id}:secret:sns/stg/*"
+  # detect-secrets が "secret:" を秘密情報と誤検知するため allowlist。実体は ARN prefix のみ。
+  secrets_arn_prefix = "arn:aws:secretsmanager:ap-northeast-1:${data.aws_caller_identity.current.account_id}:secret:sns/stg/*" # pragma: allowlist secret
 }
 
 # ---------------------------------------------------------------------------
