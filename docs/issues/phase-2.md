@@ -158,6 +158,7 @@ ARCHITECTURE §4.3 / ADR-0002 では「pg_bigm + Lindera を MVP 仮採用、Pha
 ### 作業内容
 
 - [ ] `apps/common/migrations/0001_extensions.py` を新規作成:
+
   ```python
   from django.contrib.postgres.operations import BigmExtension, TrigramExtension
   from django.db import migrations
@@ -169,6 +170,7 @@ ARCHITECTURE §4.3 / ADR-0002 では「pg_bigm + Lindera を MVP 仮採用、Pha
           TrigramExtension(),
       ]
   ```
+
 - [ ] `requirements/base.txt` に `django.contrib.postgres` 経由で利用するため特に追加 deps なし、ただし local 開発の `compose/local/postgres/Dockerfile` で `postgresql-15-pg-bigm` を apt install 済みか確認 (Phase 0.5 で既に対応していれば不要)
 - [ ] CI の Postgres image (`docker.io/groonga/pgroonga` などではなく) `postgis/postgis:15-3.4` または独自 build を使うため、`.github/workflows/ci.yml` の services を pg_bigm 同梱 image に切替
 - [ ] pytest: `test_extensions.py` で `cur.execute("SELECT extname FROM pg_extension WHERE extname IN ('pg_bigm','pg_trgm')")` が 2 行返ることを確認
