@@ -50,10 +50,15 @@ resource "aws_internet_gateway" "this" {
 resource "aws_subnet" "public" {
   count = local.az_count
 
-  vpc_id                  = aws_vpc.this.id
-  cidr_block              = var.public_subnet_cidrs[count.index]
-  availability_zone       = var.availability_zones[count.index]
-  map_public_ip_on_launch = false # ALB は ENI で public IP を持つので、サブネット既定は false
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = var.public_subnet_cidrs[count.index]
+  availability_zone = var.availability_zones[count.index]
+  # fck-nat ASG instance が user-data 内で `aws ec2 attach-network-interface`
+  # を呼ぶために IGW 経由 internet 到達性が要る。primary ENI に public IP を
+  # 自動割り当てしないと API endpoint に届かず timeout で route が blackhole
+  # のまま (Phase 1 stg で実体験)。ALB は AWS 管理 ENI が IP を持つので、
+  # 自動割り当てを true にしても ALB 動作には影響しない。
+  map_public_ip_on_launch = true
 
   tags = merge(local.default_tags, {
     Name = "${local.prefix}-public-${substr(var.availability_zones[count.index], -2, 2)}"
@@ -356,6 +361,70 @@ resource "aws_network_interface" "fcknat" {
   tags = merge(local.default_tags, { Name = "${local.prefix}-fcknat-eni" })
 }
 
+# fck-nat の secondary ENI (route table の default 先) には public IP が
+# 必要。NAT した outbound パケットを IGW 経由で internet に出すには source IP
+# が public でないと ROUTING されない (private 10.0.x.x のままでは IGW が drop)。
+resource "aws_eip" "fcknat" {
+  count = 1
+
+  domain = "vpc"
+  tags   = merge(local.default_tags, { Name = "${local.prefix}-fcknat-eip" })
+}
+
+resource "aws_eip_association" "fcknat" {
+  count                = 1
+  network_interface_id = aws_network_interface.fcknat[count.index].id
+  allocation_id        = aws_eip.fcknat[count.index].id
+}
+
+# IAM: fck-nat インスタンスが起動時に user-data 内から
+# `attach-network-interface` API を呼ぶための instance profile。
+# これが無いと ENI を attach できず route table が blackhole 状態になる
+# (Phase 1 stg で実体験 — Next → ALB の SSR fetch が fail)。
+resource "aws_iam_role" "fcknat" {
+  name = "${local.prefix}-fcknat-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = "sts:AssumeRole"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+    }]
+  })
+
+  tags = merge(local.default_tags, { Name = "${local.prefix}-fcknat-role" })
+}
+
+resource "aws_iam_role_policy" "fcknat_attach_eni" {
+  name = "${local.prefix}-fcknat-attach-eni"
+  role = aws_iam_role.fcknat.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ec2:AttachNetworkInterface",
+        "ec2:DetachNetworkInterface",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:ModifyNetworkInterfaceAttribute",
+        "ec2:DescribeInstances",
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iam_instance_profile" "fcknat" {
+  name = "${local.prefix}-fcknat-profile"
+  role = aws_iam_role.fcknat.name
+
+  tags = merge(local.default_tags, { Name = "${local.prefix}-fcknat-profile" })
+}
+
 resource "aws_launch_template" "fcknat" {
   name_prefix   = "${local.prefix}-fcknat-"
   image_id      = local.fck_nat_ami_id
@@ -371,9 +440,32 @@ resource "aws_launch_template" "fcknat" {
   # ASG による self-heal (instance 入れ替わり時に ENI 再アタッチ) が動く。
   vpc_security_group_ids = [aws_security_group.fcknat.id]
 
+  iam_instance_profile {
+    arn = aws_iam_instance_profile.fcknat.arn
+  }
+
   user_data = base64encode(<<-EOT
     #!/bin/bash
-    set -euo pipefail
+    set -euxo pipefail
+
+    # IMDSv2 token を取得して instance metadata を読む。
+    TOKEN=$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" \
+      -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    INSTANCE_ID=$(curl -fsS -H "X-aws-ec2-metadata-token: $TOKEN" \
+      http://169.254.169.254/latest/meta-data/instance-id)
+    REGION=$(curl -fsS -H "X-aws-ec2-metadata-token: $TOKEN" \
+      http://169.254.169.254/latest/meta-data/placement/region)
+
+    # ENI を eth1 として attach する。fck-nat.service にも eni_id を渡すが、
+    # 上流 AMI のデーモン挙動 (リトライ無し / 一度失敗するとリッスンしない)
+    # に起因して以前 ENI 未 attach のまま route が blackhole になったので、
+    # ここで明示的に attach 試行する。既に attach 済みなら API は冪等に成功扱いで
+    # `IncorrectState` になるため失敗を握り潰す。
+    aws --region "$REGION" ec2 attach-network-interface \
+      --instance-id "$INSTANCE_ID" \
+      --network-interface-id ${aws_network_interface.fcknat[0].id} \
+      --device-index 1 || true
+
     cat > /etc/fck-nat.conf <<EOF
     eni_id=${aws_network_interface.fcknat[0].id}
     EOF

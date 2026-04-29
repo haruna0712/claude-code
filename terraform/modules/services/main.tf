@@ -190,6 +190,10 @@ resource "aws_ecs_task_definition" "next" {
       environment = [
         { name = "NODE_ENV", value = "production" },
         { name = "NEXT_PUBLIC_API_BASE_URL", value = "https://${var.domain}/api/v1" },
+        # client/src/app/page.tsx が SSR で叩く `${API_BASE_URL}/api/health/`。
+        # NEXT_PUBLIC_* と違い build-time inline ではなく runtime env なので、
+        # DNS 委任前の暫定 ALB DNS 直接アクセスでも追従できる。
+        { name = "API_BASE_URL", value = "http://${var.alb_dns_name}" },
         { name = "PORT", value = "3000" },
       ]
       secrets = local.next_secrets

@@ -247,6 +247,9 @@ module "services" {
   domain               = "${var.app_subdomain}.${var.domain_name}"
   cors_allowed_origins = "https://${var.app_subdomain}.${var.domain_name}"
 
+  # SSR fetch base URL (Next → Django via ALB internal lookup)
+  alb_dns_name = module.compute.alb_dns_name
+
   tags = local.common_tags
 }
 

@@ -97,6 +97,11 @@ variable "domain" {
   type        = string
 }
 
+variable "alb_dns_name" {
+  description = "ALB DNS name (e.g., 'sns-stg-alb-xxx.ap-northeast-1.elb.amazonaws.com'). Used as the SSR fetch base URL injected into Next.js task definition (`API_BASE_URL`). Public domain (`var.domain`) was avoided because DNS delegation to Route53 is incomplete during stg bring-up; ALB DNS resolves to private IPs from inside the VPC."
+  type        = string
+}
+
 variable "cors_allowed_origins" {
   description = "Comma-separated origins for django-cors-headers CORS_ALLOWED_ORIGINS (F1-6). Example: 'https://stg.example.com'."
   type        = string
