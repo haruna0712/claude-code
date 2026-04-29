@@ -27,7 +27,8 @@ locals {
 
   # 全アプリで共有する非機密 env (CloudWatch metric / logging 用 ARG 含む)
   common_env = [
-    { name = "DJANGO_SETTINGS_MODULE", value = "config.settings.production" },
+    # stg はひとまず local 設定で動かす (DEBUG=True、production.py は将来用に残置)
+    { name = "DJANGO_SETTINGS_MODULE", value = "config.settings.local" },
     { name = "SENTRY_ENVIRONMENT", value = var.environment },
     { name = "DOMAIN", value = var.domain },
     { name = "AWS_REGION", value = var.aws_region },
