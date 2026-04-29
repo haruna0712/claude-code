@@ -59,5 +59,10 @@ RUN chown -R nextjs:nodejs ${APP_HOME}
 USER nextjs
 
 ENV PORT 3000
+# Next.js standalone server.js uses `process.env.HOSTNAME ?? '0.0.0.0'` to bind.
+# Old default `HOSTNAME=client` (docker-compose service name) causes ENOTFOUND
+# on ECS Fargate awsvpc where the container hostname is the task id, not `client`.
+# Bind to all interfaces explicitly.
+ENV HOSTNAME=0.0.0.0
 
-CMD HOSTNAME=client node server.js
+CMD ["node", "server.js"]
