@@ -46,6 +46,12 @@ bleach==6.3.0
 markdown2==2.5.0
 Pygments==2.18.0
 
+# OGP カード自動取得 (P2-07): SSRF 対策で TCP 接続後の peer IP 検証を行うため、
+# httpx の HTTPTransport をサブクラス化して socket レイヤをフックする。
+# beautifulsoup4 は <meta property="og:..."> をパースするだけなので軽量で十分。
+httpx==0.27.0
+beautifulsoup4==4.12.3
+
 # スラッグ生成 (Phase 6 記事)
 python-slugify==8.0.4
 

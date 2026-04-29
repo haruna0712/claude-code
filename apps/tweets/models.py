@@ -37,6 +37,15 @@ TWEET_MAX_EDIT_COUNT = 5
 TWEET_EDIT_WINDOW_MINUTES = 30
 
 
+class TweetType(models.TextChoices):
+    """SPEC §3 のツイートタイプ (P2-05)."""
+
+    ORIGINAL = "original", "オリジナル"
+    REPLY = "reply", "返信"
+    REPOST = "repost", "リポスト"
+    QUOTE = "quote", "引用"
+
+
 class Tweet(models.Model):
     """ツイート本体。
 
@@ -64,6 +73,52 @@ class Tweet(models.Model):
     # 編集回数 (上限 TWEET_MAX_EDIT_COUNT、§3.5)
     edit_count = models.PositiveSmallIntegerField(default=0)
     last_edited_at = models.DateTimeField(null=True, blank=True)
+
+    # ---- カウンタ (P2-04: signals で transaction.on_commit + reconciliation Beat) ----
+    # apps.reactions.signals が atomic に F("reaction_count") ± 1 を発行する。
+    # 種別変更 (kind の UPDATE) 時は count を変えない (db H-1 / arch H-1)。
+    reaction_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Total reactions (denormalized via Reaction signals).",
+    )
+
+    # ---- P2-05: ツイートタイプ + reply/quote/repost 参照 + カウンタ ----
+    # ER §2.5 + SPEC §3.2-§3.4. signals (apps/tweets/signals.py) が
+    # transaction.on_commit でカウンタを ± 1 する。db H-1 / arch H-2 反映。
+    type = models.CharField(
+        max_length=20,
+        choices=TweetType.choices,
+        default=TweetType.ORIGINAL,
+        help_text="SPEC §3: original / reply / repost / quote.",
+    )
+    reply_to = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="replies",
+    )
+    quote_of = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="quotes",
+    )
+    # db C-1: CASCADE だと元ツイート削除で大量行が連鎖削除されロック保持時間が増える
+    # ため SET_NULL に変更 (ER.md §2.5 と一致)。
+    # `type=repost AND repost_of IS NULL` のレコードは表示側で tombstone 化する。
+    repost_of = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reposts",
+    )
+    # カウンタ (signals で同期更新)
+    reply_count = models.PositiveIntegerField(default=0)
+    repost_count = models.PositiveIntegerField(default=0)
+    quote_count = models.PositiveIntegerField(default=0)
 
     # through テーブル経由で Tag と関連付け
     tags = models.ManyToManyField(
@@ -101,6 +156,19 @@ class Tweet(models.Model):
             models.CheckConstraint(
                 check=Q(edit_count__lte=TWEET_MAX_EDIT_COUNT),
                 name="tweet_edit_count_lte_max",
+            ),
+            # P2-05: type=repost のときのみ body 空を許可する。
+            # それ以外の type で空 body は reject。
+            models.CheckConstraint(
+                check=(Q(type=TweetType.REPOST) | ~Q(body="")),
+                name="tweet_repost_has_empty_body",
+            ),
+            # P2-05: 同一 user × 同一 repost_of は 1 件のみ (重複 RT 防止)。
+            # partial UniqueConstraint (`condition`): type=repost の行のみ対象。
+            models.UniqueConstraint(
+                fields=["author", "repost_of"],
+                condition=Q(type=TweetType.REPOST),
+                name="tweet_unique_repost_per_user",
             ),
         ]
 
@@ -301,8 +369,12 @@ class TweetTag(models.Model):
         unique_together = [("tweet", "tag")]
         # database-reviewer HIGH: tag_id 逆引きのクエリ (「このタグを持つ Tweet 一覧」)
         # に備え明示的に index を張る。
+        # P2-09 (db H-4): tweet_id 側のルックアップ (Tweet 削除時 CASCADE / トレンド集計の
+        # JOIN) でも index を効かせるため `tweet` 単独 index も追加する。Django は FK に
+        # 自動で index を作らないため明示が必要。
         indexes = [
             models.Index(fields=["tag"], name="tweets_tweettag_tag_idx"),
+            models.Index(fields=["tweet"], name="tweets_tweettag_tweet_idx"),
         ]
 
     def __str__(self) -> str:  # pragma: no cover - 表示用
@@ -379,3 +451,38 @@ class TweetEdit(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - 表示用
         return f"TweetEdit(tweet={self.tweet_id}, edited_at={self.edited_at})"
+
+
+class OgpCache(models.Model):
+    """OGP メタデータのキャッシュ (P2-07 / GitHub #182, ER §2.10).
+
+    SPEC §3.5: Tweet 本文の URL をパースして OGP メタを取得し、24h キャッシュする。
+    キャッシュキーは正規化済み URL の SHA-256 hex (``url_hash``)。複数の Tweet が
+    同じ URL を含む場合に同じ OgpCache 行を共有する。
+
+    sec MEDIUM (db M-1): 蓄積防止のため ``last_used_at`` を持ち、Tweet 作成時に
+    touch する。日次 Beat (``apps.tweets.tasks.purge_stale_ogp``) で 7 日以上参照
+    されていない行を物理削除する。
+    """
+
+    url_hash = models.CharField(
+        max_length=64,
+        unique=True,
+        help_text="SHA-256 hex of the normalized URL (32 bytes → 64 chars).",
+    )
+    url = models.URLField(max_length=500)
+    title = models.CharField(max_length=300, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    image_url = models.URLField(max_length=500, blank=True, default="")
+    site_name = models.CharField(max_length=200, blank=True, default="")
+    fetched_at = models.DateTimeField(auto_now=True)
+    last_used_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            # purge_stale_ogp の対象抽出に利用 (last_used_at < threshold)
+            models.Index(fields=["last_used_at"], name="ogp_last_used_idx"),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - 表示用
+        return f"OgpCache(url={self.url[:50]!r})"

@@ -41,12 +41,19 @@ urlpatterns = [
     # /api/v1/users/me/ (GET/PATCH) と /api/v1/users/<handle>/ (GET) を提供。
     # 認証系 (/api/v1/auth/) と分離するため apps.users.urls_profile として別登録。
     path("api/v1/users/", include("apps.users.urls_profile")),
+    # P2-03: フォロー関連 API は handle ベースで /api/v1/users/<handle>/follow/ などに
+    # マウントする (SPEC §16.2 の RESTful URL 設計)。``urls_profile`` の <str:username>/
+    # (1 セグメント) と本 include の <handle>/follow/ (2 セグメント) は衝突しない。
+    path("api/v1/users/", include("apps.follows.urls")),
     # Phase 0 scaffold (P0-04). Each app ships empty urlpatterns until
     # the owning phase adds real endpoints (see docs/ROADMAP.md).
     path("api/v1/tweets/", include("apps.tweets.urls")),
+    # P2-04: リアクションは /api/v1/tweets/<tweet_id>/reactions/ で tweet-rooted。
+    # apps.tweets.urls の <pk>/ パターンと <tweet_id>/reactions/ は衝突しない。
+    path("api/v1/tweets/", include("apps.reactions.urls")),
     path("api/v1/tags/", include("apps.tags.urls")),
-    path("api/v1/follows/", include("apps.follows.urls")),
-    path("api/v1/reactions/", include("apps.reactions.urls")),
+    # P2-04: legacy /api/v1/reactions/ は tweet-rooted に移行したため、reactions の
+    # スカフォールド include は削除済み。
     path("api/v1/boxes/", include("apps.boxes.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),
     path("api/v1/dm/", include("apps.dm.urls")),
@@ -56,6 +63,8 @@ urlpatterns = [
     path("api/v1/bots/", include("apps.bots.urls")),
     path("api/v1/billing/", include("apps.billing.urls")),
     path("api/v1/search/", include("apps.search.urls")),
+    # P2-08: タイムライン (home / following / explore)
+    path("api/v1/timeline/", include("apps.timeline.urls")),
 ]
 
 # Sentry smoke test endpoint (P0-06). DEBUG=True の環境だけ URL 登録すること自体を

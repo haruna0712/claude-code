@@ -202,7 +202,7 @@ class Tweet(TimeStampedModel):
     # 参照関係
     reply_to = models.ForeignKey("self", on_delete=SET_NULL, null=True, blank=True, related_name="replies")
     quote_of = models.ForeignKey("self", on_delete=SET_NULL, null=True, blank=True, related_name="quotes")
-    repost_of = models.ForeignKey("self", on_delete=CASCADE, null=True, blank=True, related_name="reposts")
+    repost_of = models.ForeignKey("self", on_delete=SET_NULL, null=True, blank=True, related_name="reposts")  # CASCADE だと元ツイート削除で大量行が連鎖削除されロック保持時間が増えるため SET_NULL。type=repost AND repost_of IS NULL は表示側で tombstone 化
     from_article = models.ForeignKey("articles.Article", on_delete=SET_NULL, null=True, blank=True)
     bot_source_url = models.URLField(blank=True)  # Bot 投稿時の元記事 URL
 
