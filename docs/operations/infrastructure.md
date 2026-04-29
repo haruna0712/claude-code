@@ -465,10 +465,13 @@ terraform apply
 
 | 項目 | 状態 | メモ |
 |---|---|---|
-| DNS 委任 (`codeplace.me`) | ⚠ 未完了 | 登録業者で NS 書き換え待ち |
-| ACM cert (ALB / CloudFront) | ⚠ 未発行 | DNS 委任完了後に DNS validation で自動発行 |
-| ALB HTTPS listener | ⚠ 未作成 | ACM ARN 渡し後に二段階 apply で追加 |
-| Phase 2 frontend 7 画面 | ⚠ 未実装 | 現状は Phase 0.5 smoke test page |
+| DNS 委任 (`codeplace.me`) | ✅ 完了 (2026-04-29) | NS が `awsdns-*` に向いてる |
+| ACM cert (ALB / CloudFront) | ✅ ISSUED (2026-04-29) | 期限 2026-11-12、ACM 自動更新 |
+| ALB HTTPS:443 listener | ✅ 稼働中 | TLS 1.3、5 ルール (webhook host header / api / ws / next default) |
+| CloudFront distribution | ✅ Deployed | `stg.codeplace.me` → CloudFront (`d2umnszix9vke3.cloudfront.net`) |
+| WAFv2 Web ACL | ✅ 稼働中 | OWASP managed rules + rate limit |
+| Next.js 静的アセット S3 配信 | ⚠ 未配置 | `.next/static/*` を build 時に S3 アップロード未実装 → CloudFront から Origin Hit でも 404、SSR 経由 fallback で表示は出る。Phase 2 frontend デプロイで解消 |
+| Phase 2 frontend 7 画面 | ⚠ 未実装 | 現状は Phase 0.5 smoke test page (P2-13〜P2-19 で実装) |
 | celery-beat | desired=0 | `django_celery_beat` を INSTALLED_APPS に追加してから desired=1 |
 | Multi-AZ RDS / Redis | stg は Single-AZ | prod 昇格時に `rds_multi_az = true` |
 | fck-nat per-AZ | AZ-a 1 台のみ | prod は AZ ごとに分散 (cross-AZ 転送料対策) |
