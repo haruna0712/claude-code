@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from unittest.mock import patch
 
 import pytest
@@ -21,8 +22,6 @@ from apps.tweets.ogp import (
     normalize_url,
     url_hash,
 )
-import ipaddress
-
 
 # =============================================================================
 # extract_first_url
@@ -32,8 +31,7 @@ import ipaddress
 class TestExtractFirstUrl:
     def test_plain_url(self) -> None:
         assert (
-            extract_first_url("これは https://example.com/path です")
-            == "https://example.com/path"
+            extract_first_url("これは https://example.com/path です") == "https://example.com/path"
         )
 
     def test_markdown_link(self) -> None:
@@ -42,9 +40,7 @@ class TestExtractFirstUrl:
         assert url == "https://example.com/x"
 
     def test_strips_trailing_punctuation(self) -> None:
-        assert (
-            extract_first_url("link: https://example.com.") == "https://example.com"
-        )
+        assert extract_first_url("link: https://example.com.") == "https://example.com"
 
     def test_no_url_returns_none(self) -> None:
         assert extract_first_url("just text without any link") is None
@@ -70,9 +66,7 @@ class TestNormalizeUrl:
         )
 
     def test_lowercases_scheme_and_host(self) -> None:
-        assert (
-            normalize_url("HTTPS://Example.COM/Path") == "https://example.com/Path"
-        )
+        assert normalize_url("HTTPS://Example.COM/Path") == "https://example.com/Path"
 
     def test_url_hash_is_stable(self) -> None:
         h1 = url_hash("https://example.com/path?utm_source=tw")

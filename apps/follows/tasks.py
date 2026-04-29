@@ -41,24 +41,24 @@ def reconcile_follow_counters() -> dict[str, int]:
     fixed_following = 0
 
     # follower_set (= 自分が followee として登場した回数 = followers_count) を集計
-    followers_actual = dict(
-        User.objects.annotate(c=Count("follower_set")).values_list("pk", "c")
-    )
+    followers_actual = dict(User.objects.annotate(c=Count("follower_set")).values_list("pk", "c"))
     # following_set (= 自分が follower として登場した回数 = following_count)
-    following_actual = dict(
-        User.objects.annotate(c=Count("following_set")).values_list("pk", "c")
-    )
+    following_actual = dict(User.objects.annotate(c=Count("following_set")).values_list("pk", "c"))
 
     with transaction.atomic():
         for user_pk, actual in followers_actual.items():
-            updated = User.objects.filter(pk=user_pk).exclude(
-                followers_count=actual
-            ).update(followers_count=actual)
+            updated = (
+                User.objects.filter(pk=user_pk)
+                .exclude(followers_count=actual)
+                .update(followers_count=actual)
+            )
             fixed_followers += updated
         for user_pk, actual in following_actual.items():
-            updated = User.objects.filter(pk=user_pk).exclude(
-                following_count=actual
-            ).update(following_count=actual)
+            updated = (
+                User.objects.filter(pk=user_pk)
+                .exclude(following_count=actual)
+                .update(following_count=actual)
+            )
             fixed_following += updated
 
     result = {

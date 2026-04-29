@@ -46,9 +46,7 @@ def on_reaction_saved(
     def _bump() -> None:
         from apps.tweets.models import Tweet
 
-        Tweet.objects.filter(pk=tweet_pk).update(
-            reaction_count=F("reaction_count") + 1
-        )
+        Tweet.objects.filter(pk=tweet_pk).update(reaction_count=F("reaction_count") + 1)
         # Phase 4A 実装後に自動有効化
         safe_notify(kind="LIKE", recipient=tweet_author, actor=actor)
 
@@ -56,9 +54,7 @@ def on_reaction_saved(
 
 
 @receiver(post_delete, sender=Reaction)
-def on_reaction_deleted(
-    sender: type[Reaction], instance: Reaction, **kwargs: Any
-) -> None:
+def on_reaction_deleted(sender: type[Reaction], instance: Reaction, **kwargs: Any) -> None:
     """Reaction 削除時に Tweet.reaction_count を -1 (0 でクリップ)."""
     tweet_pk = instance.tweet_id
 

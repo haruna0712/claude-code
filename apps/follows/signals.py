@@ -41,15 +41,11 @@ def _bump_counter(user_pk: int, field: str, delta: int) -> None:
         User.objects.filter(pk=user_pk).update(**{field: F(field) + delta})
     else:
         # 負方向は 0 で clip。F-1 が -1 にならないよう Greatest で 0 と比較。
-        User.objects.filter(pk=user_pk).update(
-            **{field: Greatest(F(field) + delta, 0)}
-        )
+        User.objects.filter(pk=user_pk).update(**{field: Greatest(F(field) + delta, 0)})
 
 
 @receiver(post_save, sender=Follow)
-def on_follow_created(
-    sender: type[Follow], instance: Follow, created: bool, **kwargs: Any
-) -> None:
+def on_follow_created(sender: type[Follow], instance: Follow, created: bool, **kwargs: Any) -> None:
     """Follow 作成時に followers_count / following_count を +1.
 
     P2-08: 自分の home TL キャッシュを invalidate (follow 直後に新しいフォロイーの

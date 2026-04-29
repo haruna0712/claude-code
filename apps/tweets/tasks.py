@@ -70,7 +70,9 @@ def fetch_ogp_for_tweet(tweet_id: int) -> dict[str, str] | None:
 
     # DB hit (Redis miss): 24h 以内のキャッシュなら HTTP fetch せず使い回す
     existing = OgpCache.objects.filter(url_hash=h).first()
-    if existing is not None and existing.fetched_at >= now - timedelta(seconds=OGP_CACHE_TTL_SECONDS):
+    if existing is not None and existing.fetched_at >= now - timedelta(
+        seconds=OGP_CACHE_TTL_SECONDS
+    ):
         OgpCache.objects.filter(pk=existing.pk).update(last_used_at=now)
         payload = {
             "url": existing.url,
@@ -123,7 +125,5 @@ def purge_stale_ogp() -> dict[str, int]:
 
     threshold = timezone.now() - timedelta(days=OGP_PURGE_THRESHOLD_DAYS)
     deleted, _ = OgpCache.objects.filter(last_used_at__lt=threshold).delete()
-    logger.info(
-        "ogp_purge_stale", extra={"event": "ogp.purge", "deleted": deleted}
-    )
+    logger.info("ogp_purge_stale", extra={"event": "ogp.purge", "deleted": deleted})
     return {"deleted": deleted}

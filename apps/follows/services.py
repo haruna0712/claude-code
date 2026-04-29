@@ -130,9 +130,7 @@ def compute_who_to_follow(user, limit: int = DEFAULT_LIMIT) -> list[dict[str, An
     # Step 3: fallback
     if len(candidates) < limit:
         already = exclude | {c["user_id"] for c in candidates}
-        candidates.extend(
-            _candidates_from_followers_count(already, limit - len(candidates))
-        )
+        candidates.extend(_candidates_from_followers_count(already, limit - len(candidates)))
 
     return _serialize_users(candidates[:limit])
 

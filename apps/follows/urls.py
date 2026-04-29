@@ -14,9 +14,9 @@
 from django.urls import path
 
 from apps.follows.views import (
-    FollowView,
     FollowersListView,
     FollowingListView,
+    FollowView,
     PopularUsersView,
     RecommendedUsersView,
 )

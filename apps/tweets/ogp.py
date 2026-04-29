@@ -21,7 +21,6 @@ import ipaddress
 import logging
 import re
 import socket
-from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 import httpx
@@ -136,7 +135,7 @@ def _resolve_and_check_host(host: str) -> None:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror as exc:
         raise SSRFError(f"DNS resolution failed: {host}") from exc
-    for family, _, _, _, sockaddr in infos:
+    for _family, _, _, _, sockaddr in infos:
         ip_str = sockaddr[0]
         try:
             ip = ipaddress.ip_address(ip_str)
@@ -298,7 +297,7 @@ def fetch_ogp(url: str, user_agent: str = "SNS-OGP-Bot/1.0") -> dict[str, str] |
     except (httpx.HTTPError, httpx.TransportError) as exc:
         logger.warning("ogp_fetch_http_error", extra={"url": url, "type": type(exc).__name__})
         return None
-    except Exception:  # noqa: BLE001 - 防御的: 想定外でも空 cache を作りたい
+    except Exception:
         logger.exception("ogp_fetch_unexpected", extra={"url": url})
         return None
 

@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterable
 from datetime import timedelta
-from typing import Iterable
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -54,7 +54,9 @@ def _exclude_blocked_users_qs(user) -> set[int]:
 
     Phase 4B 実装後に Block model が登場すると自動で有効化される。
     """
-    from apps.common.blocking import is_blocked_relationship  # noqa: F401  - 後方互換のための import 確認
+    from apps.common.blocking import (
+        is_blocked_relationship,  # noqa: F401  - 後方互換のための import 確認
+    )
 
     try:
         from django.apps import apps as _apps

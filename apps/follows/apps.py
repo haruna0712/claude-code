@@ -9,5 +9,5 @@ class FollowsConfig(AppConfig):
 
     def ready(self) -> None:
         # signals を import するだけで @receiver が登録される。
-        # noqa: F401 を付けて未使用 import 警告を抑止 (副作用 import)。
+
         from apps.follows import signals  # noqa: F401

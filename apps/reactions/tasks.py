@@ -20,16 +20,12 @@ def reconcile_reaction_counters() -> dict[str, int]:
     """Tweet.reaction_count を実態と照合・補正する."""
     from apps.tweets.models import Tweet
 
-    actual = dict(
-        Tweet.all_objects.annotate(c=Count("reactions")).values_list("pk", "c")
-    )
+    actual = dict(Tweet.all_objects.annotate(c=Count("reactions")).values_list("pk", "c"))
     fixed = 0
     with transaction.atomic():
         for pk, c in actual.items():
             updated = (
-                Tweet.all_objects.filter(pk=pk)
-                .exclude(reaction_count=c)
-                .update(reaction_count=c)
+                Tweet.all_objects.filter(pk=pk).exclude(reaction_count=c).update(reaction_count=c)
             )
             fixed += updated
     result = {"checked": len(actual), "fixed": fixed}

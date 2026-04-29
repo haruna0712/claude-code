@@ -36,27 +36,25 @@ class TestRepost:
 
         assert res.status_code == status.HTTP_201_CREATED
         assert res.json()["created"] is True
-        assert Tweet.objects.filter(
-            author=actor, type=TweetType.REPOST, repost_of=target
-        ).count() == 1
+        assert (
+            Tweet.objects.filter(author=actor, type=TweetType.REPOST, repost_of=target).count() == 1
+        )
         target.refresh_from_db()
         assert target.repost_count == 1
 
     def test_repost_idempotent_200(self, api_client: APIClient) -> None:
         actor = make_user()
         target = make_tweet(author=make_user())
-        Tweet.objects.create(
-            author=actor, body="", type=TweetType.REPOST, repost_of=target
-        )
+        Tweet.objects.create(author=actor, body="", type=TweetType.REPOST, repost_of=target)
         api_client.force_authenticate(user=actor)
 
         res = api_client.post(repost_url(target.pk))
 
         assert res.status_code == status.HTTP_200_OK
         assert res.json()["created"] is False
-        assert Tweet.objects.filter(
-            author=actor, type=TweetType.REPOST, repost_of=target
-        ).count() == 1
+        assert (
+            Tweet.objects.filter(author=actor, type=TweetType.REPOST, repost_of=target).count() == 1
+        )
 
     def test_repost_unauthenticated_401(self, api_client: APIClient) -> None:
         target = make_tweet(author=make_user())
@@ -72,9 +70,7 @@ class TestRepost:
     def test_repost_delete_204(self, api_client: APIClient) -> None:
         actor = make_user()
         target = make_tweet(author=make_user())
-        Tweet.objects.create(
-            author=actor, body="", type=TweetType.REPOST, repost_of=target
-        )
+        Tweet.objects.create(author=actor, body="", type=TweetType.REPOST, repost_of=target)
         api_client.force_authenticate(user=actor)
 
         res = api_client.delete(repost_url(target.pk))

@@ -21,17 +21,15 @@ def test_follow_unique_constraint_blocks_duplicate() -> None:
     a = make_user()
     b = make_user()
     Follow.objects.create(follower=a, followee=b)
-    with pytest.raises(IntegrityError):
-        with transaction.atomic():
-            Follow.objects.create(follower=a, followee=b)
+    with pytest.raises(IntegrityError), transaction.atomic():
+        Follow.objects.create(follower=a, followee=b)
 
 
 @pytest.mark.django_db
 def test_follow_check_constraint_blocks_self_follow() -> None:
     a = make_user()
-    with pytest.raises(IntegrityError):
-        with transaction.atomic():
-            Follow.objects.create(follower=a, followee=a)
+    with pytest.raises(IntegrityError), transaction.atomic():
+        Follow.objects.create(follower=a, followee=a)
 
 
 @pytest.mark.django_db(transaction=True)

@@ -31,15 +31,11 @@ def _bump_field(tweet_pk: int | None, field: str, delta: int) -> None:
     if delta >= 0:
         Tweet.all_objects.filter(pk=tweet_pk).update(**{field: F(field) + delta})
     else:
-        Tweet.all_objects.filter(pk=tweet_pk).update(
-            **{field: Greatest(F(field) + delta, 0)}
-        )
+        Tweet.all_objects.filter(pk=tweet_pk).update(**{field: Greatest(F(field) + delta, 0)})
 
 
 @receiver(post_save, sender=Tweet)
-def on_tweet_created(
-    sender: type[Tweet], instance: Tweet, created: bool, **kwargs: Any
-) -> None:
+def on_tweet_created(sender: type[Tweet], instance: Tweet, created: bool, **kwargs: Any) -> None:
     """Reply / Repost / Quote 作成時に元ツイートの count を +1.
 
     P2-07: 本文に URL があれば OGP 取得タスクを enqueue する.

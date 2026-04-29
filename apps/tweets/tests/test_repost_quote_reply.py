@@ -21,9 +21,8 @@ from apps.tweets.tests._factories import make_tweet
 @pytest.mark.django_db
 def test_check_constraint_rejects_empty_body_for_non_repost() -> None:
     author = make_user()
-    with pytest.raises(IntegrityError):
-        with transaction.atomic():
-            Tweet.objects.create(author=author, body="", type=TweetType.ORIGINAL)
+    with pytest.raises(IntegrityError), transaction.atomic():
+        Tweet.objects.create(author=author, body="", type=TweetType.ORIGINAL)
 
 
 @pytest.mark.django_db
@@ -31,9 +30,7 @@ def test_check_constraint_allows_empty_body_for_repost() -> None:
     author = make_user()
     other = make_user()
     original = make_tweet(author=other, body="hello")
-    repost = Tweet.objects.create(
-        author=author, body="", type=TweetType.REPOST, repost_of=original
-    )
+    repost = Tweet.objects.create(author=author, body="", type=TweetType.REPOST, repost_of=original)
     assert repost.pk is not None
     assert repost.body == ""
 
@@ -43,11 +40,8 @@ def test_partial_unique_constraint_blocks_duplicate_repost() -> None:
     author = make_user()
     original = make_tweet(author=make_user())
     Tweet.objects.create(author=author, body="", type=TweetType.REPOST, repost_of=original)
-    with pytest.raises(IntegrityError):
-        with transaction.atomic():
-            Tweet.objects.create(
-                author=author, body="", type=TweetType.REPOST, repost_of=original
-            )
+    with pytest.raises(IntegrityError), transaction.atomic():
+        Tweet.objects.create(author=author, body="", type=TweetType.REPOST, repost_of=original)
 
 
 @pytest.mark.django_db
@@ -66,9 +60,7 @@ def test_repost_of_set_null_on_original_delete() -> None:
     """db C-1: 元ツイート削除で repost_of=NULL (CASCADE しない)."""
     author = make_user()
     original = make_tweet(author=make_user(), body="orig")
-    repost = Tweet.objects.create(
-        author=author, body="", type=TweetType.REPOST, repost_of=original
-    )
+    repost = Tweet.objects.create(author=author, body="", type=TweetType.REPOST, repost_of=original)
     # all_objects 経由で hard delete (soft delete だと FK target が物理削除されない)
     original.delete()
     repost.refresh_from_db()
@@ -93,9 +85,7 @@ def test_signal_increments_repost_count() -> None:
     original = make_tweet(author=make_user(), body="orig")
     assert original.repost_count == 0
 
-    Tweet.objects.create(
-        author=make_user(), body="", type=TweetType.REPOST, repost_of=original
-    )
+    Tweet.objects.create(author=make_user(), body="", type=TweetType.REPOST, repost_of=original)
     original.refresh_from_db()
     assert original.repost_count == 1
 

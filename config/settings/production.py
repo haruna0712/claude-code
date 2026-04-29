@@ -13,7 +13,7 @@ base.py との差分:
 
 from os import getenv
 
-from .base import *  # noqa: F401, F403
+from .base import *
 
 DEBUG = False
 
@@ -49,9 +49,7 @@ if _alb_dns:
 ALLOWED_HOSTS.append(".elb.amazonaws.com")
 
 CSRF_TRUSTED_ORIGINS = [
-    o.strip()
-    for o in getenv("CORS_ALLOWED_ORIGINS", "").split(",")
-    if o.strip()
+    o.strip() for o in getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
 ]
 # 暫定 ALB 直アクセス用にも追加
 if _alb_dns:
@@ -67,9 +65,7 @@ EMAIL_PORT = int(getenv("EMAIL_PORT", "587"))
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = getenv("MAILGUN_API_KEY", "")
-DEFAULT_FROM_EMAIL = getenv(
-    "DEFAULT_FROM_EMAIL", f"noreply@{DOMAIN}"
-)
+DEFAULT_FROM_EMAIL = getenv("DEFAULT_FROM_EMAIL", f"noreply@{DOMAIN}")
 
 # Static files: S3 (django-storages) で配信予定。当面は CloudFront / ALB が
 # 配信するため STATIC_URL のみ調整。

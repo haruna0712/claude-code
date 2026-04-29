@@ -83,12 +83,10 @@ class FollowView(APIView):
 
         try:
             with transaction.atomic():
-                follow, created = Follow.objects.get_or_create(
-                    follower=follower, followee=followee
-                )
+                follow, created = Follow.objects.get_or_create(follower=follower, followee=followee)
         except IntegrityError:
             # 万一の同時作成 race を idempotent 化 (UniqueConstraint で発生)。
-            follow = Follow.objects.get(follower=follower, followee=followee)
+            # follow オブジェクト自体は payload で参照しないので fetch 不要。
             created = False
 
         payload = FollowResponseSerializer(
@@ -105,9 +103,7 @@ class FollowView(APIView):
 
     def delete(self, request: Request, handle: str) -> Response:
         followee = self._resolve_followee(handle)
-        deleted, _ = Follow.objects.filter(
-            follower=request.user, followee=followee
-        ).delete()
+        deleted, _ = Follow.objects.filter(follower=request.user, followee=followee).delete()
         if deleted == 0:
             return Response(
                 {"detail": "フォローしていません。"},

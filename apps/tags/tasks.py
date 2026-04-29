@@ -48,7 +48,9 @@ def aggregate_trending_tags() -> list[dict]:
         uses = row["tag_uses_24h"] or 0
         reactions = row["reactions"] or 0
         score = uses + reactions * TRENDING_REACTION_WEIGHT
-        scored.append({"tag_id": row["tag_id"], "uses": uses, "reactions": reactions, "score": score})
+        scored.append(
+            {"tag_id": row["tag_id"], "uses": uses, "reactions": reactions, "score": score}
+        )
 
     scored.sort(key=lambda r: r["score"], reverse=True)
     top = scored[:TRENDING_LIMIT]

@@ -95,9 +95,7 @@ class RepostView(APIView):
                 )
         except IntegrityError:
             # partial UniqueConstraint で同時 INSERT race を idempotent 化
-            repost = Tweet.objects.get(
-                author=request.user, type=TweetType.REPOST, repost_of=target
-            )
+            repost = Tweet.objects.get(author=request.user, type=TweetType.REPOST, repost_of=target)
             payload = {"id": repost.pk, "repost_of": target.pk, "created": False}
             return Response(
                 _RepostResponseSerializer(payload).data,
@@ -145,9 +143,7 @@ class _QuoteOrReplyBaseView(APIView):
             return resp
 
         # body / tags / images は CreateSerializer を流用してバリデーション
-        serializer = TweetCreateSerializer(
-            data=request.data, context={"request": request}
-        )
+        serializer = TweetCreateSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
 
         with transaction.atomic():
@@ -157,9 +153,7 @@ class _QuoteOrReplyBaseView(APIView):
                 **{self.fk_field_name: target},
             )
 
-        out = TweetDetailSerializer(
-            tweet, context={"request": request}
-        ).data
+        out = TweetDetailSerializer(tweet, context={"request": request}).data
         return Response(out, status=status.HTTP_201_CREATED)
 
 

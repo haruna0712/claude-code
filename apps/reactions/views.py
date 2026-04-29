@@ -70,16 +70,12 @@ class ReactionView(APIView):
         with transaction.atomic():
             # db H-2: 既存行を select_for_update で行ロック (新規 INSERT は別途 race 対策)
             existing = (
-                Reaction.objects.select_for_update()
-                .filter(user=request.user, tweet=tweet)
-                .first()
+                Reaction.objects.select_for_update().filter(user=request.user, tweet=tweet).first()
             )
 
             if existing is None:
                 try:
-                    Reaction.objects.create(
-                        user=request.user, tweet=tweet, kind=kind
-                    )
+                    Reaction.objects.create(user=request.user, tweet=tweet, kind=kind)
                 except IntegrityError:
                     # 同時 INSERT の race を idempotent 化
                     existing = Reaction.objects.get(user=request.user, tweet=tweet)

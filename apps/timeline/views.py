@@ -17,7 +17,7 @@ from apps.timeline.services import (
     build_explore_tl,
     get_or_build_home_tl,
 )
-from apps.tweets.models import Tweet, TweetType
+from apps.tweets.models import Tweet
 from apps.tweets.serializers import TweetListSerializer
 
 logger = logging.getLogger(__name__)
@@ -51,9 +51,7 @@ class HomeTimelineView(APIView):
         )
 
         # TweetListSerializer は P1-08 のものを再利用 (author / images / tags 含む)
-        data = TweetListSerializer(
-            tweets, many=True, context={"request": request}
-        ).data
+        data = TweetListSerializer(tweets, many=True, context={"request": request}).data
         return Response({"results": data, "cache_hit": cache_hit})
 
 
@@ -81,9 +79,7 @@ class FollowingTimelineView(APIView):
             .exclude(author=request.user)
             .order_by("-created_at")[:limit]
         )
-        data = TweetListSerializer(
-            list(qs), many=True, context={"request": request}
-        ).data
+        data = TweetListSerializer(list(qs), many=True, context={"request": request}).data
         return Response({"results": data})
 
 
@@ -103,7 +99,5 @@ class ExploreTimelineView(APIView):
 
         viewer = None if isinstance(request.user, AnonymousUser) else request.user
         tweets = build_explore_tl(viewer=viewer, limit=limit)
-        data = TweetListSerializer(
-            tweets, many=True, context={"request": request}
-        ).data
+        data = TweetListSerializer(tweets, many=True, context={"request": request}).data
         return Response({"results": data})

@@ -160,10 +160,7 @@ class Tweet(models.Model):
             # P2-05: type=repost のときのみ body 空を許可する。
             # それ以外の type で空 body は reject。
             models.CheckConstraint(
-                check=(
-                    Q(type=TweetType.REPOST)
-                    | ~Q(body="")
-                ),
+                check=(Q(type=TweetType.REPOST) | ~Q(body="")),
                 name="tweet_repost_has_empty_body",
             ),
             # P2-05: 同一 user × 同一 repost_of は 1 件のみ (重複 RT 防止)。
