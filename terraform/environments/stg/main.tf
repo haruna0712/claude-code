@@ -160,6 +160,46 @@ module "edge" {
 }
 
 # ---------------------------------------------------------------------------
+# 6.4. HTTP listener rules (stg 暫定 — DNS 委任後に削除予定)
+# ---------------------------------------------------------------------------
+# edge モジュール (HTTPS listener を作る) は DNS 委任完了が前提のため、それまで
+# ECS service が target group を associate できない。stg では暫定的に HTTP:80 に
+# forward rule を追加して target group を LB に紐付ける。
+
+data "aws_lb_listener" "stg_http" {
+  load_balancer_arn = module.compute.alb_arn
+  port              = 80
+}
+
+resource "aws_lb_listener_rule" "stg_http_api" {
+  listener_arn = data.aws_lb_listener.stg_http.arn
+  priority     = 10
+  condition {
+    path_pattern {
+      values = ["/api/*"]
+    }
+  }
+  action {
+    type             = "forward"
+    target_group_arn = module.compute.target_group_arns["app"]
+  }
+}
+
+resource "aws_lb_listener_rule" "stg_http_default" {
+  listener_arn = data.aws_lb_listener.stg_http.arn
+  priority     = 100
+  condition {
+    path_pattern {
+      values = ["/*"]
+    }
+  }
+  action {
+    type             = "forward"
+    target_group_arn = module.compute.target_group_arns["next"]
+  }
+}
+
+# ---------------------------------------------------------------------------
 # 6.5. ECS Services (Phase 1 stg deployment)
 # ---------------------------------------------------------------------------
 #
@@ -208,6 +248,23 @@ module "services" {
   cors_allowed_origins = "https://${var.app_subdomain}.${var.domain_name}"
 
   tags = local.common_tags
+}
+
+# ---------------------------------------------------------------------------
+# 6.6. GitHub Actions OIDC (cd-stg.yml の AWS 認証用)
+# ---------------------------------------------------------------------------
+
+module "github_oidc" {
+  source = "../../modules/github_oidc"
+
+  environment  = "stg"
+  project      = var.project
+  github_owner = "haruna0712"
+  github_repo  = "claude-code"
+  # main push のみ stg デプロイ許可
+  allowed_refs = [
+    "repo:haruna0712/claude-code:ref:refs/heads/main",
+  ]
 }
 
 # ---------------------------------------------------------------------------

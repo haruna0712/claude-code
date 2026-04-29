@@ -64,19 +64,28 @@ locals {
 }
 
 #####################################################################
-# CloudWatch Log Groups (1 per service)
+# CloudWatch Log Groups
+#
+# observability モジュールが既に django/next/celery-worker/celery-beat/daphne
+# 用の log group を管理しているため、services モジュールでは観測対象外の
+# django-migrate (one-shot job) のみを作成する。task definition の
+# logConfiguration は文字列で `/ecs/${prefix}/<svc>` を参照する (observability
+# 側と命名規約が同じであること前提)。
 #####################################################################
-resource "aws_cloudwatch_log_group" "this" {
-  for_each = toset([
-    "django",
-    "next",
-    "celery-worker",
-    "celery-beat",
-    "django-migrate",
-  ])
-  name              = "/ecs/${local.prefix}/${each.key}"
+resource "aws_cloudwatch_log_group" "migrate" {
+  name              = "/ecs/${local.prefix}/django-migrate"
   retention_in_days = var.log_retention_days
   tags              = local.common_tags
+}
+
+locals {
+  log_group_names = {
+    "django"         = "/ecs/${local.prefix}/django"
+    "next"           = "/ecs/${local.prefix}/next"
+    "celery-worker"  = "/ecs/${local.prefix}/celery-worker"
+    "celery-beat"    = "/ecs/${local.prefix}/celery-beat"
+    "django-migrate" = aws_cloudwatch_log_group.migrate.name
+  }
 }
 
 #####################################################################
@@ -133,7 +142,7 @@ resource "aws_ecs_task_definition" "django" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = aws_cloudwatch_log_group.this["django"].name
+          awslogs-group         = local.log_group_names["django"]
           awslogs-region        = var.aws_region
           awslogs-stream-prefix = "django"
         }
@@ -178,7 +187,7 @@ resource "aws_ecs_task_definition" "next" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = aws_cloudwatch_log_group.this["next"].name
+          awslogs-group         = local.log_group_names["next"]
           awslogs-region        = var.aws_region
           awslogs-stream-prefix = "next"
         }
@@ -210,7 +219,7 @@ resource "aws_ecs_task_definition" "celery_worker" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = aws_cloudwatch_log_group.this["celery-worker"].name
+          awslogs-group         = local.log_group_names["celery-worker"]
           awslogs-region        = var.aws_region
           awslogs-stream-prefix = "celery"
         }
@@ -242,7 +251,7 @@ resource "aws_ecs_task_definition" "celery_beat" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = aws_cloudwatch_log_group.this["celery-beat"].name
+          awslogs-group         = local.log_group_names["celery-beat"]
           awslogs-region        = var.aws_region
           awslogs-stream-prefix = "beat"
         }
@@ -274,7 +283,7 @@ resource "aws_ecs_task_definition" "django_migrate" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = aws_cloudwatch_log_group.this["django-migrate"].name
+          awslogs-group         = local.log_group_names["django-migrate"]
           awslogs-region        = var.aws_region
           awslogs-stream-prefix = "migrate"
         }
