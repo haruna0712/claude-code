@@ -206,10 +206,17 @@ jobs:
           for svc in "${SERVICE_LIST[@]}"; do
             svc="${svc// /}"  # trim spaces
             [ -z "$svc" ] && continue
-            echo "Triggering rolling update on service: $svc"
+            # Resolve the latest task definition revision for this service.
+            # 単に --force-new-deployment だけだと service が pin している revision で
+            # 新タスクを起動するだけで、terraform apply で作った新 revision が
+            # 反映されない (services モジュールの lifecycle.ignore_changes により)。
+            # CD 側で常に最新を解決して --task-definition で明示的に指定する。
+            LATEST_REV=$(aws ecs describe-task-definition --task-definition "$svc" --query 'taskDefinition.revision' --output text)
+            echo "Triggering rolling update on $svc → revision $LATEST_REV"
             aws ecs update-service \
               --cluster "$CLUSTER" \
               --service "$svc" \
+              --task-definition "${svc}:${LATEST_REV}" \
               --force-new-deployment \
               --no-cli-pager > /dev/null
           done
