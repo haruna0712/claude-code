@@ -47,22 +47,21 @@ locals {
   ]
 
   # Django / Celery 共通の機密注入。ARN を直接 secrets ブロックに渡す。
+  # NOTE: Sentry DSN / Google OAuth / Mailgun はハルナさん側で実値を put-secret-value
+  # するまで placeholder 値 (`{"value":"SET_VIA_AWS_CLI..."}`) のまま。これを env に
+  # 注入すると Sentry init で `BadDsn: Unsupported scheme ''` で起動失敗するため、
+  # 実値が put される時点で services モジュールに追加し直す方針に変更。
+  # それまでは Required な secrets のみ注入する。
   django_secrets = [
     { name = "DJANGO_SECRET_KEY", valueFrom = var.secret_arns["django/secret-key"] },
     { name = "SIGNING_KEY", valueFrom = var.secret_arns["django/jwt-signing-key"] },
     { name = "POSTGRES_PASSWORD", valueFrom = var.secret_arns["django/db-password"] },
     { name = "REDIS_AUTH_TOKEN", valueFrom = var.secret_arns["redis/auth-token"] },
-    { name = "SENTRY_DSN", valueFrom = var.secret_arns["sentry/dsn"] },
-    { name = "GOOGLE_OAUTH_CLIENT_ID", valueFrom = var.secret_arns["google/oauth-client-id"] },
-    { name = "GOOGLE_OAUTH_CLIENT_SECRET", valueFrom = var.secret_arns["google/oauth-client-secret"] },
-    { name = "MAILGUN_API_KEY", valueFrom = var.secret_arns["mailgun/api-key"] },
-    { name = "MAILGUN_SIGNING_KEY", valueFrom = var.secret_arns["mailgun/signing-key"] },
   ]
 
-  # Next.js (SSR) は public な NEXT_PUBLIC_* と Sentry DSN だけで十分
-  next_secrets = [
-    { name = "SENTRY_DSN", valueFrom = var.secret_arns["sentry/dsn"] },
-  ]
+  # Next.js (SSR) は public NEXT_PUBLIC_* のみ。Sentry DSN は build-time に build args
+  # で渡す (cd-stg.yml で secrets.NEXT_PUBLIC_SENTRY_DSN を指定済)。
+  next_secrets = []
 }
 
 #####################################################################
