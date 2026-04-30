@@ -15,6 +15,18 @@ if [ -f "$WORKSPACE/requirements/local.txt" ]; then
   "$WORKSPACE/.venv/bin/pip" install --upgrade pip
   "$WORKSPACE/.venv/bin/pip" install -r "$WORKSPACE/requirements/local.txt"
   echo "Python setup complete."
+
+  # --- pre-commit hook 登録 ---
+  # `pre-commit install` で .git/hooks/pre-commit を生成し、commit 時に
+  # ruff / prettier / detect-secrets が自動で走るようにする。CI と同じ
+  # gate がローカルでも効くので「lint で CI が赤く落ちる」事故を物理的に防ぐ。
+  # `--install-hooks` で各 hook の virtualenv も先に作っておき、初回 commit
+  # を高速化する。
+  if [ -d "$WORKSPACE/.git" ] && [ -x "$WORKSPACE/.venv/bin/pre-commit" ]; then
+    echo "Installing pre-commit git hook..."
+    (cd "$WORKSPACE" && "$WORKSPACE/.venv/bin/pre-commit" install --install-hooks 2>&1 | tail -5) || \
+      echo "[setup] pre-commit install failed (non-fatal — run '.venv/bin/pre-commit install' manually if needed)"
+  fi
 else
   echo "No requirements/local.txt found, skipping Python setup."
 fi

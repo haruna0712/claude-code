@@ -42,6 +42,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Installed via pip from PyPI (allowed by firewall) into system site-packages.
 RUN pip3 install --break-system-packages --no-cache-dir uv
 
+# Install Python 3.12 via uv. node:20 base image (Debian bookworm) は python3.11
+# のみ提供だが、`.pre-commit-config.yaml` の `default_language_version: python3.12`
+# を満たすため別途取得する。`UV_PYTHON_INSTALL_DIR=/opt/uv-python` で root 領域に
+# 配置し、`/usr/local/bin/python3.12` に symlink を貼って system PATH から見える
+# ようにする。pre-commit が hook 環境を構築する際にこの python3.12 を発見する。
+RUN UV_PYTHON_INSTALL_DIR=/opt/uv-python uv python install 3.12 && \
+    PYTHON312_BIN=$(find /opt/uv-python -name python3.12 -type f -executable | head -1) && \
+    ln -sf "$PYTHON312_BIN" /usr/local/bin/python3.12 && \
+    /usr/local/bin/python3.12 --version
+
 # Install Docker CLI and Docker Compose plugin
 RUN install -m 0755 -d /etc/apt/keyrings && \
   curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc && \

@@ -17,3 +17,10 @@ pytest-mock==3.14.0
 factory-boy==3.3.1
 # freezegun: 時刻固定テスト用
 freezegun==1.5.1
+
+# --- Lint / format gate (CI parity) ---
+# pre-commit: ローカル commit 時に CI の pre-commit job と同等の検査を走らせる。
+# CI workflow が `pip install pre-commit==3.8.0` で固定しているため同バージョンを pin。
+# devcontainer 起動時に setup-project.sh が `pre-commit install` を呼び .git/hooks/pre-commit
+# にフックを登録する。
+pre-commit==3.8.0
