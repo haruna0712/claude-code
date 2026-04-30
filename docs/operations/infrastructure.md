@@ -239,9 +239,9 @@ alb_certificate_arn_override         = "<acm ARN>"
 **主要リソース**:
 | リソース | 設定 |
 |---|---|
-| ECS cluster | FARGATE + FARGATE_SPOT capacity providers、ContainerInsights 有効 |
+| ECS cluster | FARGATE + FARGATE*SPOT capacity providers、ContainerInsights 有効 |
 | ECR repos × 3 | `backend` / `frontend` / `nginx` (celery は backend image 共有) |
-| ECR lifecycle policy | release-_ 30 個 / stg-_ 100 個 / untagged 7 日 |
+| ECR lifecycle policy | release-* 30 個 / stg-\_ 100 個 / untagged 7 日 |
 | ALB | Internet-facing、HTTP/2、idle_timeout 3600s (WebSocket) |
 | TGs × 3 | `app` / `next` / `daphne` |
 | Listener (HTTP:80) | 301 redirect → HTTPS:443 |

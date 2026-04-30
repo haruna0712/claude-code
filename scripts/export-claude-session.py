@@ -30,12 +30,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
+from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -88,8 +90,7 @@ def find_session_by_id(session_id: str) -> Path:
         sys.exit(f"No JSONL matches for session id '{session_id}' in {SESSION_DIR}")
     if len(matches) > 1:
         sys.exit(
-            f"Ambiguous session id '{session_id}'. Matches: "
-            + ", ".join(p.name for p in matches)
+            f"Ambiguous session id '{session_id}'. Matches: " + ", ".join(p.name for p in matches)
         )
     return matches[0]
 
@@ -130,10 +131,8 @@ def read_jsonl_from_offset(path: Path, offset: int) -> tuple[list[dict[str, Any]
         for line in f:
             line_stripped = line.strip()
             if line_stripped:
-                try:
+                with contextlib.suppress(json.JSONDecodeError):
                     records.append(json.loads(line_stripped))
-                except json.JSONDecodeError:
-                    pass
         new_offset = f.tell()
     return records, new_offset
 
@@ -270,9 +269,7 @@ def render_records(records: list[dict[str, Any]]) -> str:
                         tu_name = tool_use_map.get(tu_id, "Tool")
                         result = render_tool_result(block.get("content", ""))
                         if result.strip():
-                            out.append(
-                                f"<details><summary>📤 {tu_name} result</summary>\n"
-                            )
+                            out.append(f"<details><summary>📤 {tu_name} result</summary>\n")
                             out.append("```\n" + result + "\n```\n")
                             out.append("</details>\n")
                     elif block.get("type") == "text":
@@ -413,10 +410,7 @@ def main() -> int:
         list_recent_sessions()
         return 0
 
-    if args.session_id:
-        path = find_session_by_id(args.session_id)
-    else:
-        path = find_latest_session()
+    path = find_session_by_id(args.session_id) if args.session_id else find_latest_session()
 
     out, n_new, was_full = export_session(path, force=args.force)
     if not args.quiet:
