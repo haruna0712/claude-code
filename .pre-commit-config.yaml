@@ -127,3 +127,20 @@ repos:
   #   hooks:
   #     - id: terraform_fmt
   #       files: ^terraform/.*\.(tf|tfvars)$
+
+  # --- Pytest local gate (pre-push only) ---
+  # push 時に pytest を回し、fail なら push 自体を block する。
+  # docker-compose の postgres + redis を起動して dev container を app_nw に
+  # 接続するため、scripts/run-tests-local.sh をラッパとして経由する。
+  # `--no-verify` で bypass 可能 (緊急時のみ)。
+  - repo: local
+    hooks:
+      - id: pytest-local
+        name: pytest local gate (apps/ + config/)
+        entry: scripts/run-tests-local.sh
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+        # postgres + redis 起動 + network attach + 452 件 pytest で
+        # 通常 ~70-90 秒。1 件 fail で stop (--ff -x)。
