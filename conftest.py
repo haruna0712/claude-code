@@ -114,3 +114,39 @@ def freezer() -> Iterator:
 # TODO(P1-07): TweetFactory も同様に apps/tweets の model 実装後に追加する。
 # いまは import 時に app registry が整わないと DjangoModelFactory を定義できない
 # ため、プレースホルダのコメントのみ残す。
+
+
+# -----------------------------------------------------------------------------
+# Phase 2 共通 fixtures (P2-20)
+# -----------------------------------------------------------------------------
+# TL / リアクション / 検索 で使う共有 fixture。各 app の test 側で
+# `def test_xxx(redis_clean, eager_celery): ...` のように受け取る。
+
+
+@pytest.fixture
+def redis_clean() -> Iterator[None]:
+    """各テスト前後で Redis を初期化する fixture。
+
+    実機 Redis を使う統合テスト用。fakeredis に差し替えて完全分離する場合は
+    `tests/integration/conftest.py` レベルで monkeypatch する。
+
+    P2-08 (TL Redis ZSET) / P2-09 (trending tags) / P2-04 (reactions counter)
+    のテストで使う前提で先出ししておく。
+    """
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()
+
+
+@pytest.fixture
+def eager_celery(settings) -> Iterator[None]:
+    """Celery タスクを同期実行する fixture。
+
+    OGP 取得 (P2-07) / TL 配信 (P2-08) / トレンド集計 (P2-09) など Celery 経由
+    の処理を unit test で検証する際に使う。
+    """
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    settings.CELERY_TASK_EAGER_PROPAGATES = True
+    yield
