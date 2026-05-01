@@ -12,6 +12,7 @@ import Link from "next/link";
 import React, { useMemo, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import ReactionBar from "@/components/reactions/ReactionBar";
+import ExpandableBody from "@/components/timeline/ExpandableBody";
 import PostDialog from "@/components/tweets/PostDialog";
 import RepostButton from "@/components/tweets/RepostButton";
 import type { TweetSummary } from "@/lib/api/tweets";
@@ -113,10 +114,11 @@ export default function TweetCard({ tweet }: TweetCardProps) {
 				</div>
 			</header>
 
-			{/* Tweet body — DOMPurify sanitized HTML */}
-			<div
+			{/* Tweet body — DOMPurify sanitized HTML, P2-18 expandable. */}
+			<ExpandableBody
+				html={safeHtml}
+				charCount={tweet.char_count}
 				className="prose prose-sm dark:prose-invert max-w-none text-sm text-foreground"
-				dangerouslySetInnerHTML={{ __html: safeHtml }}
 			/>
 
 			{/* Images grid (up to 4 images) */}
