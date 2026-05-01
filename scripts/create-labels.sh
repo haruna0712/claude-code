@@ -33,6 +33,8 @@ create_label "type:docs"     "0075CA" "ドキュメント"
 create_label "type:infra"    "5319E7" "インフラ・Terraform"
 create_label "type:ci"       "8B5CF6" "GitHub Actions / pre-commit"
 create_label "type:chore"    "C5DEF5" "ビルド・依存管理"
+create_label "type:test"     "A2EEEF" "テスト追加・E2E・QA"
+create_label "type:deploy"   "006B75" "デプロイ作業"
 
 # area
 echo "[area]"
@@ -54,6 +56,11 @@ create_label "area:bots"          "1F6FEB" "Bot"
 create_label "area:billing"       "1F6FEB" "課金・Stripe"
 create_label "area:a11y"          "1F6FEB" "アクセシビリティ"
 create_label "area:seo"           "1F6FEB" "SEO"
+create_label "area:realtime"      "1F6FEB" "WebSocket / Channels"
+create_label "area:storage"       "1F6FEB" "S3 / メディア"
+create_label "area:observability" "1F6FEB" "ログ / メトリクス / アラート"
+create_label "area:security"      "1F6FEB" "認証認可・OWASP"
+create_label "area:e2e"           "1F6FEB" "Playwright E2E"
 
 # priority
 echo "[priority]"
