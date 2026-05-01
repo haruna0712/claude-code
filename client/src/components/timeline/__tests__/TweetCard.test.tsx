@@ -203,9 +203,12 @@ describe("TweetCard — action buttons (placeholder)", () => {
 		).toBeInTheDocument();
 	});
 
-	it("renders like button with aria-label", () => {
+	it("renders ReactionBar trigger in the footer (P2-14 wires the bar)", () => {
 		render(<TweetCard tweet={BASE_TWEET} />);
-		expect(screen.getByRole("button", { name: /いいね/i })).toBeInTheDocument();
+		// ReactionBar exposes the trigger via aria-label="リアクション"
+		expect(
+			screen.getByRole("button", { name: /リアクション/ }),
+		).toBeInTheDocument();
 	});
 
 	it("action buttons are keyboard accessible (focusable)", () => {
@@ -291,14 +294,16 @@ describe("TweetCard — accessibility (review fixes)", () => {
 		expect(img?.getAttribute("height")).toBe("600");
 	});
 
-	it("placeholder action buttons announce aria-disabled (not silent no-ops)", () => {
+	it("reply / retweet placeholders still announce aria-disabled (P2-15 wires those)", () => {
 		render(<TweetCard tweet={BASE_TWEET} />);
 		const reply = screen.getByRole("button", { name: /リプライ/i });
 		const retweet = screen.getByRole("button", { name: /リツイート/i });
-		const like = screen.getByRole("button", { name: /いいね/i });
-		[reply, retweet, like].forEach((btn) => {
+		[reply, retweet].forEach((btn) => {
 			expect(btn.getAttribute("aria-disabled")).toBe("true");
 			expect(btn.getAttribute("title")).toMatch(/まもなく追加/);
 		});
+		// Reaction button is now interactive (P2-14) so it should NOT be aria-disabled.
+		const reaction = screen.getByRole("button", { name: /リアクション/ });
+		expect(reaction.getAttribute("aria-disabled")).toBeNull();
 	});
 });

@@ -11,6 +11,7 @@
 import Link from "next/link";
 import React, { useMemo } from "react";
 import DOMPurify from "isomorphic-dompurify";
+import ReactionBar from "@/components/reactions/ReactionBar";
 import type { TweetSummary } from "@/lib/api/tweets";
 import { formatRelativeTime } from "@/lib/timeline/formatTime";
 
@@ -199,28 +200,7 @@ export default function TweetCard({ tweet }: TweetCardProps) {
 					<span>リツイート</span>
 				</button>
 
-				<button
-					type="button"
-					aria-disabled="true"
-					title="この機能はまもなく追加されます"
-					className="flex items-center gap-1 min-h-[32px] px-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-				>
-					<svg
-						className="size-4"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						strokeWidth={1.5}
-						aria-hidden="true"
-					>
-						<path
-							strokeLinecap="round"
-							strokeLinejoin="round"
-							d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
-						/>
-					</svg>
-					<span>いいね</span>
-				</button>
+				<ReactionBar tweetId={tweet.id} />
 			</footer>
 		</article>
 	);

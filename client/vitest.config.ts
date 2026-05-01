@@ -25,6 +25,7 @@ export default defineConfig({
 				"src/components/sidebar/**/*.tsx",
 				"src/components/explore/**/*.tsx",
 				"src/components/search/**/*.tsx",
+				"src/components/reactions/**/*.tsx",
 			],
 			exclude: [
 				"src/lib/api/**/__tests__/**",
