@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
+import { sanitizeTweetHtml } from "@/lib/sanitize/sanitizeTweetHtml";
 
 interface TagDetail {
 	name: string;
@@ -122,7 +123,9 @@ export default async function TagPage({ params }: PageProps) {
 										</div>
 										<div
 											className="prose prose-sm dark:prose-invert max-w-none"
-											dangerouslySetInnerHTML={{ __html: t.html }}
+											dangerouslySetInnerHTML={{
+												__html: sanitizeTweetHtml(t.html),
+											}}
 										/>
 										<time
 											dateTime={t.created_at}

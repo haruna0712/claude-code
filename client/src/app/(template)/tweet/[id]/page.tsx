@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
 import { stringifyJsonLd } from "@/lib/json-ld";
+import { sanitizeTweetHtml } from "@/lib/sanitize/sanitizeTweetHtml";
 
 interface PageProps {
 	params: { id: string };
@@ -144,9 +145,9 @@ export default async function TweetDetailPage({ params }: PageProps) {
 
 				<div
 					className="prose prose-sm dark:prose-invert max-w-none"
-					// Server-rendered Markdown via apps/tweets/rendering.render_markdown.
-					// bleach already sanitizes on the backend, so this string is safe.
-					dangerouslySetInnerHTML={{ __html: tweet.html }}
+					// Backend (markdown2 + bleach) sanitizes on write, but client-side
+					// sanitize is a mandatory second layer (SPEC sec CRITICAL #2).
+					dangerouslySetInnerHTML={{ __html: sanitizeTweetHtml(tweet.html) }}
 				/>
 
 				{tweet.images.length > 0 && (
