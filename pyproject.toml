@@ -11,19 +11,23 @@ requires-python = ">=3.12"
 #   (psycopg2-binary) を要求するので service container が必須。
 # - --reuse-db は高速化のための既定。CI では --create-db を明示して打ち消す。
 # - --cov=apps --cov=config で apps/ と config/ 双方をカバレッジ対象にする。
-#   まだレポートを生成するだけで gate にはしない (CI 側で --cov-fail-under=80)。
+# - --cov-fail-under は **退行検知** ライン (現状 ~30%)。Phase 2 で各 app が
+#   テストを揃えていく中で順次引き上げ、Phase 2 完了時に 80% へ移行する
+#   (P2-20 follow-up Issue)。即 80% 強制すると Phase 1 段階の現状で CI が
+#   即 fail するため段階的に上げる方針。
 # - filterwarnings は Django / DRF 内部の DeprecationWarning を抑制するだけ。
 #   プロジェクト自前コードの warning は握りつぶさない (default のまま表示)。
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.local"
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
-addopts = "--reuse-db --cov=apps --cov=config --cov-report=term-missing --cov-report=xml"
+addopts = "--reuse-db --cov=apps --cov=config --cov-report=term-missing --cov-report=xml --cov-fail-under=29"
 testpaths = ["apps", "config"]
 # カスタムマーカー。未登録だと `PytestUnknownMarkWarning` が出て `-W error` 環境で
 # 詰まるため、ここで明示しておく (P1-03 review HIGH 対応)。
 markers = [
     "unit: unit tests",
     "integration: integration tests",
+    "slow: slow tests (>2s) — excluded from PR fast feedback, run on main only",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:django.*",
