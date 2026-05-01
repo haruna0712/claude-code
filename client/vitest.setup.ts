@@ -1,6 +1,7 @@
 // vitest setup file — runs once before each test file.
 // Keep it intentionally small. Per-test setup belongs in the test file.
 
+import "@testing-library/jest-dom";
 import { afterEach, beforeEach } from "vitest";
 
 // Clear cookies between tests so CSRF / auth state never leaks.

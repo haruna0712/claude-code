@@ -16,6 +16,21 @@ const nextConfig = {
 	// `.next/standalone` をコピーするため必要。
 	// https://nextjs.org/docs/app/api-reference/config/next-config-js/output
 	output: "standalone",
+	webpack: (config, { isServer }) => {
+		if (isServer) {
+			// isomorphic-dompurify pulls in jsdom on the server side (Node.js).
+			// jsdom uses undici with private class fields syntax that Next.js's
+			// webpack cannot parse. Since TweetCard is "use client" and DOMPurify
+			// only runs in the browser, we alias the server-side import to the
+			// pure browser build of dompurify. The jsdom dependency of
+			// isomorphic-dompurify is never loaded on the client bundle.
+			config.resolve.alias = {
+				...config.resolve.alias,
+				"isomorphic-dompurify": "dompurify",
+			};
+		}
+		return config;
+	},
 };
 
 // Sentry webpack plugin options. DSN やプロジェクト設定は env 経由。

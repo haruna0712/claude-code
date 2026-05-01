@@ -13,11 +13,21 @@ export default defineConfig({
 		coverage: {
 			provider: "v8",
 			reporter: ["text", "json", "html", "lcov"],
-			// Scope coverage to modules that ship tests in this PR. As new
-			// modules are added (UI components in #122 onward), extend this
-			// include list rather than loosening the global gate.
-			include: ["src/lib/api/**/*.ts"],
-			exclude: ["src/lib/api/**/__tests__/**", "src/lib/api/**/*.d.ts"],
+			// Scope coverage to modules that ship tests in this PR (P2-13). As new
+			// modules are added, extend this include list rather than loosening the
+			// global gate.
+			include: [
+				"src/lib/api/**/*.ts",
+				"src/lib/api/**/*.tsx",
+				"src/components/timeline/**/*.tsx",
+				"src/lib/timeline/**/*.ts",
+			],
+			exclude: [
+				"src/lib/api/**/__tests__/**",
+				"src/components/**/__tests__/**",
+				"src/lib/timeline/**/__tests__/**",
+				"**/*.d.ts",
+			],
 			thresholds: {
 				lines: 80,
 				functions: 80,
@@ -30,5 +40,11 @@ export default defineConfig({
 		alias: {
 			"@": path.resolve(__dirname, "./src"),
 		},
+	},
+	esbuild: {
+		// Use the React automatic JSX runtime so test files do not need to
+		// manually import React. This mirrors what Next.js configures for
+		// production builds.
+		jsx: "automatic",
 	},
 });

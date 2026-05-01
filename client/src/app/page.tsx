@@ -1,10 +1,14 @@
-// Phase 1 ランディングページ (P1-23 残作業: P0.5 smoke page を置換)。
+// ホームページ (P2-13 / Issue #186).
 //
-// stg / 本番ともに `/` で表示される。未ログインの訪問者にプロダクト紹介と
-// ログイン/新規登録の入口を提示する。Phase 2 (P2-13 ホーム TL) が実装され
-// たら、ログイン済ユーザは TL にリダイレクトする条件分岐を追加する。
+// 未ログイン → 既存 Phase 1 ランディングを表示。
+// ログイン済 → HomeFeed (recommended/following タイムライン) を表示。
+// 認証以外のエラー (network / 500) → ランディングにフォールバック。
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ApiServerError, serverFetch } from "@/lib/api/server";
+import type { CurrentUser } from "@/lib/api/users";
+import type { HomeTimelinePage } from "@/lib/api/timeline";
+import HomeFeed from "@/components/timeline/HomeFeed";
 
 export const metadata: Metadata = {
 	title: "エンジニア特化型 SNS",
@@ -13,7 +17,11 @@ export const metadata: Metadata = {
 		"OGP やシンタックスハイライトで読みやすく共有できます。",
 };
 
-export default function LandingPage() {
+// ---------------------------------------------------------------------------
+// ランディングページコンポーネント (未ログイン時 & フォールバック)
+// ---------------------------------------------------------------------------
+
+function Landing() {
 	return (
 		<main className="min-h-screen flex items-center justify-center px-6 py-16 bg-baby_richBlack">
 			<div className="max-w-2xl text-center">
@@ -48,6 +56,51 @@ export default function LandingPage() {
 					stg 環境 / Phase 1 ランディング (Phase 2 でホーム TL に置換予定)
 				</p>
 			</div>
+		</main>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// メインページコンポーネント
+// ---------------------------------------------------------------------------
+
+export default async function HomePage({
+	searchParams,
+}: {
+	searchParams?: { tab?: string };
+}) {
+	// SSR でログイン状態を確認する。401 = 未ログイン、他エラーはフォールバック。
+	let user: CurrentUser | null = null;
+	try {
+		user = await serverFetch<CurrentUser>("/users/me/");
+	} catch (err) {
+		if (err instanceof ApiServerError && err.status === 401) {
+			// 未ログイン — ランディングを表示
+			return <Landing />;
+		}
+		// network / 500 などは安全にランディングにフォールバック
+		return <Landing />;
+	}
+
+	// ログイン済み — タイムラインをプリフェッチ
+	const rawTab = searchParams?.tab;
+	const initialTab =
+		rawTab === "following" ? ("following" as const) : ("recommended" as const);
+
+	let initialTweets: HomeTimelinePage["results"] = [];
+	try {
+		const data = await serverFetch<HomeTimelinePage>(
+			`/timeline/home/?limit=20`,
+		);
+		initialTweets = data.results;
+	} catch {
+		// タイムライン取得失敗はクライアント側で再フェッチすればよい
+		initialTweets = [];
+	}
+
+	return (
+		<main className="min-h-screen max-w-2xl mx-auto">
+			<HomeFeed initialTab={initialTab} initialTweets={initialTweets} />
 		</main>
 	);
 }
