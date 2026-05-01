@@ -10,7 +10,7 @@
  */
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 
 interface SearchBoxProps {
 	initialValue?: string;
@@ -29,7 +29,7 @@ export default function SearchBox({ initialValue = "" }: SearchBoxProps) {
 	const router = useRouter();
 	const [value, setValue] = useState(initialValue);
 
-	const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+	const onSubmit = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		const trimmed = value.trim();
 		if (!trimmed) return;
