@@ -69,8 +69,19 @@ gh issue list --milestone "<現 Phase のマイルストーン名>" --state open
 8. ドキュメント更新  → doc-updater エージェント または該当 docs/* を直接編集
 9. Conventional Commit → squash merge 前提で 1 PR = 意味のある 1 機能
 10. PR 作成          → gh pr create、CI / サブエージェント自動レビュー待ち
-11. マージ後         → cd /workspace && git worktree remove ... && git branch -d ...
+11. CI 緑 + レビュー無問題 → そのまま `gh pr merge --squash` で **マージしてよい** (人間レビュー待ち不要、ただし下記「マージ前ブロッカー」確認)
+12. マージ後         → cd /workspace && git worktree remove ... && git branch -d ...
 ```
+
+### 4.1.1 マージ前ブロッカー (どれか 1 つでも該当ならマージ停止 → ハルナさんに相談)
+
+- CI が **fail** している (lint / test / type / build のいずれか)
+- サブエージェントが **CRITICAL** を出して未解消
+- terraform apply / 本番 secret 書き込み / DB データ移行 / 認証/課金/モデレーション周りで設計判断を要する
+- スコープが膨れて **500 行を大幅に超え**、レビュー難易度が上がっている
+- 元実装が **Revert 済**で、今回が再投入 (本人レビュー強く推奨 = ハルナさんに最終判断を仰ぐ)
+
+それ以外は **テスト緑なら自動でマージ → 自動で push** してよい。ハルナさんが事後に確認する運用。
 
 ### 4.2 レビューエージェント選択マトリクス
 
@@ -86,7 +97,17 @@ gh issue list --milestone "<現 Phase のマイルストーン名>" --state open
 
 → 独立して読めるレビューは **必ず 1 メッセージ内で parallel に並列起動**。逐次起動禁止。
 
-### 4.3 共通ルール
+### 4.3 Phase 開始時の Issue 起票完備（planner エージェント）
+
+**新しい Phase に着手する前に、その Phase で必要な Issue が GitHub にすべて起票されている状態を作る。** 抜けがあると後から「あの機能が無いまま閉じた」になる。これを Claude が忘れないための運用:
+
+1. **`docs/issues/phase-<N>.md` のドラフトを精読**して、起票漏れがないか `gh issue list --milestone "Phase <N>: ..."` と突き合わせる
+2. ドラフト自体が不完全な場合は **`planner` エージェント** を呼んで Phase スコープを SPEC.md / ROADMAP.md / ARCHITECTURE.md と照合し、不足 Issue ドラフトを生成させる
+3. `./scripts/create-issues.sh phase-<N>` で一括起票、または個別 `gh issue create`
+4. 「先送り」を意図的に決めた Issue も **明示的に起票** して `priority:low` などラベル付けする (フリーズ抜け防止)
+5. これが終わるまで Phase の実装着手しない
+
+### 4.4 共通ルール
 
 - **Issue-First**: コード着手前に GitHub Issue。1 Issue = 1 PR = 1 feature branch
 - **着手前に必ず読む**: `docs/issues/phase-<現Phase>.md` と関連 SPEC 章。**いきなり書き始めない**
