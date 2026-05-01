@@ -8,11 +8,16 @@ RUN apk add --no-cache libc6-compat
 ARG APP_HOME=/app
 WORKDIR ${APP_HOME}
 
-COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
+COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* .npmrc* ./
 
+# --legacy-peer-deps mirrors the local install policy declared in
+# client/.npmrc. Without this flag npm ci aborts on peer dependency
+# conflicts that the lock file was generated under (eslint-config-standard ↔
+# eslint-plugin-n versions, axios update on #199, sidebar/explore deps).
+# Keeping the .npmrc COPY above as belt-and-braces.
 RUN \
   if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm ci; \
+  elif [ -f package-lock.json ]; then npm ci --legacy-peer-deps; \
   elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i; \
   else echo "Lockfile not found." && exit 1; \
   fi
