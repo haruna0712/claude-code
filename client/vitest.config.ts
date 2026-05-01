@@ -13,15 +13,16 @@ export default defineConfig({
 		coverage: {
 			provider: "v8",
 			reporter: ["text", "json", "html", "lcov"],
-			// Scope coverage to modules that ship tests in this PR (P2-13, #198). As new
-			// modules are added, extend this include list rather than loosening the
-			// global gate.
+			// Scope coverage to modules that ship tests in this PR (P2-13 / #198 /
+			// P2-17). As new modules are added, extend this include list rather
+			// than loosening the global gate.
 			include: [
 				"src/lib/api/**/*.ts",
 				"src/lib/api/**/*.tsx",
 				"src/components/timeline/**/*.tsx",
 				"src/lib/timeline/**/*.ts",
 				"src/lib/sanitize/**/*.ts",
+				"src/components/sidebar/**/*.tsx",
 			],
 			exclude: [
 				"src/lib/api/**/__tests__/**",
