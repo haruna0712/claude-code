@@ -119,7 +119,17 @@ LOCAL_APPS = [
     "apps.search",
 ]
 
-INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+# --- Channels / Daphne (P3-02 / Issue #227) ---
+# `daphne` は INSTALLED_APPS の **先頭** に置く必要がある (Twisted reactor を他の
+# import より前に固定する。Daphne の AppConfig.ready() がそれを保証する)。
+# `channels` も同様の理由で上位に置く。詳細:
+# https://channels.readthedocs.io/en/stable/installation.html
+CHANNELS_APPS = [
+    "daphne",
+    "channels",
+]
+
+INSTALLED_APPS = CHANNELS_APPS + DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
@@ -254,6 +264,45 @@ CELERY_TASK_SOFT_TIME_LIMIT = 60
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
 CELERY_WORKERS_SEND_TASKS_EVENTS = True
+
+# --- Django Channels (P3-02 / Issue #227) ---
+# Phase 3 の DM real-time 配信で使用。Phase 4A 通知 / 将来の WebSocket 用途も同じ
+# channel layer を共有する。
+#
+# REDIS_URL は Celery 用 (DB 0) と同じインスタンスを共有する想定。本番は ElastiCache
+# (Multi-AZ replica 1) に向く。capacity=1500 は 1 group へのバッファ上限、expiry=60
+# はメッセージの TTL 秒。共に Channels の defaults よりやや余裕を持たせた値。
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [getenv("REDIS_URL", "redis://redis:6379/0")],
+            "capacity": 1500,
+            "expiry": 60,
+        },
+    },
+}
+
+# WebSocket は CSRF token を持たないため、``Origin`` ヘッダの allowlist が
+# 唯一の cross-site 防御。production / stg / local で値を分離する。
+# 環境変数 DJANGO_CHANNELS_ALLOWED_ORIGINS は CSV 形式
+# ("https://stg.codeplace.me,http://localhost:8080")。空なら local 既定値を使う。
+_raw_allowed_origins = getenv("DJANGO_CHANNELS_ALLOWED_ORIGINS", "")
+if _raw_allowed_origins:
+    CHANNELS_ALLOWED_ORIGINS = [
+        origin.strip() for origin in _raw_allowed_origins.split(",") if origin.strip()
+    ]
+else:
+    # local 開発用の既定値。stg/prod は env で必ず上書きする (下の fail-fast 参照)。
+    CHANNELS_ALLOWED_ORIGINS = ["http://localhost:8080", "http://localhost:3000"]
+
+if SENTRY_ENVIRONMENT in ("stg", "production") and not _raw_allowed_origins:
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured(
+        f"DJANGO_CHANNELS_ALLOWED_ORIGINS must be set in {SENTRY_ENVIRONMENT} "
+        "(WebSocket Origin allowlist; sec CRITICAL P3-02)."
+    )
 
 # P1-01 + ADR-0003: HttpOnly Cookie で JWT を運搬する設定。
 # Secure は stg/prod で True、local では False (mailpit 等で HTTP 疎通用)。
