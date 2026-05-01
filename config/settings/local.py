@@ -34,7 +34,10 @@ else:
     CSRF_TRUSTED_ORIGINS = ["http://localhost:8080"]
 
 ADMIN_URL = getenv("DJANGO_ADMIN_URL")
-EMAIL_BACKEND = "djcelery_email.backends.CeleryEmailBackend"
+# stg では Mailgun 未配線のため `EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend`
+# を ECS env で渡してアクティベーション URL を CloudWatch Logs に出力させる用途で
+# env override を許す。デフォルトは djcelery_email (ローカル + 将来の Mailgun 経由)。
+EMAIL_BACKEND = getenv("EMAIL_BACKEND", "djcelery_email.backends.CeleryEmailBackend")
 EMAIL_HOST = getenv("EMAIL_HOST")
 EMAIL_PORT = getenv("EMAIL_PORT")
 DEFAULT_FROM_EMAIL = getenv("DEFAULT_FROM_EMAIL")

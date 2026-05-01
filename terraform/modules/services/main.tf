@@ -49,6 +49,13 @@ locals {
     # `*` を追加して DisallowedHost を回避。Phase 2 で Django 側に health-check
     # 専用 middleware (ALLOWED_HOSTS bypass) を入れたら厳密化する。
     { name = "ALLOWED_HOSTS", value = "${var.domain},*" },
+    # Mailgun secret (`sns/stg/mailgun/api-key`) が placeholder のままでメール
+    # 配信できないため、stg は console backend で送信内容を CloudWatch Logs に
+    # ダンプする運用にしてある。アクティベーション URL は
+    # `aws logs tail /ecs/sns-stg/django --since 5m | grep activate/`
+    # で取得して手動で開く。実 Mailgun 設定後はこの env を消せば djcelery_email
+    # 経由で SMTP 送信に戻る (config/settings/local.py で env override 対応済)。
+    { name = "EMAIL_BACKEND", value = "django.core.mail.backends.console.EmailBackend" },
   ]
 
   # Django / Celery 共通の機密注入。ARN を直接 secrets ブロックに渡す。
