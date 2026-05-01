@@ -56,9 +56,14 @@ describe("TimelineTabs — rendering", () => {
 		expect(followingTab).toHaveAttribute("aria-selected", "true");
 	});
 
-	it("has a nav element for semantic HTML", () => {
+	it("labels the tablist for screen readers", () => {
 		render(<TimelineTabs activeTab="recommended" onTabChange={vi.fn()} />);
-		expect(document.querySelector("nav")).toBeTruthy();
+		// Radix supplies role=tablist; we attach aria-label directly so SRs
+		// announce the group's purpose without a redundant <nav> wrapper.
+		expect(screen.getByRole("tablist")).toHaveAttribute(
+			"aria-label",
+			"タイムラインタブ",
+		);
 	});
 });
 
@@ -66,6 +71,7 @@ describe("TimelineTabs — interaction", () => {
 	beforeEach(() => {
 		mockSearchParams = new URLSearchParams();
 		mockPush.mockClear();
+		mockReplace.mockClear();
 	});
 
 	it("calls onTabChange with 'following' when フォロー中 tab is clicked", async () => {
@@ -84,16 +90,18 @@ describe("TimelineTabs — interaction", () => {
 		expect(onTabChange).toHaveBeenCalledWith("recommended");
 	});
 
-	it("updates URL with ?tab=following when フォロー中 is clicked", async () => {
+	it("uses router.replace (not push) when フォロー中 is clicked", async () => {
 		render(<TimelineTabs activeTab="recommended" onTabChange={vi.fn()} />);
 		await userEvent.click(screen.getByRole("tab", { name: /フォロー中/i }));
-		expect(mockPush).toHaveBeenCalledWith("/?tab=following");
+		expect(mockReplace).toHaveBeenCalledWith("/?tab=following");
+		expect(mockPush).not.toHaveBeenCalled();
 	});
 
-	it("updates URL with ?tab=recommended when おすすめ is clicked", async () => {
+	it("uses router.replace when おすすめ is clicked", async () => {
 		render(<TimelineTabs activeTab="following" onTabChange={vi.fn()} />);
 		await userEvent.click(screen.getByRole("tab", { name: /おすすめ/i }));
-		expect(mockPush).toHaveBeenCalledWith("/?tab=recommended");
+		expect(mockReplace).toHaveBeenCalledWith("/?tab=recommended");
+		expect(mockPush).not.toHaveBeenCalled();
 	});
 });
 

@@ -34,20 +34,39 @@ export default function TweetCard({ tweet }: TweetCardProps) {
 		[tweet.created_at],
 	);
 
+	// Absolute timestamp for screen readers; the visible "2h" alone reads
+	// poorly (e.g. JP SR speaks "ニエイチ"). Always pair via aria-label.
+	const absoluteTime = useMemo(
+		() =>
+			new Date(tweet.created_at).toLocaleString("ja-JP", {
+				year: "numeric",
+				month: "long",
+				day: "numeric",
+				hour: "2-digit",
+				minute: "2-digit",
+			}),
+		[tweet.created_at],
+	);
+
+	const authorName = tweet.author_display_name ?? tweet.author_handle;
+
 	const hasImages = tweet.images.length > 0;
 	const hasTags = tweet.tags.length > 0;
 
 	return (
 		<article
-			className="flex flex-col gap-3 border-b border-border px-4 py-3 hover:bg-muted/40 transition-colors"
-			aria-label={`${tweet.author_display_name ?? tweet.author_handle} のツイート`}
+			// scroll-mt-12 keeps focused articles visible below the sticky tab bar
+			// (WCAG 2.2 SC 2.4.11 Focus Not Obscured). Tab bar height is 3rem.
+			className="flex flex-col gap-3 border-b border-border px-4 py-3 scroll-mt-12 hover:bg-muted/40 transition-colors"
+			aria-label={`${authorName} のツイート`}
 		>
 			{/* Author row */}
 			<header className="flex items-center gap-3">
 				{tweet.author_avatar_url ? (
 					<img
 						src={tweet.author_avatar_url}
-						alt={`${tweet.author_display_name ?? tweet.author_handle} のアバター`}
+						alt=""
+						aria-hidden="true"
 						className="size-10 shrink-0 rounded-full object-cover"
 					/>
 				) : (
@@ -56,15 +75,13 @@ export default function TweetCard({ tweet }: TweetCardProps) {
 						className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground"
 						aria-hidden="true"
 					>
-						{(tweet.author_display_name ?? tweet.author_handle)
-							.charAt(0)
-							.toUpperCase()}
+						{authorName.charAt(0).toUpperCase()}
 					</div>
 				)}
 
 				<div className="flex min-w-0 flex-col">
 					<span className="font-semibold text-sm text-foreground truncate">
-						{tweet.author_display_name ?? tweet.author_handle}
+						{authorName}
 					</span>
 					<span className="text-xs text-muted-foreground">
 						@{tweet.author_handle}
@@ -73,12 +90,16 @@ export default function TweetCard({ tweet }: TweetCardProps) {
 
 				<div className="ml-auto flex shrink-0 items-center gap-2">
 					{tweet.edit_count > 0 && (
-						<span className="text-xs text-muted-foreground border border-muted-foreground/30 rounded px-1 py-0.5">
+						<span
+							aria-label="この投稿は編集されています"
+							className="text-xs text-muted-foreground border border-muted-foreground/30 rounded px-1 py-0.5"
+						>
 							編集済
 						</span>
 					)}
 					<time
 						dateTime={tweet.created_at}
+						aria-label={absoluteTime}
 						className="text-xs text-muted-foreground"
 					>
 						{relativeTime}
@@ -100,9 +121,13 @@ export default function TweetCard({ tweet }: TweetCardProps) {
 				>
 					{tweet.images.slice(0, 4).map((img, idx) => (
 						<img
-							key={idx}
+							key={img.image_url}
 							src={img.image_url}
-							alt=""
+							// Until Phase 1 backfill ships per-image alt_text, fall back to a
+							// descriptive label so SR users know an image exists. A11Y.md §2.1.
+							alt={`${authorName} のツイートの添付画像 ${idx + 1}`}
+							width={img.width}
+							height={img.height}
 							className="w-full rounded-md object-cover max-h-64"
 						/>
 					))}
@@ -125,12 +150,14 @@ export default function TweetCard({ tweet }: TweetCardProps) {
 				</div>
 			)}
 
-			{/* Action buttons — UI placeholder only (onClick logic in P2-14/P2-15) */}
+			{/* Action buttons — UI placeholder only (onClick wired in P2-14/P2-15).
+			    aria-disabled + title gives SR users notice instead of silent no-op. */}
 			<footer className="mt-1 flex items-center gap-4">
 				<button
 					type="button"
-					aria-label="リプライ"
-					className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+					aria-disabled="true"
+					title="この機能はまもなく追加されます"
+					className="flex items-center gap-1 min-h-[32px] px-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
 				>
 					<svg
 						className="size-4"
@@ -151,8 +178,9 @@ export default function TweetCard({ tweet }: TweetCardProps) {
 
 				<button
 					type="button"
-					aria-label="リツイート"
-					className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+					aria-disabled="true"
+					title="この機能はまもなく追加されます"
+					className="flex items-center gap-1 min-h-[32px] px-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
 				>
 					<svg
 						className="size-4"
@@ -173,8 +201,9 @@ export default function TweetCard({ tweet }: TweetCardProps) {
 
 				<button
 					type="button"
-					aria-label="いいね"
-					className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+					aria-disabled="true"
+					title="この機能はまもなく追加されます"
+					className="flex items-center gap-1 min-h-[32px] px-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
 				>
 					<svg
 						className="size-4"

@@ -63,8 +63,12 @@ describe("TweetCard — basic rendering", () => {
 
 	it("renders avatar image when avatar_url is provided", () => {
 		render(<TweetCard tweet={BASE_TWEET} />);
-		const img = screen.getByRole("img", { name: /alice/i });
-		expect(img).toBeInTheDocument();
+		// Avatar is decorative (aria-hidden) since the author name is announced
+		// by the adjacent <span>; assert presence by src instead of role.
+		const avatar = document.querySelector(
+			'img[aria-hidden="true"][src*="avatar.png"]',
+		);
+		expect(avatar).toBeTruthy();
 	});
 
 	it("renders placeholder when avatar_url is missing", () => {
@@ -235,5 +239,66 @@ describe("TweetCard — edge cases", () => {
 		const tweet = { ...BASE_TWEET, tags: ["c++", "node.js"] };
 		render(<TweetCard tweet={tweet} />);
 		expect(screen.getByText(/#c\+\+/i)).toBeInTheDocument();
+	});
+});
+
+describe("TweetCard — accessibility (review fixes)", () => {
+	it("time element has aria-label with absolute timestamp for screen readers", () => {
+		render(<TweetCard tweet={BASE_TWEET} />);
+		const time = document.querySelector("time");
+		expect(time).toBeTruthy();
+		// SR speaks the absolute label, not the visible relative "2h" string
+		expect(time?.getAttribute("aria-label")).toBeTruthy();
+		expect(time?.getAttribute("aria-label")).toMatch(/2024/);
+	});
+
+	it("edited badge has aria-label so screen readers announce its meaning", () => {
+		const tweet = { ...BASE_TWEET, edit_count: 2 };
+		render(<TweetCard tweet={tweet} />);
+		expect(
+			screen.getByLabelText("この投稿は編集されています"),
+		).toBeInTheDocument();
+	});
+
+	it("attached images have descriptive alt text fallback (not empty)", () => {
+		const tweet = {
+			...BASE_TWEET,
+			images: [
+				{ image_url: "https://example.com/i1.png", width: 800, height: 600 },
+				{ image_url: "https://example.com/i2.png", width: 400, height: 300 },
+			],
+		};
+		render(<TweetCard tweet={tweet} />);
+		const imgs = document.querySelectorAll('[data-testid="tweet-images"] img');
+		expect(imgs).toHaveLength(2);
+		// Both must have non-empty alt — content images, not decorative
+		imgs.forEach((img) => {
+			expect(img.getAttribute("alt")).toBeTruthy();
+			expect(img.getAttribute("alt")).not.toBe("");
+		});
+	});
+
+	it("attached images expose width/height to prevent layout shift (CLS)", () => {
+		const tweet = {
+			...BASE_TWEET,
+			images: [
+				{ image_url: "https://example.com/i1.png", width: 800, height: 600 },
+			],
+		};
+		render(<TweetCard tweet={tweet} />);
+		const img = document.querySelector('[data-testid="tweet-images"] img');
+		expect(img?.getAttribute("width")).toBe("800");
+		expect(img?.getAttribute("height")).toBe("600");
+	});
+
+	it("placeholder action buttons announce aria-disabled (not silent no-ops)", () => {
+		render(<TweetCard tweet={BASE_TWEET} />);
+		const reply = screen.getByRole("button", { name: /リプライ/i });
+		const retweet = screen.getByRole("button", { name: /リツイート/i });
+		const like = screen.getByRole("button", { name: /いいね/i });
+		[reply, retweet, like].forEach((btn) => {
+			expect(btn.getAttribute("aria-disabled")).toBe("true");
+			expect(btn.getAttribute("title")).toMatch(/まもなく追加/);
+		});
 	});
 });

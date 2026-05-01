@@ -23,23 +23,23 @@ export default function TimelineTabs({
 	const router = useRouter();
 
 	const handleTabChange = (value: string) => {
-		const tab = value as TabValue;
-		onTabChange(tab);
-		router.push(`/?tab=${tab}`);
+		// Reject any value Radix may emit that is not one of the known tabs.
+		if (value !== "recommended" && value !== "following") return;
+		onTabChange(value);
+		// router.replace avoids polluting history (URL ↔ state stay in sync on Back).
+		router.replace(`/?tab=${value}`);
 	};
 
 	return (
-		<nav aria-label="タイムラインタブ">
-			<Tabs value={activeTab} onValueChange={handleTabChange}>
-				<TabsList className="w-full">
-					<TabsTrigger value="recommended" className="flex-1">
-						おすすめ
-					</TabsTrigger>
-					<TabsTrigger value="following" className="flex-1">
-						フォロー中
-					</TabsTrigger>
-				</TabsList>
-			</Tabs>
-		</nav>
+		<Tabs value={activeTab} onValueChange={handleTabChange}>
+			<TabsList aria-label="タイムラインタブ" className="w-full">
+				<TabsTrigger value="recommended" className="flex-1">
+					おすすめ
+				</TabsTrigger>
+				<TabsTrigger value="following" className="flex-1">
+					フォロー中
+				</TabsTrigger>
+			</TabsList>
+		</Tabs>
 	);
 }

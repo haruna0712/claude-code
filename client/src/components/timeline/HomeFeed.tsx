@@ -9,7 +9,8 @@
  * backend cursor pagination tracked in P2-08).
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { toast } from "react-toastify";
 import TweetComposer from "@/components/tweets/TweetComposer";
 import TimelineTabs, {
 	type TabValue,
@@ -20,6 +21,9 @@ import type { TweetSummary } from "@/lib/api/tweets";
 
 const INITIAL_LIMIT = 20;
 const LIMIT_INCREMENT = 20;
+// Client-side cap so a misbehaving client cannot ask the backend for an
+// unbounded page. Real cursor pagination ships in the P2-08 follow-up.
+const MAX_LIMIT = 200;
 
 interface HomeFeedProps {
 	initialTab: TabValue;
@@ -45,22 +49,14 @@ export default function HomeFeed({ initialTab, initialTweets }: HomeFeedProps) {
 	);
 	const [limit, setLimit] = useState(INITIAL_LIMIT);
 	const [isLoading, setIsLoading] = useState(false);
-
-	const fetchTweets = useCallback(async (tab: TabValue, nextLimit: number) => {
-		setIsLoading(true);
-		try {
-			const data =
-				tab === "recommended"
-					? await fetchHomeTimeline(nextLimit)
-					: await fetchFollowingTimeline(nextLimit);
-
-			setTweets((prev) => dedupById([...prev, ...data.results]));
-		} finally {
-			setIsLoading(false);
-		}
-	}, []);
+	const [liveMessage, setLiveMessage] = useState("");
+	// Generation counter — each fetch claims a number; if a newer fetch starts,
+	// older in-flight responses no-op when they finally resolve. Prevents stale
+	// results from overwriting a fresh tab switch.
+	const fetchGeneration = useRef(0);
 
 	const handleTabChange = useCallback(async (tab: TabValue) => {
+		const myGen = ++fetchGeneration.current;
 		setActiveTab(tab);
 		setLimit(INITIAL_LIMIT);
 		setIsLoading(true);
@@ -70,24 +66,50 @@ export default function HomeFeed({ initialTab, initialTweets }: HomeFeedProps) {
 					? await fetchHomeTimeline(INITIAL_LIMIT)
 					: await fetchFollowingTimeline(INITIAL_LIMIT);
 
+			if (myGen !== fetchGeneration.current) return;
 			setTweets(dedupById(data.results));
+		} catch {
+			if (myGen !== fetchGeneration.current) return;
+			toast.error("タイムラインの取得に失敗しました");
 		} finally {
-			setIsLoading(false);
+			if (myGen === fetchGeneration.current) setIsLoading(false);
 		}
 	}, []);
 
 	const handleLoadMore = useCallback(async () => {
-		const nextLimit = limit + LIMIT_INCREMENT;
+		const nextLimit = Math.min(limit + LIMIT_INCREMENT, MAX_LIMIT);
+		if (nextLimit === limit) return;
+		const myGen = ++fetchGeneration.current;
 		setLimit(nextLimit);
-		await fetchTweets(activeTab, nextLimit);
-	}, [activeTab, limit, fetchTweets]);
+		setIsLoading(true);
+		try {
+			const data =
+				activeTab === "recommended"
+					? await fetchHomeTimeline(nextLimit)
+					: await fetchFollowingTimeline(nextLimit);
+
+			if (myGen !== fetchGeneration.current) return;
+			setTweets((prev) => dedupById([...prev, ...data.results]));
+		} catch {
+			if (myGen !== fetchGeneration.current) return;
+			toast.error("ツイートの追加読み込みに失敗しました");
+		} finally {
+			if (myGen === fetchGeneration.current) setIsLoading(false);
+		}
+	}, [activeTab, limit]);
 
 	const handlePosted = useCallback((tweet: TweetSummary) => {
 		setTweets((prev) => dedupById([tweet, ...prev]));
+		setLiveMessage("新しいツイートを投稿しました");
 	}, []);
 
 	return (
 		<div className="flex flex-col gap-0">
+			{/* SR-only live region for optimistic prepend announcement */}
+			<div role="status" aria-live="polite" className="sr-only">
+				{liveMessage}
+			</div>
+
 			{/* Tweet composer */}
 			<div className="px-4 py-3 border-b border-border">
 				<TweetComposer onPosted={handlePosted} />

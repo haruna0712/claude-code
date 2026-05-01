@@ -50,8 +50,9 @@ vi.mock("@/components/tweets/TweetComposer", () => ({
 
 // Mock next/navigation
 const mockPush = vi.fn();
+const mockReplace = vi.fn();
 vi.mock("next/navigation", () => ({
-	useRouter: () => ({ push: mockPush }),
+	useRouter: () => ({ push: mockPush, replace: mockReplace }),
 	usePathname: () => "/",
 	useSearchParams: () => new URLSearchParams(),
 }));
@@ -223,5 +224,96 @@ describe("HomeFeed — empty state", () => {
 	it("shows empty state message when no tweets", () => {
 		render(<HomeFeed initialTab="recommended" initialTweets={[]} />);
 		expect(screen.getByText(/ツイートがありません/i)).toBeInTheDocument();
+	});
+});
+
+describe("HomeFeed — review fixes", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("notifies user via toast when timeline fetch fails (not silent)", async () => {
+		const { toast } = await import("react-toastify");
+		vi.mocked(fetchFollowingTimeline).mockRejectedValueOnce(
+			new Error("network down"),
+		);
+
+		render(<HomeFeed initialTab="recommended" initialTweets={[]} />);
+		await userEvent.click(screen.getByRole("tab", { name: /フォロー中/i }));
+
+		await waitFor(() => {
+			expect(toast.error).toHaveBeenCalledWith(
+				expect.stringContaining("タイムラインの取得に失敗"),
+			);
+		});
+	});
+
+	it("notifies user via toast when load-more fails", async () => {
+		const { toast } = await import("react-toastify");
+		vi.mocked(fetchHomeTimeline).mockRejectedValueOnce(new Error("500"));
+
+		render(
+			<HomeFeed initialTab="recommended" initialTweets={INITIAL_TWEETS} />,
+		);
+		await userEvent.click(screen.getByRole("button", { name: /もっと見る/i }));
+
+		await waitFor(() => {
+			expect(toast.error).toHaveBeenCalledWith(
+				expect.stringContaining("追加読み込みに失敗"),
+			);
+		});
+	});
+
+	it("ignores stale tab fetch result when newer tab switch arrives", async () => {
+		// Fast tab → following returns slow with stale data;
+		// then user clicks back to recommended which returns fast.
+		// The stale "following" response must NOT overwrite the recommended list.
+		let resolveSlow: (v: { results: TweetSummary[] }) => void = () => {};
+		vi.mocked(fetchFollowingTimeline).mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveSlow = resolve;
+				}),
+		);
+		vi.mocked(fetchHomeTimeline).mockResolvedValue({
+			results: [makeTweet(99)],
+			cache_hit: true,
+		});
+
+		render(<HomeFeed initialTab="recommended" initialTweets={[]} />);
+
+		// 1. switch to following (slow, pending)
+		await userEvent.click(screen.getByRole("tab", { name: /フォロー中/i }));
+		// 2. immediately switch back to recommended (fast resolve)
+		await userEvent.click(screen.getByRole("tab", { name: /おすすめ/i }));
+		await waitFor(() => {
+			expect(fetchHomeTimeline).toHaveBeenCalled();
+		});
+
+		// 3. now resolve the stale following request
+		resolveSlow({ results: [makeTweet(500), makeTweet(501)] });
+
+		await waitFor(() => {
+			const articles = document.querySelectorAll("article");
+			// Only the fresh recommended result should be visible (id 99),
+			// not the stale following ids 500/501.
+			expect(articles.length).toBe(1);
+		});
+	});
+
+	it("announces optimistic prepend via aria-live region", async () => {
+		render(
+			<HomeFeed initialTab="recommended" initialTweets={INITIAL_TWEETS} />,
+		);
+
+		const live = document.querySelector('[role="status"][aria-live="polite"]');
+		expect(live).toBeTruthy();
+		expect(live?.textContent).toBe("");
+
+		await userEvent.click(screen.getByRole("button", { name: /post/i }));
+
+		await waitFor(() => {
+			expect(live?.textContent).toMatch(/新しいツイートを投稿/);
+		});
 	});
 });
