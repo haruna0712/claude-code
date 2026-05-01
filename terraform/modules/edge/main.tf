@@ -235,17 +235,27 @@ resource "aws_cloudfront_distribution" "this" {
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
   }
 
-  # -------- /_next/static/* → S3 static (long cache) --------
+  # -------- /_next/static/* → ALB (Next.js standalone server) --------
+  # 当初は S3 静的バケットに publish して CDN 配信する設計だったが、CD パイプライン
+  # に `aws s3 cp .next/static/ s3://<bucket>/_next/static/ --recursive` ステップを
+  # まだ追加していないため S3 が空で全 asset が 403 になる (`/login` 等の画面が
+  # CSS / JS 読まずに崩れる)。
+  # 暫定: Next.js standalone server (ALB 配下) に直接 forward する。standalone は
+  # `.next/static` をコンテナ内に同梱してるので self-serve できる。CloudFront 経由
+  # で長期キャッシュを効かせる利点は失うが、stg ではスループット要件無いので OK。
+  # CD に S3 publish ステップが入ったらここを `target_origin_id = "static"` に戻す。
   ordered_cache_behavior {
     path_pattern           = "/_next/static/*"
-    target_origin_id       = "static"
+    target_origin_id       = "alb"
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD", "OPTIONS"]
     compress               = true
 
+    # ALB 由来のコンテンツでも長期キャッシュ可能 (Next.js が hash 付きファイル名で
+    # immutable な前提)。
     cache_policy_id          = data.aws_cloudfront_cache_policy.caching_optimized.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.cors_s3.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
   }
 
   # -------- /media/* → S3 media --------
