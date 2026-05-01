@@ -5,7 +5,7 @@ import { AuthFormHeader } from "@/components/forms/auth";
 import PasswordResetRequestForm from "@/components/forms/auth/PasswordResetRequestForm";
 
 export const metadata: Metadata = {
-	title: "Alpha Apartments | Password Reset Request",
+	title: "エンジニア特化型 SNS | パスワード再設定",
 	description: "Password request reset page",
 };
 

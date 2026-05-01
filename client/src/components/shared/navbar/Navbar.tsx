@@ -11,7 +11,7 @@ export default function Navbar() {
 			<Link href="/" className="flex items-center">
 				<HomeModernIcon className="mr-2 size-11 text-lime-500" />
 				<p className="h2-bold font-robotoSlab text-veryBlack dark:text-babyPowder hidden sm:block">
-					Alpha <span className="text-lime-500"> Apartments</span>
+					エンジニア特化型 <span className="text-lime-500">SNS</span>
 				</p>
 			</Link>
 

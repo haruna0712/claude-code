@@ -3,7 +3,7 @@ import PasswordResetConfirmForm from "@/components/forms/auth/PasswordResetConfi
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-	title: "Alpha Apartments | Password Reset Request",
+	title: "エンジニア特化型 SNS | パスワード再設定",
 	description: "Password request reset page",
 };
 

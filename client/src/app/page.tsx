@@ -1,120 +1,52 @@
-// Next.js Hello World for Phase 0.5 smoke test (P0.5-12).
+// Phase 1 ランディングページ (P1-23 残作業: P0.5 smoke page を置換)。
 //
-// 本ページは stg への初回デプロイ確認用。/api/health/ を fetch して
-// バックエンド疎通を画面で可視化する。Phase 1 で本物のランディング/TL に置換する。
+// stg / 本番ともに `/` で表示される。未ログインの訪問者にプロダクト紹介と
+// ログイン/新規登録の入口を提示する。Phase 2 (P2-13 ホーム TL) が実装され
+// たら、ログイン済ユーザは TL にリダイレクトする条件分岐を追加する。
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
-	title: "エンジニア特化型 SNS (stg)",
+	title: "エンジニア特化型 SNS",
 	description:
-		"Engineer-focused SNS staging environment. Real landing page ships in Phase 1.",
+		"エンジニア向けの SNS。技術タグで議論を絞り込み、Markdown でツイートを書き、" +
+		"OGP やシンタックスハイライトで読みやすく共有できます。",
 };
 
-// NEXT_PUBLIC_* はクライアントバンドルに埋め込まれ、サーバー/クライアント両方で
-// 参照可能な公開値。Sentry の environment / release はクライアントの
-// sentry.client.config.ts も参照するため NEXT_PUBLIC_ で共有する。
-const ENV = process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ?? "local";
-const VERSION = process.env.NEXT_PUBLIC_SENTRY_RELEASE ?? "dev";
-
-type HealthStatus = "ok" | "degraded";
-
-interface HealthResponse {
-	status: HealthStatus;
-	version?: string;
-	db?: "ok" | "unreachable";
-	time?: string;
-}
-
-interface HealthError {
-	error: string;
-}
-
-type HealthResult = HealthResponse | HealthError;
-
-async function fetchHealth(): Promise<HealthResult> {
-	// stg では nginx/ALB 経由で /api/health/ に届く。ローカル Docker Compose
-	// では api コンテナの DNS 名で直接呼ぶ。
-	const base = process.env.API_BASE_URL ?? "http://api:8000";
-	try {
-		const response = await fetch(`${base}/api/health/`, {
-			// SSR 時にキャッシュさせない (毎リクエストで live status を見たい)
-			cache: "no-store",
-			signal: AbortSignal.timeout(3000),
-		});
-		if (!response.ok) {
-			// 詳細 (status text / body) はサーバー側のログにとどめ、画面には HTTP code のみ。
-			console.error(`health fetch HTTP ${response.status}`); // eslint-disable-line no-console
-			return { error: `API returned HTTP ${response.status}` };
-		}
-		return (await response.json()) as HealthResponse;
-	} catch (err) {
-		// 内部ホスト名 (http://api:8000) や stack trace を画面に出さない
-		// (typescript-reviewer PR #56 HIGH: 情報漏洩対策)。詳細はサーバーログへ。
-		console.error("health fetch failed", err); // eslint-disable-line no-console
-		return { error: "API unavailable" };
-	}
-}
-
-export default async function HelloPage() {
-	const health: HealthResult = await fetchHealth();
-	const isHealthy = "status" in health && health.status === "ok";
-
+export default function LandingPage() {
 	return (
-		<main className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center px-6 py-12">
-			<div className="w-full space-y-8">
-				<header className="space-y-2 text-center">
-					<p className="text-xs uppercase tracking-widest text-muted-foreground">
-						engineer-focused SNS — stg
-					</p>
-					<h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-						Hello, stg 環境 🎉
-					</h1>
-					<p className="text-base text-muted-foreground">
-						Phase 0.5 smoke test page. Phase 1 で本物の TL /
-						ログインに置き換わる。
-					</p>
-				</header>
+		<main className="min-h-screen flex items-center justify-center px-6 py-16 bg-baby_richBlack">
+			<div className="max-w-2xl text-center">
+				<p className="text-xs uppercase tracking-widest text-lime-500 mb-4">
+					Engineer-Focused SNS
+				</p>
+				<h1 className="text-4xl sm:text-5xl font-bold text-veryBlack dark:text-babyPowder mb-6">
+					エンジニアのための、{" "}
+					<span className="text-lime-500">技術で繋がる</span> SNS
+				</h1>
+				<p className="text-lg text-veryBlack/80 dark:text-babyPowder/80 mb-10 leading-relaxed">
+					技術タグで興味の近い人を見つけ、Markdown でコードを共有し、 OGP
+					プレビューで議論を深めましょう。
+				</p>
 
-				<section className="rounded-lg border bg-card p-6 shadow-sm">
-					<h2 className="text-xl font-semibold">Build info</h2>
-					<dl className="mt-4 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
-						<dt className="font-medium text-muted-foreground">Environment</dt>
-						<dd className="font-mono">{ENV}</dd>
-						<dt className="font-medium text-muted-foreground">Release</dt>
-						<dd className="font-mono">{VERSION}</dd>
-						<dt className="font-medium text-muted-foreground">Rendered at</dt>
-						<dd className="font-mono">{new Date().toISOString()}</dd>
-					</dl>
-				</section>
+				<div className="flex flex-col sm:flex-row gap-3 justify-center">
+					<Link
+						href="/register"
+						className="inline-flex items-center justify-center px-6 py-3 rounded-md bg-lime-500 text-veryBlack font-semibold hover:bg-lime-400 transition-colors"
+					>
+						新規登録する
+					</Link>
+					<Link
+						href="/login"
+						className="inline-flex items-center justify-center px-6 py-3 rounded-md border border-veryBlack/20 dark:border-babyPowder/20 text-veryBlack dark:text-babyPowder font-semibold hover:bg-veryBlack/5 dark:hover:bg-babyPowder/5 transition-colors"
+					>
+						ログイン
+					</Link>
+				</div>
 
-				<section
-					className={`rounded-lg border p-6 shadow-sm ${
-						isHealthy
-							? "border-green-500/40 bg-green-50 dark:bg-green-950/30"
-							: "border-red-500/40 bg-red-50 dark:bg-red-950/30"
-					}`}
-				>
-					<h2 className="text-xl font-semibold">
-						API health:{" "}
-						<span
-							className={
-								isHealthy
-									? "text-green-700 dark:text-green-400"
-									: "text-red-700 dark:text-red-400"
-							}
-						>
-							{isHealthy ? "OK" : "DEGRADED"}
-						</span>
-					</h2>
-					<pre className="mt-4 overflow-x-auto rounded bg-black/80 p-4 font-mono text-xs text-white">
-						{JSON.stringify(health, null, 2)}
-					</pre>
-				</section>
-
-				<footer className="text-center text-xs text-muted-foreground">
-					If you see this page in production, something went wrong — Phase 1
-					のランディングページに差し替えるまで stg 専用です。
-				</footer>
+				<p className="mt-12 text-xs text-veryBlack/50 dark:text-babyPowder/50">
+					stg 環境 / Phase 1 ランディング (Phase 2 でホーム TL に置換予定)
+				</p>
 			</div>
 		</main>
 	);

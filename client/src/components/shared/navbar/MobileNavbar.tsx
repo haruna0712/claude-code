@@ -65,7 +65,7 @@ export default function MobileNavbar() {
 				<Link href="/" className="flex items-center gap-1">
 					<HomeModernIcon className="mr-2 size-11 text-lime-500" />
 					<p className="h2-bold text-baby_veryBlack font-robotoSlab">
-						Alpha <span className="text-lime-500"> Apartments</span>
+						エンジニア特化型 <span className="text-lime-500">SNS</span>
 					</p>
 				</Link>
 
