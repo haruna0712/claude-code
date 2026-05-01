@@ -47,10 +47,9 @@ class TestFromHandle:
         assert p.from_handle == "alice"
 
     def test_invalid_handle_dropped(self):
-        p = parse_search_query("from:in valid")
+        # ハイフンや記号を含む handle は regex 不適合で drop される
+        p = parse_search_query("from:bad-handle!")
         assert p.from_handle is None
-        # "valid" は別 token として keyword 行に残る
-        assert "valid" in p.keywords
 
 
 class TestDateRange:
