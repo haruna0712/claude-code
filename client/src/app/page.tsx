@@ -1,16 +1,10 @@
-// `/` ルート: 未ログインなら Phase 1 ランディング、ログイン済なら Twitter 風の
-// ホーム TL を表示する (P2-13 ホーム TL UI)。
+// Phase 1 ランディングページ (P1-23 残作業: P0.5 smoke page を置換)。
 //
-// 認証判定は `/users/me/` に SSR で fetch して 401 か 200 かで分ける。serverFetch
-// は Cookie を next/headers 経由で Django にそのまま forward するので、JWT 期限
-// 切れ時は 401 が返って Landing にフォールバックする (browser 側で refresh が
-// 走った後に再 nav すれば feed に切り替わる)。
+// stg / 本番ともに `/` で表示される。未ログインの訪問者にプロダクト紹介と
+// ログイン/新規登録の入口を提示する。Phase 2 (P2-13 ホーム TL) が実装され
+// たら、ログイン済ユーザは TL にリダイレクトする条件分岐を追加する。
 import type { Metadata } from "next";
 import Link from "next/link";
-
-import HomeFeed from "@/components/timeline/HomeFeed";
-import { ApiServerError, serverFetch } from "@/lib/api/server";
-import type { TweetSummary } from "@/lib/api/tweets";
 
 export const metadata: Metadata = {
 	title: "エンジニア特化型 SNS",
@@ -19,46 +13,7 @@ export const metadata: Metadata = {
 		"OGP やシンタックスハイライトで読みやすく共有できます。",
 };
 
-interface CurrentUser {
-	id: string;
-	username: string;
-	email: string;
-	is_active: boolean;
-}
-
-interface TweetListPage {
-	count: number;
-	next: string | null;
-	previous: string | null;
-	results: TweetSummary[];
-}
-
-async function loadCurrentUserSafe(): Promise<CurrentUser | null> {
-	try {
-		return await serverFetch<CurrentUser>("/users/me/");
-	} catch (error) {
-		if (error instanceof ApiServerError && error.status === 401) return null;
-		// 401 以外 (network / 500 等) は Landing にフォールバックして
-		// アプリが完全停止しないようにする。
-		return null;
-	}
-}
-
-async function loadHomeTimeline(): Promise<TweetSummary[]> {
-	try {
-		const page = await serverFetch<TweetListPage | TweetSummary[]>(
-			"/timeline/home/",
-		);
-		// Timeline view は plain array を返す可能性も List Page paging を返す可能性も
-		// あるので両対応する。
-		if (Array.isArray(page)) return page;
-		return page.results ?? [];
-	} catch {
-		return [];
-	}
-}
-
-function Landing() {
+export default function LandingPage() {
 	return (
 		<main className="min-h-screen flex items-center justify-center px-6 py-16 bg-baby_richBlack">
 			<div className="max-w-2xl text-center">
@@ -90,17 +45,9 @@ function Landing() {
 				</div>
 
 				<p className="mt-12 text-xs text-veryBlack/50 dark:text-babyPowder/50">
-					stg 環境 / Phase 1 ランディング
+					stg 環境 / Phase 1 ランディング (Phase 2 でホーム TL に置換予定)
 				</p>
 			</div>
 		</main>
 	);
-}
-
-export default async function HomePage() {
-	const me = await loadCurrentUserSafe();
-	if (!me) return <Landing />;
-
-	const tweets = await loadHomeTimeline();
-	return <HomeFeed initialTweets={tweets} />;
 }
