@@ -150,3 +150,29 @@ def eager_celery(settings) -> Iterator[None]:
     settings.CELERY_TASK_ALWAYS_EAGER = True
     settings.CELERY_TASK_EAGER_PROPAGATES = True
     yield
+
+
+# -----------------------------------------------------------------------------
+# Phase 3 共通 fixtures (P3-02)
+# -----------------------------------------------------------------------------
+# WebSocket / Channels 系テストでは Redis に依存させず InMemoryChannelLayer に
+# 切り替える。CI で redis service が止まってもテストが落ちないようにする
+# (code-reviewer HIGH 反映)。
+# autouse=True にすると Phase 2 の eager_celery / redis_clean を使う既存テストの
+# 設定も書き換えてしまうため、明示 opt-in とする (Channels テストだけ受け取る)。
+
+
+@pytest.fixture
+def in_memory_channel_layer(settings) -> Iterator[None]:
+    """``CHANNEL_LAYERS`` を InMemoryChannelLayer に差し替える fixture。
+
+    Channels の WebsocketCommunicator を使うテストでは、Redis 不要にしておくと
+    pytest-asyncio + channels_redis のイベントループ競合が起きないので fixture を
+    通すこと。
+    """
+    settings.CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        },
+    }
+    yield

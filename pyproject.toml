@@ -33,6 +33,11 @@ filterwarnings = [
     "ignore::DeprecationWarning:django.*",
     "ignore::DeprecationWarning:rest_framework.*",
 ]
+# pytest-asyncio (P3-02 で導入): WebsocketCommunicator を扱う非同期テストは
+# `@pytest.mark.asyncio` を必須にする (strict)。fixture の loop scope を
+# 明示しないと 0.24+ で deprecation warning が出るため function 固定。
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 # Match Django apps layout

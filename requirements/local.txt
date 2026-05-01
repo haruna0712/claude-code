@@ -17,6 +17,9 @@ pytest-mock==3.14.0
 factory-boy==3.3.1
 # freezegun: 時刻固定テスト用
 freezegun==1.5.1
+# pytest-asyncio: Channels の WebsocketCommunicator は async API なので必要 (P3-02)。
+# Channels 4.x + pytest-asyncio 0.24.x の組み合わせで `@pytest.mark.asyncio` が動く。
+pytest-asyncio==0.24.0
 
 # --- Lint / format gate (CI parity) ---
 # pre-commit: ローカル commit 時に CI の pre-commit job と同等の検査を走らせる。
