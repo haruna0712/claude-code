@@ -301,6 +301,26 @@ describe("HomeFeed — review fixes", () => {
 		});
 	});
 
+	it("renders the tweet list inside a role='feed' container with aria-busy / aria-label (#201)", () => {
+		render(
+			<HomeFeed initialTab="recommended" initialTweets={INITIAL_TWEETS} />,
+		);
+		const feed = screen.getByRole("feed");
+		expect(feed.getAttribute("aria-label")).toBe("タイムライン");
+		expect(feed.getAttribute("aria-busy")).toBe("false");
+	});
+
+	it("each article in the feed has aria-posinset / aria-setsize (#201)", () => {
+		render(
+			<HomeFeed initialTab="recommended" initialTweets={INITIAL_TWEETS} />,
+		);
+		const articles = document.querySelectorAll("article");
+		articles.forEach((a, idx) => {
+			expect(a.getAttribute("aria-posinset")).toBe(String(idx + 1));
+			expect(a.getAttribute("aria-setsize")).toBe(String(articles.length));
+		});
+	});
+
 	it("announces optimistic prepend via aria-live region", async () => {
 		render(
 			<HomeFeed initialTab="recommended" initialTweets={INITIAL_TWEETS} />,

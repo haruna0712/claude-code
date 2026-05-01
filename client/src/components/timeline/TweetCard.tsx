@@ -20,9 +20,17 @@ import { formatRelativeTime } from "@/lib/timeline/formatTime";
 
 interface TweetCardProps {
 	tweet: TweetSummary;
+	/** 1-based position when rendered inside a `role="feed"` container (#201). */
+	posinset?: number;
+	/** Total feed size; pair with ``posinset`` to satisfy WAI-ARIA feed pattern. */
+	setsize?: number;
 }
 
-export default function TweetCard({ tweet }: TweetCardProps) {
+export default function TweetCard({
+	tweet,
+	posinset,
+	setsize,
+}: TweetCardProps) {
 	const [replyOpen, setReplyOpen] = useState(false);
 	const [quoteOpen, setQuoteOpen] = useState(false);
 
@@ -66,6 +74,8 @@ export default function TweetCard({ tweet }: TweetCardProps) {
 			// (WCAG 2.2 SC 2.4.11 Focus Not Obscured). Tab bar height is 3rem.
 			className="flex flex-col gap-3 border-b border-border px-4 py-3 scroll-mt-12 hover:bg-muted/40 transition-colors"
 			aria-label={`${authorName} のツイート`}
+			aria-posinset={posinset}
+			aria-setsize={setsize}
 		>
 			{/* Author row */}
 			<header className="flex items-center gap-3">

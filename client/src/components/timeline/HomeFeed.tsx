@@ -127,13 +127,16 @@ export default function HomeFeed({ initialTab, initialTweets }: HomeFeedProps) {
 						<p className="text-sm">ツイートがありません</p>
 					</div>
 				) : (
-					<ul role="list" aria-label="ツイート一覧">
-						{tweets.map((tweet) => (
-							<li key={tweet.id}>
-								<TweetCard tweet={tweet} />
-							</li>
+					<div role="feed" aria-label="タイムライン" aria-busy={isLoading}>
+						{tweets.map((tweet, idx) => (
+							<TweetCard
+								key={tweet.id}
+								tweet={tweet}
+								posinset={idx + 1}
+								setsize={tweets.length}
+							/>
 						))}
-					</ul>
+					</div>
 				)}
 
 				{/* Load more */}
