@@ -38,7 +38,9 @@ export default function LoginForm() {
 			await loginUser(values).unwrap();
 			dispatch(setAuth());
 			toast.success("Login Successful");
-			router.push("/welcome");
+			// SPEC §69: 初回ログイン直後はオンボーディングウィザードへ誘導。
+			// onboarding 完了済みユーザは /onboarding 内で / にリダイレクトされる。
+			router.push("/onboarding");
 			reset();
 		} catch (error) {
 			const errorMessage = extractErrorMessage(error);
