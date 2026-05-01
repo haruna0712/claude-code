@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
 import { stringifyJsonLd } from "@/lib/json-ld";
+import { sanitizeTweetHtml } from "@/lib/sanitize/sanitizeTweetHtml";
 
 interface PublicProfile {
 	username: string;
@@ -179,7 +180,9 @@ export default async function ProfilePage({ params }: PageProps) {
 									<a href={`/tweet/${t.id}`} className="block">
 										<div
 											className="prose prose-sm dark:prose-invert max-w-none"
-											dangerouslySetInnerHTML={{ __html: t.html }}
+											dangerouslySetInnerHTML={{
+												__html: sanitizeTweetHtml(t.html),
+											}}
 										/>
 										<time
 											dateTime={t.created_at}
