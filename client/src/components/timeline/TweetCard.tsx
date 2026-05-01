@@ -9,9 +9,11 @@
  */
 
 import Link from "next/link";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import ReactionBar from "@/components/reactions/ReactionBar";
+import PostDialog from "@/components/tweets/PostDialog";
+import RepostButton from "@/components/tweets/RepostButton";
 import type { TweetSummary } from "@/lib/api/tweets";
 import { formatRelativeTime } from "@/lib/timeline/formatTime";
 
@@ -20,6 +22,9 @@ interface TweetCardProps {
 }
 
 export default function TweetCard({ tweet }: TweetCardProps) {
+	const [replyOpen, setReplyOpen] = useState(false);
+	const [quoteOpen, setQuoteOpen] = useState(false);
+
 	// CRITICAL: sanitize HTML before rendering — strips <script>, event handlers,
 	// javascript: hrefs, <iframe>, <style>, and other XSS vectors.
 	const safeHtml = useMemo(
@@ -151,13 +156,12 @@ export default function TweetCard({ tweet }: TweetCardProps) {
 				</div>
 			)}
 
-			{/* Action buttons — UI placeholder only (onClick wired in P2-14/P2-15).
-			    aria-disabled + title gives SR users notice instead of silent no-op. */}
+			{/* Action buttons. Reactions wired in P2-14, repost/quote/reply in P2-15. */}
 			<footer className="mt-1 flex items-center gap-4">
 				<button
 					type="button"
-					aria-disabled="true"
-					title="この機能はまもなく追加されます"
+					aria-label="リプライ"
+					onClick={() => setReplyOpen(true)}
 					className="flex items-center gap-1 min-h-[32px] px-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
 				>
 					<svg
@@ -177,31 +181,33 @@ export default function TweetCard({ tweet }: TweetCardProps) {
 					<span>リプライ</span>
 				</button>
 
+				<RepostButton tweetId={tweet.id} />
+
 				<button
 					type="button"
-					aria-disabled="true"
-					title="この機能はまもなく追加されます"
+					aria-label="引用リポスト"
+					onClick={() => setQuoteOpen(true)}
 					className="flex items-center gap-1 min-h-[32px] px-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
 				>
-					<svg
-						className="size-4"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						strokeWidth={1.5}
-						aria-hidden="true"
-					>
-						<path
-							strokeLinecap="round"
-							strokeLinejoin="round"
-							d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 3M21 7.5H7.5"
-						/>
-					</svg>
-					<span>リツイート</span>
+					<span aria-hidden="true">”</span>
+					<span>引用</span>
 				</button>
 
 				<ReactionBar tweetId={tweet.id} />
 			</footer>
+
+			<PostDialog
+				tweetId={tweet.id}
+				mode="reply"
+				open={replyOpen}
+				onOpenChange={setReplyOpen}
+			/>
+			<PostDialog
+				tweetId={tweet.id}
+				mode="quote"
+				open={quoteOpen}
+				onOpenChange={setQuoteOpen}
+			/>
 		</article>
 	);
 }
