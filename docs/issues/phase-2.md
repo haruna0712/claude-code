@@ -714,13 +714,24 @@ SPEC §10.3 の検索フィルタ演算子を実装。`tag:python` / `from:@taro
 
 ---
 
-## P2-13. [feature][frontend] ホーム TL UI (アルゴリズム / フォロー中タブ)
+## P2-13. [feature][frontend] ホーム TL UI (アルゴリズム / フォロー中タブ) — 🚧 再投入中
 
 - **Labels**: `type:feature`, `layer:frontend`, `area:timeline`, `priority:high`
 - **Milestone**: `Phase 2: TL・リアクション・フォロー・検索`
 - **Estimate**: L (1-2d)
 - **Parallel**: P2-14, P2-15, P2-16, P2-17, P2-18 と並列可
 - **Depends on**: P2-08
+- **Status**: 元実装 (commit `129880b`) は **DOMPurify 抜け + 要件大幅未達** で Revert (`8694d88`)。本セッションで TDD 再投入中 (PR `feature/issue-186-home-tl-ui`)。
+- **本 PR スコープ**: TimelineTabs / TweetCard (DOMPurify 必須) / HomeFeed (limit-based「もっと見る」) / `/` auth 分岐
+- **本 PR スコープ外 (フォローアップ Issue 起票済)**:
+  - リアクション / RT / 引用 RT / リプライの onClick logic → P2-14 / P2-15
+  - 「もっと見る」本文展開 → P2-18
+  - サイドバー → P2-17
+  - 未ログイン `/explore` リダイレクト → P2-19
+  - cursor 無限スクロール → #200 (backend 拡張)
+  - 既存 3 ページの DOMPurify 抜け修正 → #198
+  - axios CVE → #199
+  - `role="feed"` 完全準拠 → #201
 
 ### 目的
 
