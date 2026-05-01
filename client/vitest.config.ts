@@ -24,6 +24,7 @@ export default defineConfig({
 				"src/lib/sanitize/**/*.ts",
 				"src/components/sidebar/**/*.tsx",
 				"src/components/explore/**/*.tsx",
+				"src/components/search/**/*.tsx",
 			],
 			exclude: [
 				"src/lib/api/**/__tests__/**",
