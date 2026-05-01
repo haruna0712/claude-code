@@ -26,6 +26,8 @@ export default defineConfig({
 				"src/components/explore/**/*.tsx",
 				"src/components/search/**/*.tsx",
 				"src/components/reactions/**/*.tsx",
+				"src/components/tweets/RepostButton.tsx",
+				"src/components/tweets/PostDialog.tsx",
 			],
 			exclude: [
 				"src/lib/api/**/__tests__/**",
