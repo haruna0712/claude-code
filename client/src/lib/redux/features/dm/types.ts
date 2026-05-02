@@ -8,26 +8,38 @@
 
 export type DMRoomKind = "direct" | "group";
 
-export interface DMUserSummary {
-	id: number;
-	username: string;
-	first_name: string;
-	last_name: string;
-	avatar?: string | null;
-}
-
+/**
+ * Backend (`DMRoomMembershipSerializer`) は user の入れ子オブジェクトではなく
+ * フラットに `user_id` (bigint pkid) と `handle` (username) を返す。
+ * フロントは pkid (= profile.pkid) で比較する。
+ */
 export interface DMRoomMembership {
 	id: number;
-	user: DMUserSummary;
+	user_id: number;
+	handle: string;
 	last_read_at: string | null;
 	created_at: string;
+	muted_at?: string | null;
+}
+
+/**
+ * direct room の peer / 招待者 / 招待対象を表す軽量 user 型。
+ * backend が `inviter` / `invitee` で nested として返すので存在し続ける
+ * (`DMRoomMembership` とは形が違う点に注意)。
+ */
+export interface DMUserSummary {
+	pkid: number;
+	username: string;
+	first_name?: string;
+	last_name?: string;
+	avatar?: string | null;
 }
 
 export interface DMRoom {
 	id: number;
 	kind: DMRoomKind;
 	name: string;
-	creator: DMUserSummary | null;
+	creator_id: number | null;
 	memberships: DMRoomMembership[];
 	last_message_at: string | null;
 	last_message_snippet?: string | null;
@@ -45,7 +57,13 @@ export interface DMRoomListResponse {
 	results: DMRoom[];
 }
 
-/** SPEC §7.2: グループ招待 (1:1 では生成されない). */
+/**
+ * SPEC §7.2: グループ招待 (1:1 では生成されない).
+ *
+ * NOTE: backend の実 serializer 形に合わせて再確認が必要。現状は frontend の
+ * `InvitationList` が `inv.inviter.username` / `inv.room.name` で参照しているため
+ * その形を保っているが、Phase 4A で notification と整合させる時に再点検する。
+ */
 export interface GroupInvitation {
 	id: number;
 	room: {

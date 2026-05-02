@@ -86,3 +86,30 @@ class TestCustomUserSerializerReadOnly:
         user = user_factory(username="full_name_01", first_name="Taro", last_name="Yamada")
         data = CustomUserSerializer(user).data
         assert data["full_name"] == "Taro Yamada"
+
+    def test_pkid_field_is_exposed(self, user_factory) -> None:
+        """pkid (BigAutoField) を expose する (Phase 3 fix).
+
+        DM serializer は ``user.pk`` (= pkid) を ``user_id`` で返すため、
+        フロントは比較のために pkid を必要とする。``id`` (UUID) と区別する。
+        """
+        user = user_factory(username="pkid_01")
+        data = CustomUserSerializer(user).data
+        assert "pkid" in data
+        assert data["pkid"] == user.pkid
+        assert isinstance(data["pkid"], int)
+        # id は UUID 文字列のまま (string)
+        assert data["id"] == str(user.id)
+
+    def test_pkid_is_read_only_on_patch(self, user_factory) -> None:
+        user = user_factory(username="pkid_ro_01")
+        serializer = CustomUserSerializer(
+            user,
+            data={"pkid": 999_999},
+            partial=True,
+        )
+        assert serializer.is_valid(), serializer.errors
+        updated = serializer.save()
+        # pkid は read_only_fields なので変更不可
+        assert updated.pkid == user.pkid
+        assert updated.pkid != 999_999

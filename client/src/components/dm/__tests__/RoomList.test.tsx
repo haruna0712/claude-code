@@ -28,22 +28,19 @@ function makeRoom(overrides: Partial<DMRoom> = {}): DMRoom {
 		id: 1,
 		kind: "direct",
 		name: "",
-		creator: null,
+		creator_id: null,
 		memberships: [
 			{
 				id: 1,
-				user: { id: 100, username: "me", first_name: "", last_name: "" },
+				user_id: 100,
+				handle: "me",
 				last_read_at: null,
 				created_at: "2026-05-01T00:00:00Z",
 			},
 			{
 				id: 2,
-				user: {
-					id: 200,
-					username: "alice",
-					first_name: "Alice",
-					last_name: "",
-				},
+				user_id: 200,
+				handle: "alice",
 				last_read_at: null,
 				created_at: "2026-05-01T00:00:00Z",
 			},

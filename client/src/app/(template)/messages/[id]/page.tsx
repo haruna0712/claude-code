@@ -39,21 +39,20 @@ export default function RoomDetailPage() {
 	}
 
 	const roomId = Number.parseInt(params?.id ?? "", 10);
-	const currentUserId = Number.parseInt(profile.id, 10);
-	if (Number.isNaN(roomId) || Number.isNaN(currentUserId)) {
+	if (Number.isNaN(roomId) || typeof profile.pkid !== "number") {
 		return (
 			<section
 				role="alert"
 				className="text-baby_red mx-auto max-w-2xl py-12 text-center"
 			>
-				ルーム ID の形式が不正です。
+				ルーム ID またはプロフィールが不正です。
 			</section>
 		);
 	}
 
 	return (
 		<div className="mx-auto max-w-3xl">
-			<RoomChat roomId={roomId} currentUserId={currentUserId} />
+			<RoomChat roomId={roomId} currentUserId={profile.pkid} />
 		</div>
 	);
 }
