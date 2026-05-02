@@ -1,22 +1,76 @@
-"""DM の REST view (P3-03 / Issue #228).
+"""DM の REST view (P3-03 / Issue #228, P3-04 / Issue #229).
 
-Phase 3 で必要な REST 経路は **メッセージ削除のみ** (送信は WebSocket 経由)。
-他の REST API (room 一覧 / 個別 / 既読など) は P3-04 / P3-05 で追加する。
+Phase 3 の REST 経路 (Phase 4A 以降で room search / 既読 API を追加):
+
+- ``DELETE /api/v1/dm/messages/<id>/`` (P3-03): メッセージ soft delete
+- ``GET    /api/v1/dm/rooms/`` (P3-04): 自分の room 一覧 (last_message_at 降順)
+- ``POST   /api/v1/dm/rooms/`` (P3-04): direct or group room 作成
+- ``GET    /api/v1/dm/rooms/<id>/`` (P3-04): room 詳細 (memberships 込)
+- ``GET    /api/v1/dm/rooms/<id>/messages/`` (P3-04): メッセージ履歴 (cursor pagination)
+- ``POST   /api/v1/dm/rooms/<id>/invitations/`` (P3-04): 招待作成 (room creator のみ)
+- ``DELETE /api/v1/dm/rooms/<id>/membership/`` (P3-04): 退室 (group のみ)
+- ``GET    /api/v1/dm/invitations/`` (P3-04): 自分宛て pending 招待
+- ``POST   /api/v1/dm/invitations/<id>/accept/`` (P3-04): 招待承諾
+- ``POST   /api/v1/dm/invitations/<id>/decline/`` (P3-04): 招待拒否
+
+権限・rate limit は service 層 + decorator で enforce。
 """
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import structlog
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.contrib.auth import get_user_model
+from django.contrib.auth.base_user import AbstractBaseUser
+from django.core.exceptions import (
+    PermissionDenied as DjangoPermissionDenied,
+)
+from django.core.exceptions import (
+    ValidationError as DjangoValidationError,
+)
 from django.utils import timezone
-from rest_framework import permissions
-from rest_framework.exceptions import PermissionDenied
+from rest_framework import generics, permissions, status
+from rest_framework.exceptions import (
+    NotFound,
+    PermissionDenied,
+    Throttled,
+)
+from rest_framework.exceptions import (
+    ValidationError as DRFValidationError,
+)
 from rest_framework.generics import DestroyAPIView
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from apps.dm.models import Message
+from apps.dm.models import (
+    DMRoom,
+    GroupInvitation,
+    Message,
+)
+from apps.dm.rate_limit import check_and_consume_invitation_rate
+from apps.dm.serializers import (
+    CreateDirectRoomInputSerializer,
+    CreateGroupRoomInputSerializer,
+    CreateInvitationInputSerializer,
+    DMRoomSerializer,
+    GroupInvitationSerializer,
+    MessageSerializer,
+)
+from apps.dm.services import (
+    accept_invitation,
+    create_group_room,
+    decline_invitation,
+    get_or_create_direct_room,
+    invite_user_to_room,
+    leave_room,
+)
 
 _logger = structlog.get_logger(__name__)
+User = get_user_model()
 
 
 class MessageDestroyView(DestroyAPIView):
@@ -42,7 +96,6 @@ class MessageDestroyView(DestroyAPIView):
     lookup_field = "pk"
 
     def get_queryset(self):
-        # 自分が member の room の、まだ未削除のメッセージのみが見える
         return Message.objects.filter(
             room__memberships__user=self.request.user,
             deleted_at__isnull=True,
@@ -55,9 +108,6 @@ class MessageDestroyView(DestroyAPIView):
         instance.deleted_at = timezone.now()
         instance.save(update_fields=["deleted_at", "updated_at"])
 
-        # broadcast: room メンバー全員に message.deleted を伝える。
-        # channel_layer が None (テスト / 設定不備) のときは silent skip せず warning ログ
-        # (silent-failure-hunter MEDIUM F6 反映)。
         channel_layer = get_channel_layer()
         if channel_layer is None:
             _logger.warning("dm.views.destroy.no_channel_layer", message_id=instance.pk)
@@ -66,3 +116,258 @@ class MessageDestroyView(DestroyAPIView):
             f"dm_room_{instance.room_id}",
             {"type": "message.deleted", "message_id": instance.pk},
         )
+
+
+# ----------------------------------------------------------------------------
+# Helpers (P3-04)
+# ----------------------------------------------------------------------------
+
+
+def _get_room_for_member(*, room_id: int, user: AbstractBaseUser) -> DMRoom:
+    """``user`` が member である ``room`` を返す。非メンバーは 404 (probing 防止、sec).
+
+    serializer が ``memberships`` / ``creator`` を読むため prefetch / select_related で
+    N+1 を防ぐ (review HIGH 反映)。
+    """
+
+    room = (
+        DMRoom.objects.filter(pk=room_id, memberships__user=user)
+        .select_related("creator")
+        .prefetch_related("memberships__user")
+        .first()
+    )
+    if room is None:
+        raise NotFound("room not found")
+    return room
+
+
+def _get_user_by_handle(handle: str) -> AbstractBaseUser:
+    """``@handle`` (= username) で User を解決. 見つからなければ 404."""
+    try:
+        return User.objects.get(username=handle)
+    except User.DoesNotExist as exc:
+        raise NotFound(f"@{handle} が見つかりません") from exc
+
+
+# ----------------------------------------------------------------------------
+# Rooms (P3-04)
+# ----------------------------------------------------------------------------
+
+
+class DMRoomListCreateView(generics.ListCreateAPIView):
+    """``GET/POST /api/v1/dm/rooms/``."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = DMRoomSerializer
+
+    def get_queryset(self):
+        return (
+            DMRoom.objects.filter(memberships__user=self.request.user)
+            .select_related("creator")
+            .prefetch_related("memberships__user")
+            .order_by("-last_message_at", "-created_at")
+            .distinct()
+        )
+
+    def create(self, request: Request, *args, **kwargs) -> Response:
+        kind = request.data.get("kind")
+        if kind == DMRoom.Kind.DIRECT:
+            return self._create_direct(request)
+        if kind == DMRoom.Kind.GROUP:
+            return self._create_group(request)
+        return Response(
+            {"detail": "kind must be 'direct' or 'group'"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def _create_direct(self, request: Request) -> Response:
+        serializer = CreateDirectRoomInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        peer = _get_user_by_handle(serializer.validated_data["member_handle"])
+        try:
+            room, created = get_or_create_direct_room(request.user, peer)
+        except DjangoValidationError as exc:
+            raise DRFValidationError(detail=exc.messages) from exc
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(str(exc)) from exc
+        return Response(
+            DMRoomSerializer(room).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    def _create_group(self, request: Request) -> Response:
+        serializer = CreateGroupRoomInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        invitee_handles = serializer.validated_data.get("invitee_handles", [])
+
+        # spam 抑止 rate limit. atomic INCRBY で複数件を一度に消費し、
+        # 失敗時は DECRBY で rollback (review HIGH H-1/H-2 反映)。
+        if invitee_handles and not _consume_invite_quota(request.user.pk, len(invitee_handles)):
+            raise Throttled(detail="invitation rate limit exceeded (50/day)")
+
+        try:
+            room = create_group_room(
+                creator=request.user,
+                name=serializer.validated_data["name"],
+                invitee_handles=invitee_handles,
+            )
+        except DjangoValidationError as exc:
+            raise DRFValidationError(detail=exc.messages) from exc
+        return Response(DMRoomSerializer(room).data, status=status.HTTP_201_CREATED)
+
+
+class DMRoomDetailView(generics.RetrieveAPIView):
+    """``GET /api/v1/dm/rooms/<id>/``."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = DMRoomSerializer
+
+    def get_object(self) -> DMRoom:
+        return _get_room_for_member(room_id=self.kwargs["pk"], user=self.request.user)
+
+
+class DMRoomMessagesView(generics.ListAPIView):
+    """``GET /api/v1/dm/rooms/<id>/messages/?cursor=...&limit=30``.
+
+    cursor pagination は ``created_at`` 降順 + ``id`` 補助で安定化。Phase 3 では
+    最低限の ``limit`` クエリのみ受け付け、本格的な opaque cursor は P3-05 等で導入。
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = MessageSerializer
+
+    def get_queryset(self):
+        room = _get_room_for_member(room_id=self.kwargs["pk"], user=self.request.user)
+        try:
+            limit = int(self.request.query_params.get("limit", "30"))
+        except ValueError:
+            limit = 30
+        limit = max(1, min(limit, 100))
+        return Message.objects.filter(room=room, deleted_at__isnull=True).order_by(
+            "-created_at", "-pk"
+        )[:limit]
+
+
+class DMRoomInvitationsCreateView(APIView):
+    """``POST /api/v1/dm/rooms/<id>/invitations/``: room creator が招待を作る."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request: Request, pk: int) -> Response:
+        # 1 query で creator チェック (review LOW: 旧 get_object_or_404 + creator 比較
+        # の 2 段階を 1 query に統合)
+        room = DMRoom.objects.filter(pk=pk, creator=request.user).first()
+        if room is None:
+            raise NotFound("room not found")
+
+        serializer = CreateInvitationInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        invitee = _get_user_by_handle(serializer.validated_data["invitee_handle"])
+
+        if not _consume_invite_quota(request.user.pk, 1):
+            raise Throttled(detail="invitation rate limit exceeded (50/day)")
+
+        try:
+            invitation = invite_user_to_room(room=room, inviter=request.user, invitee=invitee)
+        except DjangoValidationError as exc:
+            raise DRFValidationError(detail=exc.messages) from exc
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(str(exc)) from exc
+        return Response(
+            GroupInvitationSerializer(invitation).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class DMRoomMembershipDeleteView(APIView):
+    """``DELETE /api/v1/dm/rooms/<id>/membership/``: 自分の membership を消して退室."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request: Request, pk) -> Response:
+        room = _get_room_for_member(room_id=pk, user=request.user)
+        try:
+            leave_room(room=room, user=request.user)
+        except DjangoValidationError as exc:
+            raise DRFValidationError(detail=exc.messages) from exc
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ----------------------------------------------------------------------------
+# Invitations (P3-04)
+# ----------------------------------------------------------------------------
+
+
+class InvitationListView(generics.ListAPIView):
+    """``GET /api/v1/dm/invitations/?status=pending|all``."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = GroupInvitationSerializer
+
+    def get_queryset(self):
+        status_param = self.request.query_params.get("status", "pending")
+        # serializer が inviter / invitee の username を読むため select_related で
+        # N+1 を防ぐ (review HIGH 反映)。
+        qs = GroupInvitation.objects.filter(invitee=self.request.user).select_related(
+            "inviter", "invitee"
+        )
+        if status_param == "pending":
+            qs = qs.filter(accepted__isnull=True)
+        return qs.order_by("-created_at")
+
+
+class InvitationActionView(APIView):
+    """``POST /api/v1/dm/invitations/<id>/{accept|decline}/``."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    # ClassVar で class-level の sentinel を明示 (review HIGH 反映、mypy 整合)
+    action: ClassVar[str] = ""
+
+    def post(self, request: Request, pk: int) -> Response:
+        # 自分宛て以外は存在しないかのように 404 で返す (sec)
+        invitation = GroupInvitation.objects.filter(pk=pk, invitee=request.user).first()
+        if invitation is None:
+            raise NotFound("invitation not found")
+
+        try:
+            if self.action == "accept":
+                accept_invitation(invitation=invitation, user=request.user)
+            elif self.action == "decline":
+                decline_invitation(invitation=invitation, user=request.user)
+            else:  # pragma: no cover - 静的に決まる
+                raise PermissionDenied("invalid action")
+        except DjangoValidationError as exc:
+            raise DRFValidationError(detail=exc.messages) from exc
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(str(exc)) from exc
+
+        invitation.refresh_from_db()
+        return Response(GroupInvitationSerializer(invitation).data, status=status.HTTP_200_OK)
+
+
+class InvitationAcceptView(InvitationActionView):
+    action = "accept"
+
+
+class InvitationDeclineView(InvitationActionView):
+    action = "decline"
+
+
+# ----------------------------------------------------------------------------
+# Rate limit ヘルパ (sync wrapper for async check_invitation_rate)
+# ----------------------------------------------------------------------------
+
+
+def _consume_invite_quota(user_id: int, count: int) -> bool:
+    """``count`` 件分の招待 budget を atomic に消費する sync wrapper.
+
+    review HIGH H-1/H-2 反映:
+    - 1 度の ``INCRBY count`` で全件をまとめて消費
+    - 上限超過なら ``DECRBY count`` で rollback (失敗時に quota を消費しない)
+    - ``async_to_sync`` を 1 度だけ呼ぶ (旧実装は count 回ループしていた)
+
+    Phase 4 で本 view 以外から ``create_group_room`` を呼ぶ場合は、サービス層側でも
+    rate limit を呼ぶよう拡張する (現状は view 層のみで enforce、known limitation)。
+    """
+
+    return async_to_sync(check_and_consume_invitation_rate)(user_id, count)
