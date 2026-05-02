@@ -1,12 +1,11 @@
-"""DM の URL ルーティング (P3-03 / Issue #228, P3-04 / Issue #229).
+"""DM の URL ルーティング (P3-03 / Issue #228, P3-04 / Issue #229, P3-05 / Issue #230).
 
 Phase 3 で公開する REST 経路:
 
 - メッセージ削除 (P3-03)
 - ルーム一覧 / 作成 / 詳細 / メッセージ履歴 / 退室 (P3-04)
 - グループ招待 一覧 / 作成 / 承諾 / 拒否 (P3-04)
-
-他の経路 (既読 API など) は P3-05 で追加予定。
+- 既読 (last_read_at) 更新 (P3-05)
 """
 
 from __future__ import annotations
@@ -19,6 +18,7 @@ from apps.dm.views import (
     DMRoomListCreateView,
     DMRoomMembershipDeleteView,
     DMRoomMessagesView,
+    DMRoomReadView,
     InvitationAcceptView,
     InvitationDeclineView,
     InvitationListView,
@@ -51,6 +51,11 @@ urlpatterns = [
         "rooms/<int:pk>/membership/",
         DMRoomMembershipDeleteView.as_view(),
         name="room-membership-delete",
+    ),
+    path(
+        "rooms/<int:pk>/read/",
+        DMRoomReadView.as_view(),
+        name="room-read",
     ),
     # 招待
     path(
