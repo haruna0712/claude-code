@@ -20,8 +20,8 @@ P3-03 Consumer / P3-04 招待 API / P3-06 添付確定 API はここを呼び出
 
 from __future__ import annotations
 
+import posixpath
 from datetime import UTC, datetime
-from pathlib import PurePosixPath
 
 import structlog
 from django.contrib.auth import get_user_model
@@ -130,9 +130,10 @@ def _validate_attachment_keys_for_room(*, room_id: int, attachment_keys: list[di
     expected_prefix = f"dm/{room_id}/"
     for entry in attachment_keys:
         raw_key = entry.get("s3_key", "")
-        # PurePosixPath で ``../`` / ``./`` を正規化してから prefix 検査する。
+        # security HIGH 反映: posixpath.normpath は ``../`` / ``./`` を実際に collapse する。
+        # PurePosixPath は collapse しないため誤った安全感を与えた (security-reviewer H-1)。
         # 絶対パス (``/abc``) は normalised が ``/abc`` のままなので prefix mismatch で弾かれる。
-        normalised = str(PurePosixPath(raw_key))
+        normalised = posixpath.normpath(raw_key)
         if not normalised.startswith(expected_prefix):
             raise ValidationError(
                 f"attachment s3_key must start with '{expected_prefix}': got {raw_key!r}"
@@ -180,6 +181,13 @@ def send_message(
     keys: list[dict] = list(attachment_keys or [])
     ids: list[int] = list(attachment_ids or [])
     total_count = len(keys) + len(ids)
+
+    # SPEC §7.3 上限 (security-reviewer MEDIUM M-3 反映): 1 メッセージあたり最大 5 添付。
+    # 画像 5 枚 / ファイル 1 枚の細分化は Confirm 時の MIME 種別が必要だが、
+    # 紐付け前の orphan を全件 fetch すると無駄になるため、ここでは合計 5 で簡易制約。
+    # 詳細な mime 別検査が必要な場合は Phase 4 / 別 issue で。
+    if total_count > 5:
+        raise ValidationError(f"1 メッセージの添付は最大 5 件です (指定 {total_count} 件)")
 
     # 1. 空メッセージ拒否
     validate_message_payload(body=body, attachment_count=total_count)
@@ -320,8 +328,9 @@ def confirm_attachment(
 
     # P3-06 のドキュメントどおり、s3_key が dm/<room.pk>/ で始まることを再検証する
     # (presign 経路で生成した key だが、独立コード経由で confirm 呼びされた場合の保険)。
+    # security HIGH H-1 反映: posixpath.normpath で `..` を実際に collapse する。
     expected_prefix = f"dm/{room.pk}/"
-    normalised = str(PurePosixPath(s3_key))
+    normalised = posixpath.normpath(s3_key)
     if not normalised.startswith(expected_prefix):
         raise ValidationError(f"s3_key must start with '{expected_prefix}': got {s3_key!r}")
 
@@ -335,7 +344,9 @@ def confirm_attachment(
         raise ValidationError(
             f"S3 上のサイズ ({info.content_length}) が申告 ({size}) と一致しません"
         )
-    if info.content_type and info.content_type != mime_type:
+    # security HIGH H-2 反映: 空文字 fallback も「不一致」として明示的に弾く。
+    # if info.content_type and ... の short-circuit は MIME ヘッダ欠落時の bypass を許す。
+    if info.content_type != mime_type:
         raise ValidationError(
             f"S3 上の Content-Type ({info.content_type!r}) が申告 ({mime_type!r}) と一致しません"
         )

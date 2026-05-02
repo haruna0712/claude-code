@@ -404,6 +404,12 @@ REST_FRAMEWORK = {
         # 集中するため、user 単位で 60/min に制限する。
         # apps.reactions.views.ReactionThrottle が参照する。
         "reaction": "60/min",
+        # P3-06 (security-reviewer HIGH H-3): DM 添付の presign / confirm。
+        # 1 回 25MB 上限なので 500/day では 12GB/user/day の DoS が成立する。
+        # PresignAttachmentView / ConfirmAttachmentView が `dm_attachment_presign` を参照。
+        "dm_attachment_presign": "30/hour",
+        # confirm は head_object を毎回叩くので separate scope で更に絞る。
+        "dm_attachment_confirm": "30/hour",
     },
 }
 

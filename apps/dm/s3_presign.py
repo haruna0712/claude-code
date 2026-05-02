@@ -221,8 +221,9 @@ def generate_presigned_attachment_upload(
 
     # presigned POST: S3 側で Conditions を強制チェックする。
     #   - content-length-range: 1..max_size (改ざん時の DoS / 巨大 PUT 防止)
-    #   - starts-with $Content-Type mime_type: アプリ側申告と一致
-    #   - eq $key s3_key: 別ファイルへの上書き防止 (presigned URL 流用攻撃)
+    #   - eq Content-Type mime_type: アプリ側申告と完全一致 (security MEDIUM 反映)
+    #   - eq key s3_key: 別ファイルへの上書き防止 (presigned URL 流用攻撃)
+    # NOTE: starts-with は `image/jpeg2000` のような prefix 一致を許容するため eq を使う。
     try:
         post_data = s3_client.generate_presigned_post(
             Bucket=bucket,
@@ -230,7 +231,7 @@ def generate_presigned_attachment_upload(
             Fields={"Content-Type": mime_type, "key": s3_key},
             Conditions=[
                 ["content-length-range", 1, max_size],
-                ["starts-with", "$Content-Type", mime_type],
+                {"Content-Type": mime_type},
                 {"key": s3_key},
             ],
             ExpiresIn=PRESIGN_EXPIRES_SECONDS,

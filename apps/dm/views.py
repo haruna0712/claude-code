@@ -45,6 +45,7 @@ from rest_framework.exceptions import (
 from rest_framework.generics import DestroyAPIView
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.dm.models import (
@@ -53,7 +54,9 @@ from apps.dm.models import (
     Message,
 )
 from apps.dm.rate_limit import check_and_consume_invitation_rate
+from apps.dm.s3_presign import generate_presigned_attachment_upload
 from apps.dm.serializers import (
+    ConfirmAttachmentInputSerializer,
     CreateDirectRoomInputSerializer,
     CreateGroupRoomInputSerializer,
     CreateInvitationInputSerializer,
@@ -61,10 +64,12 @@ from apps.dm.serializers import (
     GroupInvitationSerializer,
     MarkRoomReadInputSerializer,
     MessageSerializer,
+    PresignAttachmentInputSerializer,
 )
 from apps.dm.services import (
     accept_invitation,
     annotate_rooms_with_unread_count,
+    confirm_attachment,
     create_group_room,
     decline_invitation,
     get_or_create_direct_room,
@@ -427,6 +432,14 @@ class InvitationDeclineView(InvitationActionView):
 # ----------------------------------------------------------------------------
 
 
+class _PresignAttachmentThrottle(ScopedRateThrottle):
+    scope = "dm_attachment_presign"
+
+
+class _ConfirmAttachmentThrottle(ScopedRateThrottle):
+    scope = "dm_attachment_confirm"
+
+
 class PresignAttachmentView(APIView):
     """``POST /api/v1/dm/attachments/presign/``: presigned POST URL を発行する.
 
@@ -436,20 +449,18 @@ class PresignAttachmentView(APIView):
     認可:
     - 認証必須 (``IsAuthenticated``)
     - ``room`` が caller の member でない場合 404 (probing 防止)
+    - rate limit ``dm_attachment_presign`` 30/hour (security-reviewer HIGH H-3)
     """
 
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [_PresignAttachmentThrottle]
 
     def post(self, request: Request) -> Response:
-        from apps.dm.serializers import PresignAttachmentInputSerializer
-
         serializer = PresignAttachmentInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
         room = _get_room_for_member(room_id=data["room_id"], user=request.user)
-
-        from apps.dm.s3_presign import generate_presigned_attachment_upload
 
         try:
             result = generate_presigned_attachment_upload(
@@ -482,14 +493,14 @@ class ConfirmAttachmentView(APIView):
     1. room メンバー検証 (404 で probing 防止)
     2. service ``confirm_attachment`` で S3 head_object 再検証 → orphan 作成
     3. id を返す (フロントは send_message に attachment_ids として渡す)
+
+    rate limit ``dm_attachment_confirm`` 30/hour (security-reviewer HIGH H-3)
     """
 
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [_ConfirmAttachmentThrottle]
 
     def post(self, request: Request) -> Response:
-        from apps.dm.serializers import ConfirmAttachmentInputSerializer
-        from apps.dm.services import confirm_attachment
-
         serializer = ConfirmAttachmentInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -507,6 +518,8 @@ class ConfirmAttachmentView(APIView):
             )
         except DjangoValidationError as exc:
             raise DRFValidationError(detail=exc.messages) from exc
+        except DjangoPermissionDenied as exc:  # security LOW L-1: 将来の互換のため
+            raise PermissionDenied(str(exc)) from exc
 
         return Response(
             {

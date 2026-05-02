@@ -201,11 +201,13 @@ class DMConsumer(AsyncJsonWebsocketConsumer):
         # SPEC §7.4 monotonicity: 巻き戻し禁止。``mark_room_read`` と整合させるため
         # DB 側 conditional UPDATE で `last_read_at IS NULL OR last_read_at < when`
         # のみ書き込む (review HIGH P3-05 反映: WebSocket 経由でも巻き戻し不可)。
+        # python-reviewer HIGH 反映: updated_at は「行の変更日時」なので now() で書く
+        # (when は「既読位置」)。`mark_room_read` (services.py) と整合させる。
         from django.db.models import Q as _Q
 
         DMRoomMembership.objects.filter(room_id=self.room_id, user=self.user).filter(
             _Q(last_read_at__isnull=True) | _Q(last_read_at__lt=when)
-        ).update(last_read_at=when, updated_at=when)
+        ).update(last_read_at=when, updated_at=timezone.now())
 
     # ---- group_send イベントハンドラ ----
 

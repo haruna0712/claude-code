@@ -190,6 +190,7 @@ class MessageAttachment(models.Model):
     )
     s3_key = models.CharField(
         max_length=512,
+        unique=True,
         help_text="S3 オブジェクトキー (バケット相対)。dm/<room_id>/<yyyy>/<mm>/<uuid>.<ext>",
     )
     filename = models.CharField(max_length=200)
