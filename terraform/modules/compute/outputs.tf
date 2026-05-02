@@ -35,6 +35,11 @@ output "target_group_arns" {
   value       = { for k, tg in aws_lb_target_group.this : k => tg.arn }
 }
 
+output "target_group_arn_suffixes" {
+  description = "CloudWatch dimensions に使う target group arn_suffix (P3-18 daphne 用)."
+  value       = { for k, tg in aws_lb_target_group.this : k => tg.arn_suffix }
+}
+
 output "ecr_repository_urls" {
   description = "service 名 -> ECR repository URL のマップ"
   value       = { for k, r in aws_ecr_repository.this : k => r.repository_url }

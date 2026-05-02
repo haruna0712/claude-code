@@ -7,6 +7,12 @@ variable "environment" {
   }
 }
 
+variable "aws_region" {
+  description = "AWS region (CloudWatch Dashboard widget の region 指定に使う)。"
+  type        = string
+  default     = "ap-northeast-1"
+}
+
 variable "project" {
   description = "プロジェクト名 (リソース prefix)"
   type        = string
@@ -105,6 +111,45 @@ variable "ecs_cluster_name" {
   description = "ECS Cluster 名 (サービス CPU アラーム用)。未指定ならスキップ。"
   type        = string
   default     = ""
+}
+
+# ---------- P3-18 / Issue #243: DM 関連メトリクス ----------
+
+variable "daphne_target_group_arn_suffix" {
+  description = <<-EOT
+    Daphne 用 ALB target group の arn_suffix (P3-18, /ws/* 5xx alarm 用)。
+    `compute.target_group_arn_suffixes["daphne"]` を渡す。空ならアラーム作らない。
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "enable_dm_alarms" {
+  description = "P3-18 DM 関連アラーム (daphne 5xx / Redis CurrConnections) を作るか。"
+  type        = bool
+  default     = false
+}
+
+variable "redis_replication_group_id" {
+  description = "ElastiCache Redis replication_group_id (Channel layer の CurrConnections alarm 用)。"
+  type        = string
+  default     = ""
+}
+
+variable "redis_curr_connections_threshold" {
+  description = "Redis CurrConnections アラーム閾値 (Channel layer のコネクション数異常検知)。"
+  type        = number
+  default     = 1000
+}
+
+variable "daphne_5xx_error_rate_threshold" {
+  description = "/ws/* 5xx error rate アラーム閾値 (0.0-1.0、default 0.01 = 1%)。"
+  type        = number
+  default     = 0.01
+  validation {
+    condition     = var.daphne_5xx_error_rate_threshold > 0 && var.daphne_5xx_error_rate_threshold < 1
+    error_message = "0 < 閾値 < 1 を指定。"
+  }
 }
 
 variable "tags" {
