@@ -49,6 +49,10 @@ locals {
     # `*` を追加して DisallowedHost を回避。Phase 2 で Django 側に health-check
     # 専用 middleware (ALLOWED_HOSTS bypass) を入れたら厳密化する。
     { name = "ALLOWED_HOSTS", value = "${var.domain},*" },
+    # P3-13 (security HIGH H-1): config/settings/base.py の fail-fast ガードを満たす。
+    # OriginValidator (Channels) で WebSocket cross-site 防御を行うため、
+    # 自ドメインのみを許可する。Origin スキームは https を強制 (Cookie JWT は Secure)。
+    { name = "DJANGO_CHANNELS_ALLOWED_ORIGINS", value = "https://${var.domain}" },
     # Mailgun secret (`sns/stg/mailgun/api-key`) が placeholder のままでメール
     # 配信できないため、stg は console backend で送信内容を CloudWatch Logs に
     # ダンプする運用にしてある。アクティベーション URL は
@@ -315,10 +319,10 @@ resource "aws_ecs_task_definition" "daphne" {
         "--proxy-headers",
         "config.asgi:application",
       ]
+      # awsvpc では hostPort は containerPort と同値固定なので省略 (architect MEDIUM M-2)。
       portMappings = [
         {
           containerPort = 8001
-          hostPort      = 8001
           protocol      = "tcp"
         }
       ]

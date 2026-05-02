@@ -48,9 +48,16 @@ locals {
     daphne = {
       port     = 8001
       protocol = "HTTP"
-      health   = "/ws/health/"
+      # ALB target group の health check は HTTP probe で WebSocket upgrade ではない。
+      # daphne は ProtocolTypeRouter 経由で HTTP も処理し、django_asgi_app → urls.py で
+      # /api/health/ を返す。/ws/health/ は urls.py に未登録 (asgi.py の docstring 参照)
+      # のため CRITICAL C-1 として `/api/health/` に修正 (architect review)。
+      health = "/api/health/"
       # WebSocket 再接続を同じタスクに張り付かせるため sticky (ARCHITECTURE §3.4)
       sticky = true
+      # WebSocket 接続を deregister 中も維持するため 300s (ARCHITECTURE §3.4)。
+      # app/next は 30s で十分なので per-TG で値を分ける (architect HIGH H-1)。
+      deregistration_delay = 300
     }
   }
 }
@@ -193,7 +200,8 @@ resource "aws_lb_target_group" "this" {
   vpc_id      = var.vpc_id
   target_type = "ip" # Fargate awsvpc mode
 
-  deregistration_delay = 30
+  # daphne (WebSocket) は cutover 時に既存接続を 300s 維持。app/next は 30s で十分。
+  deregistration_delay = lookup(each.value, "deregistration_delay", 30)
 
   # architect PR #51 MEDIUM: matcher を "200" に絞り、リダイレクトを
   # 健全状態と誤認しないようにする。

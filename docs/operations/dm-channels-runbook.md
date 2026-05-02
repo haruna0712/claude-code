@@ -77,14 +77,17 @@ aws elbv2 describe-target-health --target-group-arn "$TG_ARN" \
 ### 3.3 WebSocket 接続テスト
 
 ```bash
-# wscat (npm install -g wscat) で /ws/health/ に 101 (switching protocols) を期待
+# wscat (npm install -g wscat) で /ws/health/ に 101 (switching protocols) を期待。
+# health_consumer は connect 直後に code=1000 (Normal Closure) で close するため、
+# wscat が "Disconnected (code: 1000)" と表示するのが正常動作。
 wscat -c "wss://stg.example.com/ws/health/"
-# 期待: Connected (press CTRL+C to quit)
 
 # 認証必須の DM room へは Cookie JWT 付きで:
-COOKIE="access=...; refresh=..."
-wscat -c "wss://stg.example.com/ws/dm/<room_id>/" -H "Cookie: $COOKIE"
+# 履歴に残さないよう -s で非エコー入力する (security MEDIUM M-3)。
+read -s COOKIE_HEADER
+wscat -c "wss://stg.example.com/ws/dm/<room_id>/" -H "Cookie: $COOKIE_HEADER"
 # 期待: Connected (4401 / 4403 で close されない)
+unset COOKIE_HEADER
 ```
 
 ### 3.4 Sticky session cookie の確認
@@ -147,7 +150,8 @@ ALB idle_timeout 超過の可能性。Channels 側で keepalive ping (60s 間隔
 
 ### 5.5 cutover 中に既存接続が drop
 
-`deregistration_delay` を増やす (現状 300s)。または `deployment_minimum_healthy_percent = 100` を確認。
+`deregistration_delay` (daphne TG は 300s に設定済 — `compute/main.tf` `local.target_groups.daphne`) を確認。
+または `deployment_minimum_healthy_percent = 100` を確認。app / next TG は 30s で別設定。
 
 ---
 
