@@ -44,9 +44,9 @@ export default function InvitationsPage() {
 				<h1 className="text-baby_white text-xl font-bold">グループ招待</h1>
 				<Link
 					href="/messages"
-					className="text-baby_blue focus-visible:outline-baby_blue text-sm underline focus-visible:outline-2"
+					className="text-baby_blue focus-visible:ring-baby_blue focus-visible:ring-offset-baby_veryBlack text-sm underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
 				>
-					← メッセージ一覧
+					<span aria-hidden="true">←</span> メッセージ一覧
 				</Link>
 			</header>
 			<InvitationList />

@@ -43,7 +43,7 @@ export default function RoomListItem({
 		<li className="border-baby_grey/10 border-b">
 			<Link
 				href={`/messages/${room.id}`}
-				className="hover:bg-baby_grey/5 focus-visible:outline-baby_blue flex min-h-[64px] items-center gap-3 px-4 py-3 focus-visible:outline-2"
+				className="focus-visible:ring-baby_blue focus-visible:ring-offset-baby_veryBlack hover:bg-baby_grey/5 flex min-h-[64px] items-center gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
 				aria-label={`${displayName} とのトーク${unread > 0 ? `, 未読 ${unread} 件` : ""}`}
 			>
 				<RoomAvatar room={room} currentUserId={currentUserId} />

@@ -55,11 +55,11 @@ export default function RoomList({ currentUserId }: RoomListProps) {
 			{pendingInvitationCount > 0 ? (
 				<Link
 					href="/messages/invitations"
-					className="border-baby_blue/40 bg-baby_blue/5 text-baby_blue hover:bg-baby_blue/10 focus-visible:outline-baby_blue mb-4 block rounded-md border px-4 py-3 text-sm focus-visible:outline-2"
+					className="border-baby_blue/40 bg-baby_blue/5 text-baby_blue hover:bg-baby_blue/10 focus-visible:ring-baby_blue focus-visible:ring-offset-baby_veryBlack mb-4 block rounded-md border px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
 					aria-label={`保留中のグループ招待 ${pendingInvitationCount} 件、招待ページに移動`}
 				>
 					保留中のグループ招待が <strong>{pendingInvitationCount}</strong>{" "}
-					件あります →
+					件あります <span aria-hidden="true">→</span>
 				</Link>
 			) : null}
 			{rooms.length === 0 ? (
@@ -67,7 +67,7 @@ export default function RoomList({ currentUserId }: RoomListProps) {
 					<p className="text-baby_grey">まだメッセージはありません。</p>
 					<Link
 						href="/explore"
-						className="text-baby_blue focus-visible:outline-baby_blue mt-4 inline-block underline focus-visible:outline-2"
+						className="text-baby_blue focus-visible:ring-baby_blue focus-visible:ring-offset-baby_veryBlack mt-4 inline-block underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
 					>
 						ユーザーを探す
 					</Link>

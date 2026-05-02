@@ -93,7 +93,10 @@ export default function InvitationList() {
 						key={inv.id}
 						className="border-baby_grey/10 flex items-center gap-3 border-b px-4 py-3 last:border-b-0"
 					>
-						<div className="bg-baby_grey/30 text-baby_white flex size-12 shrink-0 items-center justify-center rounded-full text-base font-semibold">
+						<div
+							aria-hidden="true"
+							className="bg-baby_grey/30 text-baby_white flex size-12 shrink-0 items-center justify-center rounded-full text-base font-semibold"
+						>
 							{inv.inviter.username[0]?.toUpperCase() ?? "?"}
 						</div>
 						<div className="min-w-0 flex-1">
