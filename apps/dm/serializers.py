@@ -182,3 +182,32 @@ class CreateGroupRoomInputSerializer(serializers.Serializer):
 
 class CreateInvitationInputSerializer(serializers.Serializer):
     invitee_handle = serializers.CharField(min_length=3, max_length=30)
+
+
+# ---------------------------------------------------------------------------
+# Attachments (P3-06)
+# ---------------------------------------------------------------------------
+
+
+class PresignAttachmentInputSerializer(serializers.Serializer):
+    """``POST /api/v1/dm/attachments/presign/`` の入力 (フィールド単位の最低限の検証).
+
+    詳細な MIME / size 上限 / extension 検証は ``s3_presign.validate_attachment_request``
+    で行う (allowlist と上限を 1 箇所に集約)。
+    """
+
+    room_id = serializers.IntegerField(min_value=1)
+    filename = serializers.CharField(min_length=1, max_length=200)
+    mime_type = serializers.CharField(min_length=1, max_length=100)
+    size = serializers.IntegerField(min_value=1)
+
+
+class ConfirmAttachmentInputSerializer(serializers.Serializer):
+    """``POST /api/v1/dm/attachments/confirm/`` の入力."""
+
+    room_id = serializers.IntegerField(min_value=1)
+    # s3_key は presign で発行した値をそのまま戻してもらう。形式は services 層で再検証。
+    s3_key = serializers.CharField(min_length=1, max_length=512)
+    filename = serializers.CharField(min_length=1, max_length=200)
+    mime_type = serializers.CharField(min_length=1, max_length=100)
+    size = serializers.IntegerField(min_value=1)

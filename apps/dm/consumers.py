@@ -99,10 +99,25 @@ class DMConsumer(AsyncJsonWebsocketConsumer):
 
         body = content.get("body") or ""
         attachment_keys = content.get("attachment_keys") or []
+        # P3-06: 推奨経路は attachment_ids (Confirm API で作成した orphan を id 紐付け)
+        raw_ids = content.get("attachment_ids") or []
+        try:
+            attachment_ids = [int(x) for x in raw_ids]
+        except (TypeError, ValueError):
+            await self.send_json(
+                {
+                    "type": "error",
+                    "code": "validation_error",
+                    "detail": "attachment_ids must be integers",
+                }
+            )
+            return
 
         try:
             message = await database_sync_to_async(self._create_message)(
-                body=body, attachment_keys=attachment_keys
+                body=body,
+                attachment_keys=attachment_keys,
+                attachment_ids=attachment_ids,
             )
         except ValidationError as exc:
             await self.send_json(
@@ -137,7 +152,13 @@ class DMConsumer(AsyncJsonWebsocketConsumer):
             self.group_name, {"type": "message.new", "message": payload}
         )
 
-    def _create_message(self, *, body: str, attachment_keys: list[dict]) -> Message:
+    def _create_message(
+        self,
+        *,
+        body: str,
+        attachment_keys: list[dict],
+        attachment_ids: list[int],
+    ) -> Message:
         # services.send_message を sync コンテキストで呼ぶラッパ。
         # database_sync_to_async と組み合わせて async から実行する。
         room = (
@@ -145,7 +166,14 @@ class DMConsumer(AsyncJsonWebsocketConsumer):
             .get(room_id=self.room_id, user=self.user)
             .room
         )
-        return send_message(room=room, sender=self.user, body=body, attachment_keys=attachment_keys)
+        # 旧経路 (keys) は後方互換のために残すが、両方指定はサービス層で ValueError。
+        # 新規呼出は ids 推奨。
+        kwargs: dict = {"room": room, "sender": self.user, "body": body}
+        if attachment_ids:
+            kwargs["attachment_ids"] = attachment_ids
+        elif attachment_keys:
+            kwargs["attachment_keys"] = attachment_keys
+        return send_message(**kwargs)
 
     async def _handle_typing(self, content) -> None:
         await self.channel_layer.group_send(
