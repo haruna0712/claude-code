@@ -37,13 +37,29 @@ export default function MessagesPage() {
 		);
 	}
 
+	// Profile.id は legacy 都合で `string` 型 (UserResponse 由来) だが、
+	// Django serializer は実際には BigAutoField を JSON number として返す。
+	// `Number(...)` で coerce すると非数値文字列で NaN になり display name 計算が
+	// 崩れるため、parseInt + isNaN ガードで明示的に弾く (ts-reviewer HIGH H-1)。
+	const currentUserId = Number.parseInt(profile.id, 10);
+	if (Number.isNaN(currentUserId)) {
+		return (
+			<section
+				role="alert"
+				className="text-baby_red mx-auto max-w-2xl py-12 text-center"
+			>
+				プロフィール ID の形式が不正です。再ログインしてください。
+			</section>
+		);
+	}
+
 	return (
 		<section className="mx-auto max-w-2xl">
 			<header className="mb-6 flex items-baseline justify-between">
 				<h1 className="text-baby_white text-xl font-bold">メッセージ</h1>
 				{/* 新規 DM 開始ボタン: P3-11 (#236) で本格実装。本 PR では空状態 CTA のみ。 */}
 			</header>
-			<RoomList currentUserId={Number(profile.id)} />
+			<RoomList currentUserId={currentUserId} />
 		</section>
 	);
 }

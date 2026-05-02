@@ -22,28 +22,38 @@ import { formatRelativeTime } from "@/lib/timeline/formatTime";
 export default function InvitationList() {
 	const router = useRouter();
 	const query = useListInvitationsQuery({ status: "pending" });
-	const [acceptInvitation, acceptState] = useAcceptInvitationMutation();
-	const [declineInvitation, declineState] = useDeclineInvitationMutation();
+	const [acceptInvitation] = useAcceptInvitationMutation();
+	const [declineInvitation] = useDeclineInvitationMutation();
 	const [actionError, setActionError] = useState<string | null>(null);
+	// Per-invitation の処理中 id を track する (ts-reviewer / code-reviewer HIGH H-2 反映)。
+	// 旧実装は acceptState/declineState の isLoading 共有でリスト全体が disabled になり、
+	// 別 row の操作も不可能になっていた。
+	const [processingId, setProcessingId] = useState<number | null>(null);
 
 	const invitations = query.data?.results ?? [];
 
 	const onAccept = async (inv: GroupInvitation) => {
 		setActionError(null);
+		setProcessingId(inv.id);
 		try {
 			const result = await acceptInvitation(inv.id).unwrap();
 			router.push(`/messages/${result.room.id}`);
 		} catch {
 			setActionError("招待の承諾に失敗しました。再試行してください。");
+		} finally {
+			setProcessingId(null);
 		}
 	};
 
 	const onDecline = async (inv: GroupInvitation) => {
 		setActionError(null);
+		setProcessingId(inv.id);
 		try {
 			await declineInvitation(inv.id).unwrap();
 		} catch {
 			setActionError("招待の拒否に失敗しました。再試行してください。");
+		} finally {
+			setProcessingId(null);
 		}
 	};
 
@@ -74,8 +84,6 @@ export default function InvitationList() {
 			</div>
 		);
 	}
-
-	const isProcessing = acceptState.isLoading || declineState.isLoading;
 
 	return (
 		<div data-testid="invitation-list">
@@ -118,15 +126,17 @@ export default function InvitationList() {
 							<button
 								type="button"
 								onClick={() => onAccept(inv)}
-								disabled={isProcessing}
+								disabled={processingId === inv.id}
+								aria-busy={processingId === inv.id}
 								className="bg-baby_blue text-baby_white focus-visible:outline-baby_white rounded-md px-3 py-1.5 text-sm font-semibold focus-visible:outline-2 disabled:opacity-50"
 							>
-								承諾
+								{processingId === inv.id ? "処理中..." : "承諾"}
 							</button>
 							<button
 								type="button"
 								onClick={() => onDecline(inv)}
-								disabled={isProcessing}
+								disabled={processingId === inv.id}
+								aria-busy={processingId === inv.id}
 								className="border-baby_grey text-baby_grey hover:bg-baby_grey/10 focus-visible:outline-baby_white rounded-md border px-3 py-1.5 text-sm font-semibold focus-visible:outline-2 disabled:opacity-50"
 							>
 								拒否

@@ -49,7 +49,7 @@ export function pickPeer(
 
 /**
  * メッセージ snippet を `SNIPPET_MAX_LENGTH` 字で省略する。
- * 改行は "·" に置き換えて 1 行表示。
+ * 改行・連続空白は単一スペースに置き換えて 1 行表示。
  */
 export function truncateSnippet(
 	body: string | null | undefined,
@@ -69,9 +69,13 @@ export function truncateSnippet(
  * 指定 id から HSL color を生成 (グループアイコン背景用)。
  * - hue は 0-359 の一様分布 (id × 137 で golden-angle 風に)
  * - saturation / lightness は固定でアクセシブルな contrast
+ *
+ * NOTE: Django bigint id が大きくなった際の精度欠落を防ぐため、まず modulo で
+ * 値域を縮めてから乗算する (code-reviewer HIGH H-3 反映)。
  */
 export function colorFromId(id: number): string {
-	const h = Math.abs(Math.floor(id) * 137) % 360;
+	const safe = Math.abs(Math.floor(id));
+	const h = ((safe % 360) * 137) % 360;
 	return `hsl(${h}, 60%, 45%)`;
 }
 
