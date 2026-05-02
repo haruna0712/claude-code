@@ -205,3 +205,201 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx_rate" {
 
   tags = local.default_tags
 }
+
+# ---------------------------------------------------------------------------
+# P3-18 / Issue #243: DM 関連アラーム
+# - /ws/* (daphne TG) の 5xx error rate
+# - ElastiCache Redis (Channel layer) の CurrConnections / EngineCPUUtilization
+# ---------------------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "daphne_5xx_rate" {
+  # for_each guard は静的 bool のみで条件付ける (code-reviewer HIGH H-2 反映)。
+  # arn_suffix は module.compute の output で apply 時 unknown になるため、
+  # `!= ""` 条件を for_each に入れると plan 時に key set が確定せずエラーになる。
+  for_each = var.enable_dm_alarms ? toset(["this"]) : toset([])
+
+  alarm_name = "${local.prefix}-daphne-5xx-rate-high"
+  alarm_description = format(
+    "/ws/* (daphne TG) HTTPCode_Target_5XX_Count > %.1f%% over 5min (minimum 10 req/period)",
+    var.daphne_5xx_error_rate_threshold * 100,
+  )
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  threshold           = var.daphne_5xx_error_rate_threshold
+  treat_missing_data  = "notBreaching"
+
+  # architect HIGH H-1 反映: 低 traffic 時 (total < 10) は分母が小さく 1 件のエラーで
+  # 50% を超えてしまい false positive になる。最低 10 req/period のガードを入れる。
+  metric_query {
+    id          = "error_rate"
+    expression  = "IF(total > 10, errors / total, 0)"
+    label       = "/ws/* 5xx error rate (gated by min traffic)"
+    return_data = true
+  }
+
+  metric_query {
+    id = "errors"
+    metric {
+      metric_name = "HTTPCode_Target_5XX_Count"
+      namespace   = "AWS/ApplicationELB"
+      period      = 300
+      stat        = "Sum"
+      dimensions = {
+        LoadBalancer = var.alb_arn_suffix
+        TargetGroup  = var.daphne_target_group_arn_suffix
+      }
+    }
+  }
+
+  metric_query {
+    id = "total"
+    metric {
+      metric_name = "RequestCount"
+      namespace   = "AWS/ApplicationELB"
+      period      = 300
+      stat        = "Sum"
+      dimensions = {
+        LoadBalancer = var.alb_arn_suffix
+        TargetGroup  = var.daphne_target_group_arn_suffix
+      }
+    }
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = merge(local.default_tags, { Service = "daphne" })
+}
+
+resource "aws_cloudwatch_metric_alarm" "redis_curr_connections" {
+  # for_each は静的 bool のみ (code-reviewer HIGH H-2 反映、apply-time unknown 回避)
+  for_each = var.enable_dm_alarms ? toset(["this"]) : toset([])
+
+  alarm_name          = "${local.prefix}-redis-curr-connections-high"
+  alarm_description   = "Channel layer Redis CurrConnections > ${var.redis_curr_connections_threshold} (>5min)"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CurrConnections"
+  namespace           = "AWS/ElastiCache"
+  period              = 300
+  statistic           = "Average"
+  threshold           = var.redis_curr_connections_threshold
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ReplicationGroupId = var.redis_replication_group_id
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = merge(local.default_tags, { Service = "redis" })
+}
+
+resource "aws_cloudwatch_metric_alarm" "redis_engine_cpu" {
+  # for_each は静的 bool のみ (code-reviewer HIGH H-2 反映、apply-time unknown 回避)
+  for_each = var.enable_dm_alarms ? toset(["this"]) : toset([])
+
+  alarm_name          = "${local.prefix}-redis-engine-cpu-high"
+  alarm_description   = "Channel layer Redis EngineCPUUtilization > ${var.redis_engine_cpu_threshold}% over 5min"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "EngineCPUUtilization"
+  namespace           = "AWS/ElastiCache"
+  period              = 300
+  statistic           = "Average"
+  threshold           = var.redis_engine_cpu_threshold
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ReplicationGroupId = var.redis_replication_group_id
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = merge(local.default_tags, { Service = "redis" })
+}
+
+# ---------------------------------------------------------------------------
+# DM Dashboard (P3-18)
+# Daphne / /ws/* / Redis を 1 画面で確認できる CloudWatch Dashboard。
+# ---------------------------------------------------------------------------
+
+resource "aws_cloudwatch_dashboard" "dm" {
+  count = var.enable_dm_alarms ? 1 : 0
+
+  dashboard_name = "${local.prefix}-dm"
+
+  dashboard_body = jsonencode({
+    widgets = [
+      {
+        type   = "metric"
+        x      = 0
+        y      = 0
+        width  = 12
+        height = 6
+        properties = {
+          title   = "Daphne ECS — CPU / Memory"
+          region  = var.aws_region
+          view    = "timeSeries"
+          stacked = false
+          # ecs_services に "daphne" が含まれない呼び出し方への保険として lookup + 空文字列。
+          metrics = [
+            ["AWS/ECS", "CPUUtilization", "ClusterName", var.ecs_cluster_name, "ServiceName", lookup(local.resolved_ecs_service_names, "daphne", ""), { stat = "Average" }],
+            [".", "MemoryUtilization", ".", ".", ".", ".", { stat = "Average" }],
+          ]
+          period = 60
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 0
+        width  = 12
+        height = 6
+        properties = {
+          title   = "/ws/* (daphne TG) — 5xx / Requests / TargetResponseTime"
+          region  = var.aws_region
+          view    = "timeSeries"
+          stacked = false
+          metrics = [
+            ["AWS/ApplicationELB", "HTTPCode_Target_5XX_Count", "LoadBalancer", var.alb_arn_suffix, "TargetGroup", var.daphne_target_group_arn_suffix, { stat = "Sum" }],
+            [".", "RequestCount", ".", ".", ".", ".", { stat = "Sum" }],
+            [".", "TargetResponseTime", ".", ".", ".", ".", { stat = "p95" }],
+          ]
+          period = 60
+          annotations = {
+            horizontal = [
+              { value = var.daphne_5xx_error_rate_threshold, label = "5xx rate alarm threshold (ratio)", color = "#d62728" },
+            ]
+          }
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 6
+        width  = 12
+        height = 6
+        properties = {
+          title   = "Channel layer Redis — CurrConnections / EngineCPUUtilization"
+          region  = var.aws_region
+          view    = "timeSeries"
+          stacked = false
+          metrics = [
+            ["AWS/ElastiCache", "CurrConnections", "ReplicationGroupId", var.redis_replication_group_id, { stat = "Average" }],
+            [".", "EngineCPUUtilization", ".", ".", { stat = "Average" }],
+          ]
+          period = 60
+          annotations = {
+            horizontal = [
+              { value = var.redis_curr_connections_threshold, label = "CurrConnections alarm threshold", color = "#d62728" },
+              { value = var.redis_engine_cpu_threshold, label = "EngineCPU alarm threshold", color = "#ff9896" },
+            ]
+          }
+        }
+      },
+    ]
+  })
+}

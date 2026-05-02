@@ -300,6 +300,7 @@ module "observability" {
 
   environment        = "stg"
   project            = var.project
+  aws_region         = var.aws_region
   log_retention_days = 30
   alert_email        = var.alert_email
 
@@ -315,6 +316,11 @@ module "observability" {
   rds_instance_identifier  = module.data.rds_instance_id
   rds_allocated_storage_gb = var.rds_allocated_storage_gb
   enable_rds_alarms        = true
+
+  # P3-18 / Issue #243: DM 関連メトリクス & アラーム + Dashboard
+  enable_dm_alarms               = true
+  daphne_target_group_arn_suffix = module.compute.target_group_arn_suffixes["daphne"]
+  redis_replication_group_id     = module.data.redis_id
 }
 
 # ---------------------------------------------------------------------------
