@@ -52,20 +52,23 @@ export default function MessageList({
 	}, [messages]);
 
 	return (
-		<div
-			ref={containerRef}
-			role="log"
-			aria-live="polite"
-			aria-label="メッセージ履歴"
-			data-testid="message-list"
-			className="flex-1 overflow-y-auto py-2"
-		>
+		<>
 			{messages.length === 0 ? (
 				<p className="text-baby_grey px-4 py-8 text-center text-sm">
 					まだメッセージはありません。
 				</p>
-			) : (
-				messages.map((m) => {
+			) : null}
+			<div
+				ref={containerRef}
+				role="log"
+				aria-live="polite"
+				aria-relevant="additions"
+				aria-atomic="false"
+				aria-label="メッセージ履歴"
+				data-testid="message-list"
+				className="flex-1 overflow-y-auto py-2"
+			>
+				{messages.map((m) => {
 					const localKey = `msg-${m.id}`;
 					const status = pendingByClientKey?.get(localKey) ?? "sent";
 					return (
@@ -77,8 +80,8 @@ export default function MessageList({
 							onRetry={onRetry ? () => onRetry(localKey) : undefined}
 						/>
 					);
-				})
-			)}
-		</div>
+				})}
+			</div>
+		</>
 	);
 }

@@ -63,8 +63,8 @@ export default function RoomChat({ roomId, currentUserId }: RoomChatProps) {
 		const frame = socket.lastFrame;
 		if (!frame) return;
 		if (frame.type === "message.new") {
-			const incoming = frame.message as DMMessage;
-			if (incoming && typeof incoming.id === "number") {
+			const incoming = parseIncomingMessage(frame.message);
+			if (incoming) {
 				setLiveMessages((prev) =>
 					prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming],
 				);
@@ -81,8 +81,9 @@ export default function RoomChat({ roomId, currentUserId }: RoomChatProps) {
 			}
 		} else if (frame.type === "typing.update") {
 			const userId = frame.user_id;
+			const rawStarted = frame.started_at;
 			const startedAt =
-				(frame.started_at as string | undefined) ?? new Date().toISOString();
+				typeof rawStarted === "string" ? rawStarted : new Date().toISOString();
 			if (typeof userId === "number" && userId !== currentUserId) {
 				setTyping({ userId, startedAt });
 			}
@@ -161,6 +162,32 @@ export default function RoomChat({ roomId, currentUserId }: RoomChatProps) {
 	);
 }
 
+/**
+ * `message.new` frame の `message` field を runtime narrowing で安全な DMMessage に。
+ * 必須フィールドを実際にチェックして不正な frame は null を返す (ts-reviewer HIGH 反映)。
+ */
+function parseIncomingMessage(raw: unknown): DMMessage | null {
+	if (!raw || typeof raw !== "object") return null;
+	const r = raw as Record<string, unknown>;
+	if (typeof r.id !== "number") return null;
+	if (typeof r.room_id !== "number") return null;
+	if (r.sender_id !== null && typeof r.sender_id !== "number") return null;
+	if (typeof r.body !== "string") return null;
+	if (typeof r.created_at !== "string") return null;
+	return {
+		id: r.id,
+		room_id: r.room_id,
+		sender_id: r.sender_id as number | null,
+		body: r.body,
+		attachments: Array.isArray(r.attachments)
+			? (r.attachments as DMMessage["attachments"])
+			: [],
+		created_at: r.created_at,
+		updated_at: typeof r.updated_at === "string" ? r.updated_at : r.created_at,
+		deleted_at: typeof r.deleted_at === "string" ? r.deleted_at : null,
+	};
+}
+
 function SocketStatusBadge({
 	status,
 	onReconnect,
@@ -168,17 +195,22 @@ function SocketStatusBadge({
 	status: "connecting" | "open" | "closed";
 	onReconnect(): void;
 }) {
+	// a11y H-3: 色だけでなく形 (●/◐/⚠) でも区別 + role=status で transition を SR に通知
 	if (status === "open") {
 		return (
-			<span className="text-baby_green text-xs" aria-label="WebSocket 接続済み">
-				● オンライン
+			<span
+				role="status"
+				aria-live="polite"
+				className="text-baby_green text-xs"
+			>
+				<span aria-hidden="true">●</span> オンライン
 			</span>
 		);
 	}
 	if (status === "connecting") {
 		return (
-			<span className="text-baby_grey text-xs" aria-label="WebSocket 接続中">
-				● 接続中...
+			<span role="status" aria-live="polite" className="text-baby_grey text-xs">
+				<span aria-hidden="true">◐</span> 接続中...
 			</span>
 		);
 	}
@@ -186,10 +218,10 @@ function SocketStatusBadge({
 		<button
 			type="button"
 			onClick={onReconnect}
-			className="text-baby_red focus-visible:ring-baby_blue text-xs underline focus-visible:outline-none focus-visible:ring-2"
+			className="text-baby_red focus-visible:ring-baby_blue inline-flex min-h-[24px] items-center gap-1 text-xs underline focus-visible:outline-none focus-visible:ring-2"
 			aria-label="WebSocket 切断中、クリックで再接続"
 		>
-			● 切断 (再接続)
+			<span aria-hidden="true">⚠</span> 切断 (再接続)
 		</button>
 	);
 }

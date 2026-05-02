@@ -22,6 +22,22 @@ describe("MessageComposer", () => {
 		expect(onSubmit).toHaveBeenCalledWith("hi");
 	});
 
+	it("Cmd+Enter (metaKey) でも送信される", async () => {
+		const onSubmit = vi.fn();
+		render(<MessageComposer onSubmit={onSubmit} />);
+		const textarea = screen.getByLabelText("メッセージを入力");
+		await userEvent.type(textarea, "hi{Meta>}{Enter}{/Meta}");
+		expect(onSubmit).toHaveBeenCalledWith("hi");
+	});
+
+	it("onSubmit 失敗時は alert を表示", async () => {
+		const onSubmit = vi.fn().mockRejectedValue(new Error("backend down"));
+		render(<MessageComposer onSubmit={onSubmit} />);
+		await userEvent.type(screen.getByLabelText("メッセージを入力"), "hi");
+		await userEvent.click(screen.getByRole("button", { name: "送信" }));
+		expect(await screen.findByRole("alert")).toHaveTextContent("backend down");
+	});
+
 	it("空文字 / 空白のみは送信されない", async () => {
 		const onSubmit = vi.fn();
 		render(<MessageComposer onSubmit={onSubmit} />);
