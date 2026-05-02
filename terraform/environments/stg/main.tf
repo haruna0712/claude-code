@@ -100,6 +100,11 @@ module "storage" {
   # 二段階 apply (architect PR #53 HIGH): 初回は空、edge 作成後に tfvars で
   # `cloudfront_distribution_arn_override` を埋めて再 apply。
   cloudfront_oac_arn = var.cloudfront_distribution_arn_override
+
+  # DM 添付の lifecycle (P3-07 / Issue #232)。stg は default 値 (90/365) で運用想定だが、
+  # 必要に応じて terraform.tfvars で上書き可能にする。
+  dm_attachment_glacier_ir_days = var.dm_attachment_glacier_ir_days
+  dm_attachment_expiration_days = var.dm_attachment_expiration_days
 }
 
 # ---------------------------------------------------------------------------
@@ -324,19 +329,40 @@ module "observability" {
 # ---------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "ecs_dm_attachment_access" {
+  # オブジェクトレベル: PutObject / GetObject / DeleteObject を dm/ prefix 限定で許可。
+  # GetObjectVersion は versioning ON のバケットで HEAD/GET が誤って 404 になる事象を
+  # 避けるため (security-reviewer HIGH-1: AWS は ListBucket なしの場合 NoSuchKey 扱い)。
   statement {
-    sid    = "AllowDMAttachmentPutGetDelete"
+    sid    = "AllowDMAttachmentObjectAccessStg"
     effect = "Allow"
     actions = [
       "s3:PutObject",
       "s3:GetObject",
+      "s3:GetObjectVersion",
       "s3:DeleteObject",
     ]
     resources = ["${module.storage.media_bucket_arn}/dm/*"]
   }
 
+  # バケットレベル ListBucket: `dm/` prefix 限定で許可
+  # (security-reviewer HIGH-1: ListBucket がないと Glacier IR 復元時等に 404 誤判定)。
   statement {
-    sid       = "AllowDMAttachmentBucketLocation"
+    sid       = "AllowDMAttachmentListStg"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [module.storage.media_bucket_arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["dm/*", "dm/", "dm"]
+    }
+  }
+
+  # バケットレベル GetBucketLocation: SDK がリクエスト署名のリージョン解決に
+  # 暗黙発行する。s3:prefix 条件は GetBucketLocation に適用されないため別 statement。
+  statement {
+    sid       = "AllowDMAttachmentBucketLocationStg"
     effect    = "Allow"
     actions   = ["s3:GetBucketLocation"]
     resources = [module.storage.media_bucket_arn]

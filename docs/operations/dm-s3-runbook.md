@@ -33,14 +33,23 @@ sns-stg-media/
 | 30 日    | 旧バージョンも削除    | バージョニング暴発防止                    |
 | 1 日     | 不完全 multipart 削除 | upload abort 後のゴミ回収                 |
 
-変更したい場合は `terraform/environments/stg/terraform.tfvars` で:
+> 既存の `cleanup-noncurrent-versions` ルール (filter なし、全 prefix) は `dm/`
+> オブジェクトの noncurrent version にもマッチするが、dm 専用ルールの 30 日が
+> 先に発動するため実効は 30 日 (storage/main.tf のコメント参照)。
+
+stg では `terraform/environments/stg/variables.tf` の `dm_attachment_glacier_ir_days` /
+`dm_attachment_expiration_days` を `terraform.tfvars` で上書きできる:
 
 ```hcl
-# storage モジュールに渡す変数 (terraform/modules/storage/variables.tf)
-# dm_attachment_glacier_ir_days = 60
-# dm_attachment_expiration_days = 730
+# terraform/environments/stg/terraform.tfvars
+dm_attachment_glacier_ir_days = 60
+dm_attachment_expiration_days = 730
 ```
 
+> **制約**: `dm_attachment_expiration_days` は `dm_attachment_glacier_ir_days` より大きい値
+> (または 0 で無期限) を指定。違反すると `terraform plan` の precondition で fail する
+> (apply 前に検出される)。
+>
 > **注意**: `dm_attachment_expiration_days = 0` は「永続保持」を意味する。法務的に問題ない場合のみ。
 
 ---
@@ -51,16 +60,19 @@ sns-stg-media/
 `terraform/environments/stg/main.tf` で `aws_iam_role_policy.ecs_dm_attachment` として
 両モジュール作成後に attach する。
 
-権限内訳:
+権限内訳 (実 ARN は `terraform output media_bucket_arn` で確認):
 
-| Action                 | Resource                          | 用途                                 |
-| ---------------------- | --------------------------------- | ------------------------------------ |
-| `s3:PutObject`         | `arn:aws:s3:::sns-stg-media/dm/*` | presigned URL 発行 (P3-06)           |
-| `s3:GetObject`         | `arn:aws:s3:::sns-stg-media/dm/*` | 添付ダウンロード (HEAD/Range)        |
-| `s3:DeleteObject`      | `arn:aws:s3:::sns-stg-media/dm/*` | メッセージ削除時の object 削除 (24h) |
-| `s3:GetBucketLocation` | `arn:aws:s3:::sns-stg-media`      | multipart upload 状態確認            |
+| Action                 | Resource scope     | 条件                        | 用途                              |
+| ---------------------- | ------------------ | --------------------------- | --------------------------------- |
+| `s3:PutObject`         | `<media_arn>/dm/*` | —                           | presigned URL 発行 (P3-06)        |
+| `s3:GetObject`         | `<media_arn>/dm/*` | —                           | 添付ダウンロード (HEAD/Range)     |
+| `s3:GetObjectVersion`  | `<media_arn>/dm/*` | —                           | versioning ON で 404 誤判定回避   |
+| `s3:DeleteObject`      | `<media_arn>/dm/*` | —                           | メッセージ削除時 (SPEC §7.3、24h) |
+| `s3:ListBucket`        | `<media_arn>`      | `s3:prefix StringLike dm/*` | Glacier IR 復元時の存在確認       |
+| `s3:GetBucketLocation` | `<media_arn>`      | —                           | SDK のリージョン解決              |
 
-avatars / tweets / articles など他 prefix には触らないことが保証される (resource path で `dm/*` 限定)。
+avatars / tweets / articles など他 prefix には触らないことが保証される
+(オブジェクトレベル権限は `dm/*` 限定、ListBucket は `s3:prefix` 条件で絞り込み)。
 
 ---
 
@@ -91,19 +103,47 @@ module "storage" {
 ## 6. 退会・大量削除の運用
 
 - ユーザーが退会した場合の DM object 一括削除は **Phase 9 で scheduled task として実装予定** (現状未実装)。
-- 緊急で個別 object を削除する場合は AWS CLI:
+
+### 6.1 削除前の preflight (必須)
+
+prod / stg どちらに対する操作か必ず先に確認する:
 
 ```bash
+aws sts get-caller-identity
+# → "Account": "<id>" を確認。stg と prod で AWS account が異なるはず。
+aws s3 ls s3://sns-stg-media/dm/ | head -20
+# → 想定どおりのバケットを参照しているか確認。
+```
+
+### 6.2 個別 object の削除
+
+```bash
+# まず --dryrun で対象を確認
+aws s3 rm "s3://sns-stg-media/dm/2026/05/01/<message_id>/" --recursive --dryrun
+# 出力を目視確認後、--dryrun を外して実行
 aws s3 rm "s3://sns-stg-media/dm/2026/05/01/<message_id>/" --recursive
 ```
 
-- バケット全体に `dm/` だけ完全削除したい場合 (テスト環境のリセット):
+### 6.3 stg 環境の dm/ 完全リセット (テスト用途のみ)
 
 ```bash
+# Step 1: --dryrun で件数確認
+aws s3 rm "s3://sns-stg-media/dm/" --recursive --dryrun | wc -l
+
+# Step 2: current version 削除 (delete marker が残るだけで実体は復元可能)
 aws s3 rm "s3://sns-stg-media/dm/" --recursive
+
+# Step 3: バージョニング ON のバケットでは current 削除だけでは実体が残る。
+#         全 version + delete marker を削除するには delete-objects API を使う:
+aws s3api list-object-versions \
+  --bucket sns-stg-media --prefix "dm/" \
+  --query '{Objects: [Versions, DeleteMarkers][].{Key:Key, VersionId:VersionId}}' \
+  --output json > /tmp/dm-versions.json
+aws s3api delete-objects --bucket sns-stg-media --delete file:///tmp/dm-versions.json
 ```
 
 > **本番では絶対に実行しない**。退会フローは別途 Phase 9 で承認・監査ログ込みで実装する。
+> 上記コマンドはプロビジョニング後の **stg 環境のテスト用途** に限定する。
 
 ---
 
@@ -120,12 +160,21 @@ aws s3 rm "s3://sns-stg-media/dm/" --recursive
 ## 8. apply 手順
 
 ```bash
+# Step 0: 操作対象アカウントを確認 (stg / prod 取り違え防止)
+aws sts get-caller-identity
+
+# Step 1: フォーマット & 検証
 cd terraform/environments/stg
 terraform fmt
 terraform validate
+
+# Step 2: plan
 terraform plan -out=dm-s3.plan
-# → 差分確認後、ハルナさん手動で:
+
+# Step 3: 差分確認後、ハルナさん手動で:
 terraform apply dm-s3.plan
 ```
 
 > CLAUDE.md §9 の通り、`terraform apply` は人間が必ず実行する。Claude は plan までで止まる。
+> apply 直前に `aws sts get-caller-identity` でアカウント ID を確認することを必ず行う
+> (security-reviewer HIGH-2: prod / stg バケット名が 4 文字差のため誤操作リスク高)。
