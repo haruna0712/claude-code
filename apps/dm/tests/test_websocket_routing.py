@@ -50,24 +50,24 @@ async def test_health_endpoint_requires_listed_origin() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dm_routing_reaches_placeholder_consumer() -> None:
-    """P3-02 で配線が通ったことの最低限の確認.
+async def test_dm_routing_reaches_consumer_and_rejects_anonymous() -> None:
+    """``/ws/dm/<pk>/`` ルーティングが Consumer に届き、未認証は 4401 close される.
 
-    実 DMConsumer は P3-03 (#228) で実装する。Phase 3 開始時点ではプレースホルダが
-    ``close(code=4501)`` で即切断するので、accept されないが close_code が 4501 で
-    返ってくれば「ルーティングは到達した」と判断できる。
+    P3-02 ではプレースホルダ Consumer が 4501 で即切断していたが、P3-03 (#228) で
+    本実装に切り替わったため close code は 4401 (未認証) になる。詳細な scope テストは
+    ``apps/dm/tests/test_consumer.py`` 側で行う。
     """
     from config.asgi import application
 
     allowed_origin = settings.CHANNELS_ALLOWED_ORIGINS[0].encode()
     communicator = WebsocketCommunicator(
         application,
-        "/ws/dm/00000000-0000-0000-0000-000000000000/",
+        "/ws/dm/1/",
         headers=[(b"origin", allowed_origin)],
     )
     connected, close_code = await communicator.connect()
     assert connected is False
-    assert close_code == 4501
+    assert close_code == 4401
 
 
 @pytest.mark.asyncio
@@ -77,7 +77,7 @@ async def test_origin_validator_rejects_disallowed_origin() -> None:
 
     communicator = WebsocketCommunicator(
         application,
-        "/ws/dm/00000000-0000-0000-0000-000000000000/",
+        "/ws/dm/1/",
         headers=[(b"origin", b"https://evil.example.com")],
     )
     connected, _close_code = await communicator.connect()
@@ -91,31 +91,25 @@ async def test_origin_validator_rejects_missing_origin() -> None:
 
     communicator = WebsocketCommunicator(
         application,
-        "/ws/dm/00000000-0000-0000-0000-000000000000/",
+        "/ws/dm/1/",
     )
     connected, _close_code = await communicator.connect()
     assert connected is False
 
 
 @pytest.mark.asyncio
-async def test_dm_routing_rejects_invalid_uuid() -> None:
-    """``[0-9a-f-]+`` の旧 regex で通っていた不正値は新 regex で 404 close になる.
-
-    URLRouter は path 不一致時 ``ValueError`` を投げる仕様だが、
-    ``OriginValidator`` 経由で wrap されているため close 扱いになる。
-    """
+async def test_dm_routing_rejects_non_numeric() -> None:
+    """``\\d+`` regex は数字以外の不正 path を弾く (URLRouter は ValueError を raise)."""
     from config.asgi import application
 
     allowed_origin = settings.CHANNELS_ALLOWED_ORIGINS[0].encode()
     communicator = WebsocketCommunicator(
         application,
-        "/ws/dm/---/",
+        "/ws/dm/abc/",
         headers=[(b"origin", allowed_origin)],
     )
-    # URLRouter は match しない場合 ValueError を投げる。connect は False で返る。
     try:
         connected, _ = await communicator.connect()
         assert connected is False
     except ValueError:
-        # OK: outer URLRouter が "no route" 判定で raise した
         pass

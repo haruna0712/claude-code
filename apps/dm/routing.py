@@ -11,10 +11,9 @@ from django.urls import re_path
 
 from apps.dm.consumers import DMConsumer
 
-# room_id は ``DMRoom.id`` (UUIDField) のみ受ける。緩い ``[0-9a-f-]+`` だと
-# ``---`` のような不正値が router を素通りし、Consumer 側で 2 重バリデーション
-# が必要になる (code/python-reviewer MEDIUM 反映)。UUID v4 形式に固定する。
-_UUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+# room_id は ``DMRoom`` の bigint primary key (Django auto ``id``) を直接受ける。
+# ER §2.14 では UUID 化されておらず、Phase 3 全体で bigint PK を使用するため、
+# routing は ``\d+`` で固定する (UUID 化は Phase 9+ で再検討する余地)。
 websocket_urlpatterns = [
-    re_path(rf"^ws/dm/(?P<room_id>{_UUID_RE})/$", DMConsumer.as_asgi()),
+    re_path(r"^ws/dm/(?P<room_id>\d+)/$", DMConsumer.as_asgi()),
 ]
