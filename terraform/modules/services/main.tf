@@ -98,6 +98,8 @@ locals {
     "celery-worker"  = "/ecs/${local.prefix}/celery-worker"
     "celery-beat"    = "/ecs/${local.prefix}/celery-beat"
     "django-migrate" = aws_cloudwatch_log_group.migrate.name
+    # P3-13: Daphne (Channels ASGI) — observability module が log group を作成する。
+    "daphne" = "/ecs/${local.prefix}/daphne"
   }
 }
 
@@ -287,6 +289,57 @@ resource "aws_ecs_task_definition" "celery_beat" {
   tags = local.common_tags
 }
 
+# ---------- daphne (Channels ASGI WebSocket server, P3-13) ----------
+resource "aws_ecs_task_definition" "daphne" {
+  family                   = "${local.prefix}-daphne"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = var.daphne_cpu
+  memory                   = var.daphne_memory
+  execution_role_arn       = var.ecs_task_execution_role_arn
+  task_role_arn            = var.ecs_task_role_arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "daphne"
+      image     = "${var.ecr_repository_urls["django"]}:${var.image_tag}" # Django image を共有
+      essential = true
+      # SPEC §7 / ARCHITECTURE §3.4: Daphne で ASGI を起動。idle_timeout=3600 (ALB) と整合。
+      # Daphne 自体の websocket idle は 0 (無制限) に近い、コネクション維持は ALB 側で管理。
+      command = [
+        "daphne",
+        "-b",
+        "0.0.0.0",
+        "-p",
+        "8001",
+        "--proxy-headers",
+        "config.asgi:application",
+      ]
+      portMappings = [
+        {
+          containerPort = 8001
+          hostPort      = 8001
+          protocol      = "tcp"
+        }
+      ]
+      environment = local.common_env
+      secrets     = local.django_secrets
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = local.log_group_names["daphne"]
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "daphne"
+        }
+      }
+      # ALB target group の health check (/ws/health/) と一致させるため、
+      # container 内の health check は省略 (ALB 側で十分)。
+    }
+  ])
+
+  tags = local.common_tags
+}
+
 # ---------- django-migrate (one-shot, cd-stg.yml run-task) ----------
 resource "aws_ecs_task_definition" "django_migrate" {
   family                   = "${local.prefix}-django-migrate"
@@ -410,6 +463,46 @@ resource "aws_ecs_service" "celery_worker" {
   tags = local.common_tags
 }
 
+# daphne (ALB target group=daphne, port 8001, sticky session — P3-13)
+# WebSocket は再接続時に同じ task に貼り付けるため target group 側で sticky 設定済み。
+# deployment は max=200 で blue/green 風に切り替え、cutover 中も既存接続を維持する。
+resource "aws_ecs_service" "daphne" {
+  name             = "${local.prefix}-daphne"
+  cluster          = var.ecs_cluster_arn
+  task_definition  = aws_ecs_task_definition.daphne.arn
+  desired_count    = var.daphne_desired_count
+  launch_type      = "FARGATE"
+  platform_version = "LATEST"
+
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [var.ecs_security_group_id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = var.target_group_arns["daphne"]
+    container_name   = "daphne"
+    container_port   = 8001
+  }
+
+  # WebSocket connection の急な drop を避けるため、cutover 中は新旧両方が available。
+  deployment_minimum_healthy_percent = 100
+  deployment_maximum_percent         = 200
+
+  # 既存接続が切れる前に target group から外す猶予 (deregistration_delay) を target group 側で 300s 設定済み。
+  # 本 service 側では task の安全な置き換えのため health_check_grace_period を長めに取る。
+  health_check_grace_period_seconds = 60
+
+  # cd-stg.yml が `force-new-deployment` で更新するため、image tag 変更で
+  # terraform plan に毎回差分が出ないよう、task_definition revision の管理は CD に委譲。
+  lifecycle {
+    ignore_changes = [task_definition, desired_count]
+  }
+
+  tags = local.common_tags
+}
+
 # celery-beat (must be 1 task only — duplicates cause double scheduling)
 resource "aws_ecs_service" "celery_beat" {
   name             = "${local.prefix}-celery-beat"
@@ -434,4 +527,36 @@ resource "aws_ecs_service" "celery_beat" {
   }
 
   tags = local.common_tags
+}
+
+#####################################################################
+# Application Auto Scaling — daphne (P3-13 / Issue #238)
+#####################################################################
+# ARCHITECTURE §3.5: stg では Daphne は min=1 / max=2、CPU 80% で scale up。
+# WebSocket 接続数を直接ターゲットにしたいが ECS service の組み込みメトリクスは
+# CPU / Memory のみのため、CPU を proxy として使う (Phase 4 で CW custom metric 検討)。
+
+resource "aws_appautoscaling_target" "daphne" {
+  service_namespace  = "ecs"
+  scalable_dimension = "ecs:service:DesiredCount"
+  resource_id        = "service/${replace(var.ecs_cluster_arn, "/^.+\\//", "")}/${aws_ecs_service.daphne.name}"
+  min_capacity       = var.daphne_autoscaling_min_capacity
+  max_capacity       = var.daphne_autoscaling_max_capacity
+}
+
+resource "aws_appautoscaling_policy" "daphne_cpu" {
+  name               = "${local.prefix}-daphne-cpu-target"
+  service_namespace  = aws_appautoscaling_target.daphne.service_namespace
+  scalable_dimension = aws_appautoscaling_target.daphne.scalable_dimension
+  resource_id        = aws_appautoscaling_target.daphne.resource_id
+  policy_type        = "TargetTrackingScaling"
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+    target_value       = var.daphne_autoscaling_cpu_target
+    scale_in_cooldown  = 300
+    scale_out_cooldown = 60
+  }
 }

@@ -14,6 +14,11 @@ output "celery_beat_service_name" {
   value = aws_ecs_service.celery_beat.name
 }
 
+output "daphne_service_name" {
+  description = "P3-13 daphne (Channels) ECS service 名"
+  value       = aws_ecs_service.daphne.name
+}
+
 output "service_names_csv" {
   description = "cd-stg.yml の vars.ECS_SERVICES に貼る用 (カンマ区切り)"
   value = join(",", [
@@ -21,6 +26,7 @@ output "service_names_csv" {
     aws_ecs_service.next.name,
     aws_ecs_service.celery_worker.name,
     aws_ecs_service.celery_beat.name,
+    aws_ecs_service.daphne.name,
   ])
 }
 
