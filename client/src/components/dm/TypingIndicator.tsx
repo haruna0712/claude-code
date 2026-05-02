@@ -10,15 +10,14 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import type { DMUserSummary } from "@/lib/redux/features/dm/types";
-
 const AUTO_HIDE_MS = 3_000;
 const SR_ANNOUNCE_AFTER_MS = 3_000;
 
 interface TypingIndicatorProps {
 	typingUserId: number | null;
 	startedAt?: string | null;
-	memberLookup: Map<number, DMUserSummary>;
+	/** user_id (pkid) → handle (username) の lookup. */
+	memberLookup: Map<number, string>;
 }
 
 export default function TypingIndicator({
@@ -55,9 +54,9 @@ export default function TypingIndicator({
 	}, [typingUserId, startedAt, announceId]);
 
 	if (visibleId == null) return null;
-	const member = memberLookup.get(visibleId);
-	const label = member ? `@${member.username}` : "誰か";
-	const announcing = announceId === visibleId && member;
+	const handle = memberLookup.get(visibleId);
+	const label = handle ? `@${handle}` : "誰か";
+	const announcing = announceId === visibleId && Boolean(handle);
 
 	return (
 		<>
@@ -70,7 +69,7 @@ export default function TypingIndicator({
 			</div>
 			{announcing ? (
 				<div role="status" aria-live="polite" className="sr-only">
-					{member ? `${member.username} さんが入力中` : ""}
+					{handle ? `${handle} さんが入力中` : ""}
 				</div>
 			) : null}
 		</>

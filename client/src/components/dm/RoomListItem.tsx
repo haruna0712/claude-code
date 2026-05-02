@@ -88,18 +88,10 @@ function RoomAvatar({
 }) {
 	if (room.kind === "direct") {
 		const peer = pickPeer(room, currentUserId);
-		const src = peer?.avatar ?? null;
-		const fallback = peer ? (peer.username[0]?.toUpperCase() ?? "?") : "?";
-		return src ? (
-			// eslint-disable-next-line @next/next/no-img-element
-			<img
-				src={src}
-				alt=""
-				width={48}
-				height={48}
-				className="size-12 shrink-0 rounded-full object-cover"
-			/>
-		) : (
+		// DMRoomMembership は flat な handle のみ持つ。avatar URL は別 endpoint
+		// (/api/v1/profiles/...) で解決する設計だが Phase 3 範囲外、initials のみ表示。
+		const fallback = peer ? (peer.handle[0]?.toUpperCase() ?? "?") : "?";
+		return (
 			<div
 				aria-hidden="true"
 				className="bg-baby_grey/30 text-baby_white flex size-12 shrink-0 items-center justify-center rounded-full text-base font-semibold"

@@ -38,10 +38,16 @@ class CustomUserSerializer(UserSerializer):
 
     full_name = serializers.ReadOnlyField()
 
+    # P3 fix: bigint pkid を露出する。User.id は UUID (公開用)、`pkid` は内部 BigAutoField
+    # (DM serializer の user_id / sender_id / creator_id と一致する番号)。フロントエンドが
+    # `currentUserId` として比較するために必要。
+    pkid = serializers.IntegerField(read_only=True)
+
     class Meta(UserSerializer.Meta):
         model = User
         fields = [
             "id",
+            "pkid",
             "email",
             "username",
             "first_name",
@@ -66,6 +72,7 @@ class CustomUserSerializer(UserSerializer):
         # サーバー側 (signal / dedicated endpoint) でのみ更新する (P1-03 review MEDIUM 対応)。
         read_only_fields = [
             "id",
+            "pkid",
             "email",
             "username",
             "is_premium",

@@ -27,7 +27,7 @@ import {
 	useListRoomMessagesQuery,
 	useMarkRoomReadMutation,
 } from "@/lib/redux/features/dm/dmApiSlice";
-import type { DMMessage, DMUserSummary } from "@/lib/redux/features/dm/types";
+import type { DMMessage } from "@/lib/redux/features/dm/types";
 import { getRoomDisplayName } from "@/lib/dm/format";
 
 interface RoomChatProps {
@@ -91,11 +91,12 @@ export default function RoomChat({ roomId, currentUserId }: RoomChatProps) {
 	}, [socket.lastFrame, currentUserId]);
 
 	const memberLookup = useMemo(() => {
-		const map = new Map<number, DMUserSummary>();
+		// Map<user_id (pkid), handle>。TypingIndicator が `@<handle>` を表示する。
+		const map = new Map<number, string>();
 		const room = roomQuery.data;
 		if (room) {
 			for (const m of room.memberships ?? []) {
-				if (m.user) map.set(m.user.id, m.user);
+				map.set(m.user_id, m.handle);
 			}
 		}
 		return map;

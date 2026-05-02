@@ -172,6 +172,12 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
+# P3-13 で channels を導入したため、`channels` を INSTALLED_APPS に含めると
+# `manage.py runserver` が ASGI モードに切替わり ASGI_APPLICATION の指定を要求する。
+# stg / prod は daphne が直接 `config.asgi:application` を起動するため不要だが、
+# local の runserver 互換のために明示する。
+ASGI_APPLICATION = "config.asgi.application"
+
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases

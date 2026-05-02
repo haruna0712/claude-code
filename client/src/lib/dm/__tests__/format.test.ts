@@ -1,5 +1,9 @@
 /**
  * Tests for DM format utilities (P3-08).
+ *
+ * Mock データは backend (apps/dm/serializers DMRoomMembershipSerializer) の実形と
+ * 一致させる: flat な `user_id` / `handle` を持つ membership。
+ * (skill: verify-api-contract-before-typing 反映)
  */
 
 import { describe, expect, it } from "vitest";
@@ -18,17 +22,19 @@ function makeDirectRoom(overrides: Partial<DMRoom> = {}): DMRoom {
 		id: 1,
 		kind: "direct",
 		name: "",
-		creator: null,
+		creator_id: null,
 		memberships: [
 			{
 				id: 1,
-				user: { id: 100, username: "me", first_name: "", last_name: "" },
+				user_id: 100,
+				handle: "me",
 				last_read_at: null,
 				created_at: "2026-05-01T00:00:00Z",
 			},
 			{
 				id: 2,
-				user: { id: 200, username: "alice", first_name: "", last_name: "" },
+				user_id: 200,
+				handle: "alice",
 				last_read_at: null,
 				created_at: "2026-05-01T00:00:00Z",
 			},
@@ -42,7 +48,7 @@ function makeDirectRoom(overrides: Partial<DMRoom> = {}): DMRoom {
 }
 
 describe("getRoomDisplayName", () => {
-	it("direct room は相手 username を返す", () => {
+	it("direct room は相手 handle を返す", () => {
 		expect(getRoomDisplayName(makeDirectRoom(), 100)).toBe("@alice");
 	});
 
@@ -51,7 +57,8 @@ describe("getRoomDisplayName", () => {
 			memberships: [
 				{
 					id: 1,
-					user: { id: 100, username: "me", first_name: "", last_name: "" },
+					user_id: 100,
+					handle: "me",
 					last_read_at: null,
 					created_at: "2026-05-01T00:00:00Z",
 				},
@@ -65,26 +72,29 @@ describe("getRoomDisplayName", () => {
 		expect(getRoomDisplayName(room, 100)).toBe("Engineers");
 	});
 
-	it("group room で name 空はメンバー username を最大 3 名連結", () => {
+	it("group room で name 空はメンバー handle を最大 3 名連結", () => {
 		const room = makeDirectRoom({
 			kind: "group",
 			name: "",
 			memberships: [
 				{
 					id: 1,
-					user: { id: 100, username: "me", first_name: "", last_name: "" },
+					user_id: 100,
+					handle: "me",
 					last_read_at: null,
 					created_at: "2026-05-01T00:00:00Z",
 				},
 				{
 					id: 2,
-					user: { id: 200, username: "alice", first_name: "", last_name: "" },
+					user_id: 200,
+					handle: "alice",
 					last_read_at: null,
 					created_at: "2026-05-01T00:00:00Z",
 				},
 				{
 					id: 3,
-					user: { id: 300, username: "bob", first_name: "", last_name: "" },
+					user_id: 300,
+					handle: "bob",
 					last_read_at: null,
 					created_at: "2026-05-01T00:00:00Z",
 				},
@@ -96,12 +106,8 @@ describe("getRoomDisplayName", () => {
 	it("group room で 4 名以上は ... が付く", () => {
 		const memberships = Array.from({ length: 5 }, (_, i) => ({
 			id: i + 2,
-			user: {
-				id: 200 + i,
-				username: `user${i}`,
-				first_name: "",
-				last_name: "",
-			},
+			user_id: 200 + i,
+			handle: `user${i}`,
 			last_read_at: null,
 			created_at: "2026-05-01T00:00:00Z",
 		}));
@@ -111,9 +117,10 @@ describe("getRoomDisplayName", () => {
 });
 
 describe("pickPeer", () => {
-	it("direct room の相手を返す", () => {
+	it("direct room の相手 membership を返す", () => {
 		const peer = pickPeer(makeDirectRoom(), 100);
-		expect(peer?.username).toBe("alice");
+		expect(peer?.handle).toBe("alice");
+		expect(peer?.user_id).toBe(200);
 	});
 
 	it("自分しかいないと null", () => {
@@ -121,7 +128,8 @@ describe("pickPeer", () => {
 			memberships: [
 				{
 					id: 1,
-					user: { id: 100, username: "me", first_name: "", last_name: "" },
+					user_id: 100,
+					handle: "me",
 					last_read_at: null,
 					created_at: "2026-05-01T00:00:00Z",
 				},

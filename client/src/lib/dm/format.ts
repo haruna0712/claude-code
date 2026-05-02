@@ -6,15 +6,18 @@
  * - グループアイコン用 initials + auto color (id を hash → HSL)
  */
 
-import type { DMRoom, DMUserSummary } from "@/lib/redux/features/dm/types";
+import type { DMRoom, DMRoomMembership } from "@/lib/redux/features/dm/types";
 
 export const SNIPPET_MAX_LENGTH = 50;
 
 /**
  * 自分以外のメンバーから display name を組み立てる。
- * - direct: 相手 1 名の username (` @' を付ける)
+ * - direct: 相手 1 名の handle (`@<handle>` 表記)
  * - group (name あり): name そのまま
- * - group (name なし): メンバー username を最大 3 名連結
+ * - group (name なし): メンバー handle を最大 3 名連結
+ *
+ * `currentUserId` は **bigint pkid** (apps/dm/serializers の user_id と一致)。
+ * frontend では `profile.pkid` から取得する。
  */
 export function getRoomDisplayName(
 	room: DMRoom,
@@ -22,15 +25,14 @@ export function getRoomDisplayName(
 ): string {
 	if (room.kind === "direct") {
 		const peer = pickPeer(room, currentUserId);
-		return peer ? `@${peer.username}` : "(unknown)";
+		return peer ? `@${peer.handle}` : "(unknown)";
 	}
 	if (room.name && room.name.trim().length > 0) {
 		return room.name;
 	}
 	const others = (room.memberships ?? [])
-		.map((m) => m.user)
-		.filter((u): u is DMUserSummary => Boolean(u) && u.id !== currentUserId)
-		.map((u) => u.username);
+		.filter((m) => m.user_id !== currentUserId)
+		.map((m) => m.handle);
 	if (others.length === 0) {
 		return "(無名のグループ)";
 	}
@@ -40,11 +42,10 @@ export function getRoomDisplayName(
 export function pickPeer(
 	room: DMRoom,
 	currentUserId: number,
-): DMUserSummary | null {
-	const peer = (room.memberships ?? []).find(
-		(m) => m.user && m.user.id !== currentUserId,
+): DMRoomMembership | null {
+	return (
+		(room.memberships ?? []).find((m) => m.user_id !== currentUserId) ?? null
 	);
-	return peer ? peer.user : null;
 }
 
 /**

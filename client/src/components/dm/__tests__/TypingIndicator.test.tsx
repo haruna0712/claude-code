@@ -2,11 +2,8 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import TypingIndicator from "@/components/dm/TypingIndicator";
-import type { DMUserSummary } from "@/lib/redux/features/dm/types";
 
-const lookup = new Map<number, DMUserSummary>([
-	[200, { id: 200, username: "alice", first_name: "", last_name: "" }],
-]);
+const lookup = new Map<number, string>([[200, "alice"]]);
 
 describe("TypingIndicator", () => {
 	it("typingUserId=null では何も描画しない", () => {
@@ -16,7 +13,7 @@ describe("TypingIndicator", () => {
 		expect(container).toBeEmptyDOMElement();
 	});
 
-	it("解決可能な user は @username が入力中... で表示", () => {
+	it("解決可能な user は @handle が入力中... で表示", () => {
 		render(
 			<TypingIndicator
 				typingUserId={200}

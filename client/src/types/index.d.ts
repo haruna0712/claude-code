@@ -16,7 +16,13 @@ export interface User {
 }
 
 export interface UserResponse {
+	/** UUID 公開 ID (URL や外部参照に使う). */
 	id: string;
+	/**
+	 * Bigint primary key (DM serializer の user_id / sender_id / creator_id と一致).
+	 * Phase 3 で /auth/users/me/ に追加された (apps/users/serializers CustomUserSerializer)。
+	 */
+	pkid: number;
 	email: string;
 	first_name: string;
 	last_name: string;

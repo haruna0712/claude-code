@@ -36,8 +36,8 @@ function makeInvitation(
 	return {
 		id: 1,
 		room: { id: 100, kind: "group", name: "Engineers" },
-		inviter: { id: 200, username: "alice", first_name: "", last_name: "" },
-		invitee: { id: 100, username: "me", first_name: "", last_name: "" },
+		inviter: { pkid: 200, username: "alice" },
+		invitee: { pkid: 100, username: "me" },
 		accepted: null,
 		created_at: "2026-05-01T12:00:00Z",
 		updated_at: "2026-05-01T12:00:00Z",
