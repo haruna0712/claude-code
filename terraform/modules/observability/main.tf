@@ -213,19 +213,27 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx_rate" {
 # ---------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "daphne_5xx_rate" {
-  for_each = var.enable_dm_alarms && var.daphne_target_group_arn_suffix != "" ? toset(["this"]) : toset([])
+  # for_each guard は静的 bool のみで条件付ける (code-reviewer HIGH H-2 反映)。
+  # arn_suffix は module.compute の output で apply 時 unknown になるため、
+  # `!= ""` 条件を for_each に入れると plan 時に key set が確定せずエラーになる。
+  for_each = var.enable_dm_alarms ? toset(["this"]) : toset([])
 
-  alarm_name          = "${local.prefix}-daphne-5xx-rate-high"
-  alarm_description   = "/ws/* (daphne TG) HTTPCode_Target_5XX_Count > ${var.daphne_5xx_error_rate_threshold * 100}% over 5min"
+  alarm_name = "${local.prefix}-daphne-5xx-rate-high"
+  alarm_description = format(
+    "/ws/* (daphne TG) HTTPCode_Target_5XX_Count > %.1f%% over 5min (minimum 10 req/period)",
+    var.daphne_5xx_error_rate_threshold * 100,
+  )
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
   threshold           = var.daphne_5xx_error_rate_threshold
   treat_missing_data  = "notBreaching"
 
+  # architect HIGH H-1 反映: 低 traffic 時 (total < 10) は分母が小さく 1 件のエラーで
+  # 50% を超えてしまい false positive になる。最低 10 req/period のガードを入れる。
   metric_query {
     id          = "error_rate"
-    expression  = "IF(total > 0, errors / total, 0)"
-    label       = "/ws/* 5xx error rate"
+    expression  = "IF(total > 10, errors / total, 0)"
+    label       = "/ws/* 5xx error rate (gated by min traffic)"
     return_data = true
   }
 
@@ -264,7 +272,8 @@ resource "aws_cloudwatch_metric_alarm" "daphne_5xx_rate" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "redis_curr_connections" {
-  for_each = var.enable_dm_alarms && var.redis_replication_group_id != "" ? toset(["this"]) : toset([])
+  # for_each は静的 bool のみ (code-reviewer HIGH H-2 反映、apply-time unknown 回避)
+  for_each = var.enable_dm_alarms ? toset(["this"]) : toset([])
 
   alarm_name          = "${local.prefix}-redis-curr-connections-high"
   alarm_description   = "Channel layer Redis CurrConnections > ${var.redis_curr_connections_threshold} (>5min)"
@@ -288,17 +297,18 @@ resource "aws_cloudwatch_metric_alarm" "redis_curr_connections" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "redis_engine_cpu" {
-  for_each = var.enable_dm_alarms && var.redis_replication_group_id != "" ? toset(["this"]) : toset([])
+  # for_each は静的 bool のみ (code-reviewer HIGH H-2 反映、apply-time unknown 回避)
+  for_each = var.enable_dm_alarms ? toset(["this"]) : toset([])
 
   alarm_name          = "${local.prefix}-redis-engine-cpu-high"
-  alarm_description   = "Channel layer Redis EngineCPUUtilization > 80% over 5min"
+  alarm_description   = "Channel layer Redis EngineCPUUtilization > ${var.redis_engine_cpu_threshold}% over 5min"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
   metric_name         = "EngineCPUUtilization"
   namespace           = "AWS/ElastiCache"
   period              = 300
   statistic           = "Average"
-  threshold           = 80
+  threshold           = var.redis_engine_cpu_threshold
   treat_missing_data  = "notBreaching"
 
   dimensions = {
@@ -334,8 +344,9 @@ resource "aws_cloudwatch_dashboard" "dm" {
           region  = var.aws_region
           view    = "timeSeries"
           stacked = false
+          # ecs_services に "daphne" が含まれない呼び出し方への保険として lookup + 空文字列。
           metrics = [
-            ["AWS/ECS", "CPUUtilization", "ClusterName", var.ecs_cluster_name, "ServiceName", local.resolved_ecs_service_names["daphne"], { stat = "Average" }],
+            ["AWS/ECS", "CPUUtilization", "ClusterName", var.ecs_cluster_name, "ServiceName", lookup(local.resolved_ecs_service_names, "daphne", ""), { stat = "Average" }],
             [".", "MemoryUtilization", ".", ".", ".", ".", { stat = "Average" }],
           ]
           period = 60
@@ -358,6 +369,11 @@ resource "aws_cloudwatch_dashboard" "dm" {
             [".", "TargetResponseTime", ".", ".", ".", ".", { stat = "p95" }],
           ]
           period = 60
+          annotations = {
+            horizontal = [
+              { value = var.daphne_5xx_error_rate_threshold, label = "5xx rate alarm threshold (ratio)", color = "#d62728" },
+            ]
+          }
         }
       },
       {
@@ -376,6 +392,12 @@ resource "aws_cloudwatch_dashboard" "dm" {
             [".", "EngineCPUUtilization", ".", ".", { stat = "Average" }],
           ]
           period = 60
+          annotations = {
+            horizontal = [
+              { value = var.redis_curr_connections_threshold, label = "CurrConnections alarm threshold", color = "#d62728" },
+              { value = var.redis_engine_cpu_threshold, label = "EngineCPU alarm threshold", color = "#ff9896" },
+            ]
+          }
         }
       },
     ]

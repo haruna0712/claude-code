@@ -300,6 +300,7 @@ module "observability" {
 
   environment        = "stg"
   project            = var.project
+  aws_region         = var.aws_region
   log_retention_days = 30
   alert_email        = var.alert_email
 

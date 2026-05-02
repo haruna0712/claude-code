@@ -137,9 +137,27 @@ variable "redis_replication_group_id" {
 }
 
 variable "redis_curr_connections_threshold" {
-  description = "Redis CurrConnections アラーム閾値 (Channel layer のコネクション数異常検知)。"
+  description = <<-EOT
+    Redis CurrConnections アラーム閾値 (Channel layer + Django web + Celery worker の合算)。
+    stg の典型 baseline は ~70-100 (daphne 2 task × ~20conn + django + celery beat)。
+    1000 はその 10 倍を緩めにとった漏れ検知用 (P3-18)。
+  EOT
   type        = number
   default     = 1000
+  validation {
+    condition     = var.redis_curr_connections_threshold > 0
+    error_message = "redis_curr_connections_threshold は正の整数を指定してください。"
+  }
+}
+
+variable "redis_engine_cpu_threshold" {
+  description = "ElastiCache Redis EngineCPUUtilization アラーム閾値 (パーセント、P3-18)."
+  type        = number
+  default     = 80
+  validation {
+    condition     = var.redis_engine_cpu_threshold > 0 && var.redis_engine_cpu_threshold <= 100
+    error_message = "0 < redis_engine_cpu_threshold <= 100 を指定。"
+  }
 }
 
 variable "daphne_5xx_error_rate_threshold" {
