@@ -47,8 +47,16 @@ variable "ecr_repository_urls" {
 }
 
 variable "target_group_arns" {
-  description = "Map of ALB target group logical name → ARN. Must contain 'app' (django) and 'next' (Next.js SSR)."
+  description = "Map of ALB target group logical name → ARN. Must contain 'app' (django), 'next' (Next.js SSR), and 'daphne' (Channels WebSocket, P3-13)."
   type        = map(string)
+  validation {
+    condition = (
+      contains(keys(var.target_group_arns), "app") &&
+      contains(keys(var.target_group_arns), "next") &&
+      contains(keys(var.target_group_arns), "daphne")
+    )
+    error_message = "target_group_arns must contain 'app', 'next', and 'daphne' keys."
+  }
 }
 
 variable "private_subnet_ids" {
@@ -161,6 +169,44 @@ variable "celery_memory" {
   description = "Fargate memory (MiB) for celery-worker and celery-beat."
   type        = number
   default     = 512
+}
+
+# ---------- daphne (P3-13 / Issue #238) ----------
+
+variable "daphne_cpu" {
+  description = "Fargate CPU units for the Daphne (Channels) task."
+  type        = number
+  default     = 256
+}
+
+variable "daphne_memory" {
+  description = "Fargate memory (MiB) for the Daphne (Channels) task."
+  type        = number
+  default     = 512
+}
+
+variable "daphne_desired_count" {
+  description = "Desired running count of Daphne tasks. ARCHITECTURE §3.5 で stg は min=1。"
+  type        = number
+  default     = 1
+}
+
+variable "daphne_autoscaling_min_capacity" {
+  description = "Daphne の Application Auto Scaling 下限 (ARCHITECTURE §3.5)."
+  type        = number
+  default     = 1
+}
+
+variable "daphne_autoscaling_max_capacity" {
+  description = "Daphne の Application Auto Scaling 上限 (ARCHITECTURE §3.5)."
+  type        = number
+  default     = 2
+}
+
+variable "daphne_autoscaling_cpu_target" {
+  description = "Daphne の CPU target tracking 値 (パーセント、ARCHITECTURE §3.5 で 80%)."
+  type        = number
+  default     = 80
 }
 
 variable "log_retention_days" {
