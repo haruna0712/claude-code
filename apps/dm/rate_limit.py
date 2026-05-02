@@ -37,9 +37,15 @@ _logger = structlog.get_logger(__name__)
 # 1 ユーザー / 1 分あたりの最大送信数 (sec MEDIUM 反映)。
 DM_SEND_RATE_PER_MINUTE = 30
 
+# 1 ユーザー / 1 日あたりの最大招待数 (P3-04 / spam 抑止、sec MEDIUM)。
+DM_INVITATION_RATE_PER_DAY = 50
+
 # Redis EXPIRE は window 跨ぎを考慮して少し長めに (60 ぴったりだとカウンタが
 # 消えた直後の race で連投が許される)。
 _BUCKET_TTL_SECONDS = 65
+
+# 1 日 (24h) bucket TTL も少し余裕を持たせる (window 終端 race 対策)。
+_DAILY_BUCKET_TTL_SECONDS = 24 * 60 * 60 + 300
 
 
 _RedisFactory = Callable[[], "object"]
@@ -122,3 +128,64 @@ async def check_send_rate(user_id: int | str) -> bool:
                 await client.aclose()  # type: ignore[attr-defined]
 
     return count <= DM_SEND_RATE_PER_MINUTE
+
+
+async def check_and_consume_invitation_rate(user_id: int | str, count: int = 1) -> bool:
+    """``count`` 件分の招待発行 budget を atomic にチェック&消費する.
+
+    Pipeline で ``INCRBY count`` してから上限超過判定し、超過なら ``DECRBY count``
+    で rollback して ``False`` を返す (review HIGH H-1/H-2 反映: 失敗時に counter を
+    pre-decrement しないようにする)。
+
+    Redis 障害時は ``True`` (fail-open) を返す。spam 抑止が目的なので、Redis 障害で
+    招待 API 全停止より緩やか fail を選ぶ (security M-1 として UTC 境界 burst は
+    documented limitation)。
+    """
+
+    if count <= 0:
+        return True
+    client = _get_client()
+    bucket = int(time.time()) // (24 * 60 * 60)
+    key = f"dm:rl:invite:{user_id}:{bucket}"
+    try:
+        pipe = client.pipeline()
+        pipe.incrby(key, count)
+        pipe.expire(key, _DAILY_BUCKET_TTL_SECONDS)
+        results = await pipe.execute()
+        new_total = int(results[0])
+
+        if new_total > DM_INVITATION_RATE_PER_DAY:
+            # 超過なので rollback (失敗時に quota を消費しない)
+            try:
+                await client.decrby(key, count)
+            except Exception:
+                _logger.warning(
+                    "dm.rate_limit.invitation_rollback_failed",
+                    user_id=user_id,
+                    count=count,
+                    exc_info=True,
+                )
+            return False
+    except Exception:
+        _logger.warning(
+            "dm.rate_limit.invitation_redis_error_fail_open",
+            user_id=user_id,
+            exc_info=True,
+        )
+        return True
+    finally:
+        if _redis_factory is not None:
+            with contextlib.suppress(AttributeError):
+                await client.aclose()  # type: ignore[attr-defined]
+
+    return True
+
+
+# 後方互換: 旧 ``check_invitation_rate`` 名を残す (新規コードは
+# ``check_and_consume_invitation_rate`` を使うこと)。
+async def check_invitation_rate(user_id: int | str) -> bool:
+    """Deprecated: ``check_and_consume_invitation_rate`` を使うこと.
+
+    ``count=1`` の atomic check & consume を行う wrapper。互換のために残置。
+    """
+    return await check_and_consume_invitation_rate(user_id, count=1)
