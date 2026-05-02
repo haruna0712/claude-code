@@ -1,14 +1,15 @@
-"""DM の REST view (P3-03 / Issue #228, P3-04 / Issue #229).
+"""DM の REST view (P3-03 / Issue #228, P3-04 / Issue #229, P3-05 / Issue #230).
 
-Phase 3 の REST 経路 (Phase 4A 以降で room search / 既読 API を追加):
+Phase 3 の REST 経路:
 
 - ``DELETE /api/v1/dm/messages/<id>/`` (P3-03): メッセージ soft delete
-- ``GET    /api/v1/dm/rooms/`` (P3-04): 自分の room 一覧 (last_message_at 降順)
+- ``GET    /api/v1/dm/rooms/`` (P3-04): 自分の room 一覧 (unread_count inline、P3-05)
 - ``POST   /api/v1/dm/rooms/`` (P3-04): direct or group room 作成
 - ``GET    /api/v1/dm/rooms/<id>/`` (P3-04): room 詳細 (memberships 込)
 - ``GET    /api/v1/dm/rooms/<id>/messages/`` (P3-04): メッセージ履歴 (cursor pagination)
 - ``POST   /api/v1/dm/rooms/<id>/invitations/`` (P3-04): 招待作成 (room creator のみ)
 - ``DELETE /api/v1/dm/rooms/<id>/membership/`` (P3-04): 退室 (group のみ)
+- ``POST   /api/v1/dm/rooms/<id>/read/`` (P3-05): 既読 (last_read_at) 更新
 - ``GET    /api/v1/dm/invitations/`` (P3-04): 自分宛て pending 招待
 - ``POST   /api/v1/dm/invitations/<id>/accept/`` (P3-04): 招待承諾
 - ``POST   /api/v1/dm/invitations/<id>/decline/`` (P3-04): 招待拒否
@@ -58,15 +59,18 @@ from apps.dm.serializers import (
     CreateInvitationInputSerializer,
     DMRoomSerializer,
     GroupInvitationSerializer,
+    MarkRoomReadInputSerializer,
     MessageSerializer,
 )
 from apps.dm.services import (
     accept_invitation,
+    annotate_rooms_with_unread_count,
     create_group_room,
     decline_invitation,
     get_or_create_direct_room,
     invite_user_to_room,
     leave_room,
+    mark_room_read,
 )
 
 _logger = structlog.get_logger(__name__)
@@ -161,13 +165,15 @@ class DMRoomListCreateView(generics.ListCreateAPIView):
     serializer_class = DMRoomSerializer
 
     def get_queryset(self):
-        return (
+        # 自分の room 一覧。Subquery で unread_count を inline annotate (P3-05 反映)。
+        base = (
             DMRoom.objects.filter(memberships__user=self.request.user)
             .select_related("creator")
             .prefetch_related("memberships__user")
             .order_by("-last_message_at", "-created_at")
             .distinct()
         )
+        return annotate_rooms_with_unread_count(base, self.request.user)
 
     def create(self, request: Request, *args, **kwargs) -> Response:
         kind = request.data.get("kind")
@@ -291,6 +297,64 @@ class DMRoomMembershipDeleteView(APIView):
         except DjangoValidationError as exc:
             raise DRFValidationError(detail=exc.messages) from exc
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class DMRoomReadView(APIView):
+    """``POST /api/v1/dm/rooms/<id>/read/`` (P3-05): 既読 ``last_read_at`` 更新.
+
+    body=``{"message_id": int}`` の Message が指定 room 配下でなければ 400。
+    更新後は ``read.update`` を WebSocket で broadcast (Consumer の ``read`` event と整合)。
+    HTTP は WebSocket 不調時の補助経路 (SPEC §7.4 の "WebSocket でも可能なため HTTP は補助")。
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request: Request, pk: int) -> Response:
+        room = _get_room_for_member(room_id=pk, user=request.user)
+
+        serializer = MarkRoomReadInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        message_id = serializer.validated_data["message_id"]
+
+        # message を room scope で取得し、別 room の message ID を投げて存在を
+        # 探る情報漏洩を防ぐ (review MEDIUM 反映: 1 query で room 越境を弾く)。
+        message = Message.objects.filter(pk=message_id, room=room).first()
+        if message is None:
+            raise DRFValidationError(detail={"message_id": "message not found"})
+
+        try:
+            membership = mark_room_read(room=room, user=request.user, message=message)
+        except DjangoValidationError as exc:
+            raise DRFValidationError(detail=exc.messages) from exc
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(str(exc)) from exc
+
+        # WebSocket broadcast (Consumer の `read.update` イベントと同型)。
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            _logger.warning("dm.views.read.no_channel_layer", room_id=room.pk)
+        else:
+            async_to_sync(channel_layer.group_send)(
+                f"dm_room_{room.pk}",
+                {
+                    "type": "read.update",
+                    "user_id": request.user.pk,
+                    "last_read_at": membership.last_read_at.isoformat()
+                    if membership.last_read_at
+                    else None,
+                },
+            )
+
+        return Response(
+            {
+                "room_id": room.pk,
+                "user_id": request.user.pk,
+                "last_read_at": membership.last_read_at.isoformat()
+                if membership.last_read_at
+                else None,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 # ----------------------------------------------------------------------------

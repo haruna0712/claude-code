@@ -89,10 +89,16 @@ class DMRoomMembershipSerializer(serializers.ModelSerializer):
 
 
 class DMRoomSerializer(serializers.ModelSerializer):
-    """Room 一覧 / 詳細用. memberships は include_memberships=True のときのみ展開."""
+    """Room 一覧 / 詳細用.
+
+    ``unread_count`` は room 一覧 API が ``annotate_rooms_with_unread_count`` で
+    annotate した値を inline で返す。annotate されていない場合 (room 詳細など) は
+    ``None`` (P3-05 / Issue #230)。
+    """
 
     creator_id = serializers.IntegerField(source="creator.pk", allow_null=True)
     memberships = DMRoomMembershipSerializer(many=True, read_only=True)
+    unread_count = serializers.SerializerMethodField()
 
     class Meta:
         model = DMRoom
@@ -102,12 +108,27 @@ class DMRoomSerializer(serializers.ModelSerializer):
             "name",
             "creator_id",
             "memberships",
+            "unread_count",
             "last_message_at",
             "is_archived",
             "created_at",
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_unread_count(self, obj: DMRoom) -> int | None:
+        """``annotate_rooms_with_unread_count`` で付けた annotation を返す.
+
+        annotate されていない場合 (room 詳細など) は ``None`` を返し、フロント側で
+        必要なら別 endpoint から取得させる。
+        """
+        return getattr(obj, "unread_count", None)
+
+
+class MarkRoomReadInputSerializer(serializers.Serializer):
+    """``POST /rooms/<id>/read/`` の入力."""
+
+    message_id = serializers.IntegerField(min_value=1)
 
 
 class GroupInvitationSerializer(serializers.ModelSerializer):
