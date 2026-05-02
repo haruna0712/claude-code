@@ -16,10 +16,12 @@ import { baseApiSlice } from "@/lib/redux/features/api/baseApiSlice";
 
 import type {
 	CreateRoomInput,
+	DMMessage,
 	DMRoom,
 	DMRoomListResponse,
 	GroupInvitation,
 	InvitationListResponse,
+	RoomMessagesResponse,
 } from "./types";
 
 export const dmApiSlice = baseApiSlice.injectEndpoints({
@@ -94,6 +96,32 @@ export const dmApiSlice = baseApiSlice.injectEndpoints({
 				{ type: "DMInvitation" as const, id: "LIST" },
 			],
 		}),
+		// P3-09: 履歴取得 (新しい順で limit 件、画面側で reverse して下から表示)
+		listRoomMessages: builder.query<
+			RoomMessagesResponse,
+			{ roomId: number; limit?: number }
+		>({
+			query: ({ roomId, limit = 30 }) =>
+				`/dm/rooms/${roomId}/messages/?limit=${limit}`,
+			transformResponse: (raw: RoomMessagesResponse | DMMessage[]) => {
+				// DRF が pagination 無しで配列を返すケースに備えて normalize する。
+				if (Array.isArray(raw)) {
+					return { results: raw } as RoomMessagesResponse;
+				}
+				return raw;
+			},
+		}),
+		// P3-05: 既読更新 REST (initial load 時に呼ぶ)。WebSocket でも更新可。
+		markRoomRead: builder.mutation<{ ok: true }, number>({
+			query: (roomId) => ({
+				url: `/dm/rooms/${roomId}/read/`,
+				method: "POST",
+			}),
+			invalidatesTags: (_result, _error, roomId) => [
+				{ type: "DMRoom" as const, id: roomId },
+				{ type: "DMRoom" as const, id: "LIST" },
+			],
+		}),
 	}),
 	overrideExisting: false,
 });
@@ -105,4 +133,6 @@ export const {
 	useListInvitationsQuery,
 	useAcceptInvitationMutation,
 	useDeclineInvitationMutation,
+	useListRoomMessagesQuery,
+	useMarkRoomReadMutation,
 } = dmApiSlice;

@@ -80,3 +80,33 @@ export interface CreateGroupRoomInput {
 }
 
 export type CreateRoomInput = CreateDirectRoomInput | CreateGroupRoomInput;
+
+/** Django apps/dm/serializers.MessageAttachmentSerializer と一致 (P3-09 / P3-06). */
+export interface MessageAttachment {
+	id: number;
+	s3_key: string;
+	filename: string;
+	mime_type: string;
+	size: number;
+	width: number | null;
+	height: number | null;
+}
+
+/** Django apps/dm/serializers.MessageSerializer と一致 (P3-09). */
+export interface DMMessage {
+	id: number;
+	room_id: number;
+	sender_id: number | null;
+	body: string;
+	attachments: MessageAttachment[];
+	created_at: string;
+	updated_at: string;
+	deleted_at: string | null;
+}
+
+export interface RoomMessagesResponse {
+	results: DMMessage[];
+	count?: number;
+	next?: string | null;
+	previous?: string | null;
+}
