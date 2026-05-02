@@ -63,6 +63,6 @@ output "redis_connection_url" {
   # 無いと `ValueError: A rediss:// URL must have parameter ssl_cert_reqs ...` で
   # celery worker が起動失敗する (django redis cache 側は redis-py がデフォルトで
   # CERT_REQUIRED 扱いするので問題ない)。
-  value       = "rediss://:${var.redis_auth_token}@${aws_elasticache_replication_group.this.primary_endpoint_address}:${aws_elasticache_replication_group.this.port}/0?ssl_cert_reqs=CERT_REQUIRED"
-  sensitive   = true
+  value     = "rediss://:${var.redis_auth_token}@${aws_elasticache_replication_group.this.primary_endpoint_address}:${aws_elasticache_replication_group.this.port}/0?ssl_cert_reqs=CERT_REQUIRED"
+  sensitive = true
 }

@@ -311,3 +311,40 @@ module "observability" {
   rds_allocated_storage_gb = var.rds_allocated_storage_gb
   enable_rds_alarms        = true
 }
+
+# ---------------------------------------------------------------------------
+# 8. DM 添付の S3 直アップロード権限 (P3-07 / Issue #232)
+# ---------------------------------------------------------------------------
+# storage <-> compute の循環参照を避けるため、両モジュール作成後に
+# stg レイヤで直接 IAM role policy を attach する:
+#   - PutObject  : presigned URL 経由のアップロード確定後に metadata 確認
+#   - GetObject  : 添付ダウンロード (ヘッド確認 + ファイルサイズ確認、SPEC §7)
+#   - DeleteObject : メッセージ削除時のオブジェクト削除 (SPEC §7.3、24h 削除キュー)
+# 全部 dm/* prefix 限定なので avatar / tweet 画像 / article などには影響しない。
+# ---------------------------------------------------------------------------
+
+data "aws_iam_policy_document" "ecs_dm_attachment_access" {
+  statement {
+    sid    = "AllowDMAttachmentPutGetDelete"
+    effect = "Allow"
+    actions = [
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:DeleteObject",
+    ]
+    resources = ["${module.storage.media_bucket_arn}/dm/*"]
+  }
+
+  statement {
+    sid       = "AllowDMAttachmentBucketLocation"
+    effect    = "Allow"
+    actions   = ["s3:GetBucketLocation"]
+    resources = [module.storage.media_bucket_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "ecs_dm_attachment" {
+  name   = "${var.project}-stg-ecs-dm-attachment"
+  role   = module.compute.ecs_task_role_name
+  policy = data.aws_iam_policy_document.ecs_dm_attachment_access.json
+}

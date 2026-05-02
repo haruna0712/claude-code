@@ -73,3 +73,19 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "dm_attachment_glacier_ir_days" {
+  description = "dm/ prefix の object を Glacier IR に移すまでの日数 (P3-07)"
+  type        = number
+  default     = 90
+}
+
+variable "dm_attachment_expiration_days" {
+  description = "dm/ prefix の object を完全削除するまでの日数 (0 で削除しない、P3-07)"
+  type        = number
+  default     = 365
+  validation {
+    condition     = var.dm_attachment_expiration_days == 0 || var.dm_attachment_expiration_days >= 30
+    error_message = "0 (無期限) か 30 日以上を指定。"
+  }
+}
