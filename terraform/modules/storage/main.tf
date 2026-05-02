@@ -135,9 +135,26 @@ resource "aws_s3_bucket_lifecycle_configuration" "backup" {
   }
 }
 
-# media: 旧バージョンのみ削除、本体は永続
+# media: 旧バージョンのみ削除、本体は永続。
+# DM 添付 (`dm/` prefix) は別ルールでコスト + プライバシー対応 (P3-07)。
+#
+# NOTE: `cleanup-noncurrent-versions` ルールは `filter {}` (全 prefix 対象) のため
+# `dm/` オブジェクトの noncurrent version にもマッチする。dm 専用ルールの
+# `noncurrent_days = 30` の方が早く発動するため、実効は 30 日 (意図どおり)。
 resource "aws_s3_bucket_lifecycle_configuration" "media" {
   bucket = aws_s3_bucket.this["media"].id
+
+  # cross-variable 検査: 期限なしを許容するが、削除する場合は Glacier IR transition
+  # より大きい日数でなければ S3 が apply 時にエラーを返す。
+  lifecycle {
+    precondition {
+      condition = (
+        var.dm_attachment_expiration_days == 0 ||
+        var.dm_attachment_expiration_days > var.dm_attachment_glacier_ir_days
+      )
+      error_message = "dm_attachment_expiration_days は dm_attachment_glacier_ir_days より大きい値か 0 (無期限) を指定。"
+    }
+  }
 
   rule {
     id     = "cleanup-noncurrent-versions"
@@ -151,6 +168,39 @@ resource "aws_s3_bucket_lifecycle_configuration" "media" {
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
+    }
+  }
+
+  # DM 添付: 90 日後 Glacier IR、365 日後削除 (P3-07).
+  # コスト削減 + プライバシー (退会後も無期限保持しない、SPEC §プライバシー)。
+  # 退会時のバルク削除は別途 scheduled task で実装する想定 (Phase 9)。
+  # avatar / articles など他 prefix は影響を受けない (filter.prefix=dm/ で限定)。
+  rule {
+    id     = "dm-attachment-archive-and-expire"
+    status = "Enabled"
+
+    filter {
+      prefix = "dm/"
+    }
+
+    transition {
+      days          = var.dm_attachment_glacier_ir_days
+      storage_class = "GLACIER_IR"
+    }
+
+    dynamic "expiration" {
+      for_each = var.dm_attachment_expiration_days > 0 ? [1] : []
+      content {
+        days = var.dm_attachment_expiration_days
+      }
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
     }
   }
 }

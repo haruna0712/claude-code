@@ -100,6 +100,11 @@ module "storage" {
   # 二段階 apply (architect PR #53 HIGH): 初回は空、edge 作成後に tfvars で
   # `cloudfront_distribution_arn_override` を埋めて再 apply。
   cloudfront_oac_arn = var.cloudfront_distribution_arn_override
+
+  # DM 添付の lifecycle (P3-07 / Issue #232)。stg は default 値 (90/365) で運用想定だが、
+  # 必要に応じて terraform.tfvars で上書き可能にする。
+  dm_attachment_glacier_ir_days = var.dm_attachment_glacier_ir_days
+  dm_attachment_expiration_days = var.dm_attachment_expiration_days
 }
 
 # ---------------------------------------------------------------------------
@@ -310,4 +315,62 @@ module "observability" {
   rds_instance_identifier  = module.data.rds_instance_id
   rds_allocated_storage_gb = var.rds_allocated_storage_gb
   enable_rds_alarms        = true
+}
+
+# ---------------------------------------------------------------------------
+# 8. DM 添付の S3 直アップロード権限 (P3-07 / Issue #232)
+# ---------------------------------------------------------------------------
+# storage <-> compute の循環参照を避けるため、両モジュール作成後に
+# stg レイヤで直接 IAM role policy を attach する:
+#   - PutObject  : presigned URL 経由のアップロード確定後に metadata 確認
+#   - GetObject  : 添付ダウンロード (ヘッド確認 + ファイルサイズ確認、SPEC §7)
+#   - DeleteObject : メッセージ削除時のオブジェクト削除 (SPEC §7.3、24h 削除キュー)
+# 全部 dm/* prefix 限定なので avatar / tweet 画像 / article などには影響しない。
+# ---------------------------------------------------------------------------
+
+data "aws_iam_policy_document" "ecs_dm_attachment_access" {
+  # オブジェクトレベル: PutObject / GetObject / DeleteObject を dm/ prefix 限定で許可。
+  # GetObjectVersion は versioning ON のバケットで HEAD/GET が誤って 404 になる事象を
+  # 避けるため (security-reviewer HIGH-1: AWS は ListBucket なしの場合 NoSuchKey 扱い)。
+  statement {
+    sid    = "AllowDMAttachmentObjectAccessStg"
+    effect = "Allow"
+    actions = [
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:GetObjectVersion",
+      "s3:DeleteObject",
+    ]
+    resources = ["${module.storage.media_bucket_arn}/dm/*"]
+  }
+
+  # バケットレベル ListBucket: `dm/` prefix 限定で許可
+  # (security-reviewer HIGH-1: ListBucket がないと Glacier IR 復元時等に 404 誤判定)。
+  statement {
+    sid       = "AllowDMAttachmentListStg"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [module.storage.media_bucket_arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["dm/*", "dm/", "dm"]
+    }
+  }
+
+  # バケットレベル GetBucketLocation: SDK がリクエスト署名のリージョン解決に
+  # 暗黙発行する。s3:prefix 条件は GetBucketLocation に適用されないため別 statement。
+  statement {
+    sid       = "AllowDMAttachmentBucketLocationStg"
+    effect    = "Allow"
+    actions   = ["s3:GetBucketLocation"]
+    resources = [module.storage.media_bucket_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "ecs_dm_attachment" {
+  name   = "${var.project}-stg-ecs-dm-attachment"
+  role   = module.compute.ecs_task_role_name
+  policy = data.aws_iam_policy_document.ecs_dm_attachment_access.json
 }

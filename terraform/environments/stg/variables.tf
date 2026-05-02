@@ -129,3 +129,17 @@ variable "waf_rate_limit_per_5min" {
   type        = number
   default     = 2000
 }
+
+# ---------- DM 添付 (P3-07 / Issue #232) ----------
+
+variable "dm_attachment_glacier_ir_days" {
+  description = "dm/ prefix の object を Glacier IR に移すまでの日数 (storage モジュール経由)"
+  type        = number
+  default     = 90
+}
+
+variable "dm_attachment_expiration_days" {
+  description = "dm/ prefix の object を完全削除するまでの日数 (0 で無期限、storage モジュール経由)"
+  type        = number
+  default     = 365
+}

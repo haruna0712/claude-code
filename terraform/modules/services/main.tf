@@ -230,9 +230,9 @@ resource "aws_ecs_task_definition" "celery_worker" {
 
   container_definitions = jsonencode([
     {
-      name        = "celery-worker"
-      image       = "${var.ecr_repository_urls["django"]}:${var.image_tag}" # Django image を共有
-      essential   = true
+      name      = "celery-worker"
+      image     = "${var.ecr_repository_urls["django"]}:${var.image_tag}" # Django image を共有
+      essential = true
       # /start-celeryworker は Dockerfile で `celery -A config.celery_app worker`
       # を exec する。直接 inline で書くと "config" モジュールに celery 属性が無く
       # `Module 'config' has no attribute 'celery'` で exit 2 する。
@@ -265,9 +265,9 @@ resource "aws_ecs_task_definition" "celery_beat" {
 
   container_definitions = jsonencode([
     {
-      name        = "celery-beat"
-      image       = "${var.ecr_repository_urls["django"]}:${var.image_tag}"
-      essential   = true
+      name      = "celery-beat"
+      image     = "${var.ecr_repository_urls["django"]}:${var.image_tag}"
+      essential = true
       # /start-celerybeat は migrate django_celery_beat → celery -A config.celery_app
       # beat の順で exec する。直接 inline 書きだと celery_app 解決に失敗する。
       command     = ["/start-celerybeat"]
