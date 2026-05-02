@@ -16,7 +16,11 @@
 
 import { useCallback, useRef, useState, type ChangeEvent } from "react";
 
-import { uploadAttachment, validateAttachment } from "@/lib/dm/attachments";
+import {
+	ALL_ALLOWED_MIME_TYPES,
+	uploadAttachment,
+	validateAttachment,
+} from "@/lib/dm/attachments";
 import type { ConfirmResponse } from "@/lib/dm/attachments";
 
 interface AttachmentUploaderProps {
@@ -31,8 +35,10 @@ export default function AttachmentUploader({
 	disabled,
 }: AttachmentUploaderProps) {
 	const inputRef = useRef<HTMLInputElement | null>(null);
+	const buttonRef = useRef<HTMLButtonElement | null>(null);
 	const [progress, setProgress] = useState<number | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [successAnnounce, setSuccessAnnounce] = useState<string | null>(null);
 
 	const onPick = useCallback(() => {
 		inputRef.current?.click();
@@ -44,10 +50,13 @@ export default function AttachmentUploader({
 			event.target.value = ""; // 同じファイルを選び直せるように
 			if (!file) return;
 			setError(null);
+			setSuccessAnnounce(null);
 
 			const validation = validateAttachment(file);
 			if (validation) {
 				setError(validation.message);
+				// a11y H2: error 発生時は trigger button へ focus を戻す
+				buttonRef.current?.focus();
 				return;
 			}
 
@@ -62,10 +71,16 @@ export default function AttachmentUploader({
 						),
 				});
 				onUploaded(result);
+				setSuccessAnnounce(`${file.name} をアップロードしました`);
 			} catch (err: unknown) {
+				// AbortError は user キャンセルなので alert に出さない (ts-reviewer HIGH H-3)
+				if (err instanceof DOMException && err.name === "AbortError") {
+					return;
+				}
 				const msg =
 					err instanceof Error ? err.message : "アップロードに失敗しました";
 				setError(msg);
+				buttonRef.current?.focus();
 			} finally {
 				setProgress(null);
 			}
@@ -81,11 +96,13 @@ export default function AttachmentUploader({
 				ref={inputRef}
 				type="file"
 				className="hidden"
+				accept={ALL_ALLOWED_MIME_TYPES.join(",")}
 				onChange={onChange}
 				disabled={disabled || uploading}
 				data-testid="attachment-input"
 			/>
 			<button
+				ref={buttonRef}
 				type="button"
 				onClick={onPick}
 				disabled={disabled || uploading}
@@ -98,12 +115,14 @@ export default function AttachmentUploader({
 				<progress
 					value={progress}
 					max={100}
-					aria-label={`アップロード ${progress}%`}
+					aria-label="アップロード進捗"
 					className="h-1 w-32"
-				>
-					{progress}%
-				</progress>
+				/>
 			) : null}
+			{/* SR への成功通知 (a11y MEDIUM M-2 反映、視覚 progress 消失とは別経路) */}
+			<div role="status" aria-live="polite" className="sr-only">
+				{successAnnounce ?? ""}
+			</div>
 			{error ? (
 				<div role="alert" className="text-baby_red text-xs">
 					{error}

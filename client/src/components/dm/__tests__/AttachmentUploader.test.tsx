@@ -42,7 +42,8 @@ describe("AttachmentUploader", () => {
 		render(<AttachmentUploader roomId={1} onUploaded={onUploaded} />);
 		const file = makeFile("video.mp4", "video/mp4", 1024);
 		const input = screen.getByTestId("attachment-input") as HTMLInputElement;
-		await userEvent.upload(input, file);
+		// accept attr 付きでも userEvent.upload は applyAccept: false で flag を落として注入する。
+		await userEvent.upload(input, file, { applyAccept: false });
 		expect(uploadAttachmentMock).not.toHaveBeenCalled();
 		expect(await screen.findByRole("alert")).toHaveTextContent(/非対応/);
 	});
@@ -54,6 +55,8 @@ describe("AttachmentUploader", () => {
 			filename: "photo.jpg",
 			mime_type: "image/jpeg",
 			size: 1024,
+			width: null,
+			height: null,
 		});
 		const onUploaded = vi.fn();
 		render(<AttachmentUploader roomId={1} onUploaded={onUploaded} />);

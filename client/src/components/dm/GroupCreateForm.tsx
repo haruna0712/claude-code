@@ -18,9 +18,37 @@
  */
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import { useCreateDMRoomMutation } from "@/lib/redux/features/dm/dmApiSlice";
+
+/**
+ * RTK Query mutation の throw は `FetchBaseQueryError | SerializedError | Error` のいずれか。
+ * UI に最適な message を抽出する (code-reviewer MEDIUM M-4 反映)。
+ */
+function extractErrorMessage(err: unknown, fallback: string): string {
+	if (err && typeof err === "object") {
+		const e = err as Record<string, unknown>;
+		// FetchBaseQueryError: { status, data }
+		if (
+			typeof e.status !== "undefined" &&
+			e.data &&
+			typeof e.data === "object"
+		) {
+			const d = e.data as Record<string, unknown>;
+			if (typeof d.detail === "string") return d.detail;
+			if (
+				Array.isArray(d.non_field_errors) &&
+				typeof d.non_field_errors[0] === "string"
+			) {
+				return d.non_field_errors[0];
+			}
+		}
+		if (typeof e.message === "string") return e.message;
+	}
+	if (err instanceof Error) return err.message;
+	return fallback;
+}
 
 const HANDLE_REGEX = /^[a-zA-Z0-9_]{3,30}$/;
 
@@ -43,6 +71,8 @@ export default function GroupCreateForm({
 		handles?: string;
 		general?: string;
 	}>({});
+	const nameRef = useRef<HTMLInputElement | null>(null);
+	const handlesRef = useRef<HTMLTextAreaElement | null>(null);
 
 	const parsedHandles = handlesRaw
 		.split(/[\n,\s]+/)
@@ -68,6 +98,9 @@ export default function GroupCreateForm({
 		}
 
 		setErrors(next);
+		// a11y H3: 最初のエラー入力欄へ focus を戻す (DOM 順)
+		if (next.name) nameRef.current?.focus();
+		else if (next.handles) handlesRef.current?.focus();
 		return Object.keys(next).length === 0;
 	};
 
@@ -83,9 +116,9 @@ export default function GroupCreateForm({
 			if (onCreated) onCreated(room.id);
 			else router.push(`/messages/${room.id}`);
 		} catch (err: unknown) {
-			const msg =
-				err instanceof Error ? err.message : "グループの作成に失敗しました";
-			setErrors({ general: msg });
+			setErrors({
+				general: extractErrorMessage(err, "グループの作成に失敗しました"),
+			});
 		}
 	};
 
@@ -97,6 +130,7 @@ export default function GroupCreateForm({
 			onSubmit={onSubmit}
 			className="flex flex-col gap-4"
 			aria-label="グループ作成"
+			aria-busy={isLoading}
 		>
 			{errors.general ? (
 				<div role="alert" className="text-baby_red text-sm">
@@ -111,6 +145,7 @@ export default function GroupCreateForm({
 					グループ名
 				</label>
 				<input
+					ref={nameRef}
 					id="group-name"
 					type="text"
 					value={name}
@@ -139,6 +174,7 @@ export default function GroupCreateForm({
 					招待メンバー (@handle、改行 / スペース / カンマ区切り)
 				</label>
 				<textarea
+					ref={handlesRef}
 					id="group-handles"
 					value={handlesRaw}
 					onChange={(e) => setHandlesRaw(e.target.value)}
@@ -146,7 +182,9 @@ export default function GroupCreateForm({
 					required
 					aria-invalid={Boolean(errors.handles)}
 					aria-describedby={
-						errors.handles ? "group-handles-error" : "group-handles-hint"
+						errors.handles
+							? "group-handles-hint group-handles-error"
+							: "group-handles-hint"
 					}
 					className="bg-baby_veryBlack text-baby_white focus-visible:ring-baby_blue rounded-md px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2"
 				/>

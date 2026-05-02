@@ -10,9 +10,8 @@
  * MIME / size 検証はクライアント + サーバ両方で行う (UX + security)。
  */
 
-import axios from "axios";
-
-import { createApiClient } from "@/lib/api/client";
+import { api } from "@/lib/api/client";
+import type { MessageAttachment } from "@/lib/redux/features/dm/types";
 
 export const ATTACHMENT_LIMITS = {
 	imageMaxBytes: 10 * 1024 * 1024,
@@ -96,20 +95,16 @@ export interface PresignResponse {
 	expires_at: string;
 }
 
-export interface ConfirmResponse {
-	id: number;
-	s3_key: string;
-	filename: string;
-	mime_type: string;
-	size: number;
-}
+/**
+ * Confirm endpoint は `MessageAttachmentSerializer` をそのまま返すため、
+ * 既存型 `MessageAttachment` を再利用する (ts-reviewer HIGH H-1 反映)。
+ */
+export type ConfirmResponse = MessageAttachment;
 
 export interface UploadProgress {
 	loaded: number;
 	total: number;
 }
-
-const client = createApiClient();
 
 export async function requestPresign(input: {
 	roomId: number;
@@ -117,15 +112,12 @@ export async function requestPresign(input: {
 	mimeType: string;
 	size: number;
 }): Promise<PresignResponse> {
-	const { data } = await client.post<PresignResponse>(
-		"/dm/attachments/presign/",
-		{
-			room_id: input.roomId,
-			filename: input.filename,
-			mime_type: input.mimeType,
-			size: input.size,
-		},
-	);
+	const { data } = await api.post<PresignResponse>("/dm/attachments/presign/", {
+		room_id: input.roomId,
+		filename: input.filename,
+		mime_type: input.mimeType,
+		size: input.size,
+	});
 	return data;
 }
 
@@ -140,6 +132,11 @@ export function uploadToS3(input: {
 	signal?: AbortSignal;
 }): Promise<void> {
 	return new Promise((resolve, reject) => {
+		// signal が事前に abort されているケースを早期に reject (ts-reviewer HIGH H-2)
+		if (input.signal?.aborted) {
+			reject(new DOMException("aborted", "AbortError"));
+			return;
+		}
 		const xhr = new XMLHttpRequest();
 		xhr.open("POST", input.presign.url, true);
 		xhr.upload.onprogress = (event) => {
@@ -153,7 +150,8 @@ export function uploadToS3(input: {
 		};
 		xhr.onerror = () => reject(new Error("S3 upload network error"));
 		xhr.onabort = () => reject(new DOMException("aborted", "AbortError"));
-		input.signal?.addEventListener("abort", () => xhr.abort());
+		// once: true で listener を一度だけ呼んで自動解除 (ts-reviewer MEDIUM M-1: GC leak 防止)
+		input.signal?.addEventListener("abort", () => xhr.abort(), { once: true });
 
 		const form = new FormData();
 		for (const [k, v] of Object.entries(input.presign.fields)) {
@@ -171,16 +169,13 @@ export async function confirmAttachment(input: {
 	mimeType: string;
 	size: number;
 }): Promise<ConfirmResponse> {
-	const { data } = await client.post<ConfirmResponse>(
-		"/dm/attachments/confirm/",
-		{
-			room_id: input.roomId,
-			s3_key: input.s3Key,
-			filename: input.filename,
-			mime_type: input.mimeType,
-			size: input.size,
-		},
-	);
+	const { data } = await api.post<ConfirmResponse>("/dm/attachments/confirm/", {
+		room_id: input.roomId,
+		s3_key: input.s3Key,
+		filename: input.filename,
+		mime_type: input.mimeType,
+		size: input.size,
+	});
 	return data;
 }
 
@@ -218,6 +213,3 @@ export async function uploadAttachment(input: {
 		size: input.file.size,
 	});
 }
-
-// axios import を残すため (一部の bundler 解析で削除されるのを防ぐ)
-export const __axios = axios;
