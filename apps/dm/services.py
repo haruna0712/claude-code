@@ -20,8 +20,8 @@ P3-03 Consumer / P3-04 招待 API / P3-06 添付確定 API はここを呼び出
 
 from __future__ import annotations
 
+import posixpath
 from datetime import UTC, datetime
-from pathlib import PurePosixPath
 
 import structlog
 from django.contrib.auth import get_user_model
@@ -38,6 +38,7 @@ from django.utils import timezone
 
 # 関数を直接 import すると monkeypatch (Phase 4 移行 spec) が効かなくなるため
 # module 経由で参照する (P3-15 phase-3-stub-bridges.md の caller indirection 規約)。
+from apps.dm import s3_presign as _presign
 from apps.dm.integrations import moderation as _moderation
 from apps.dm.integrations import notifications as _notifications
 from apps.dm.models import (
@@ -129,9 +130,10 @@ def _validate_attachment_keys_for_room(*, room_id: int, attachment_keys: list[di
     expected_prefix = f"dm/{room_id}/"
     for entry in attachment_keys:
         raw_key = entry.get("s3_key", "")
-        # PurePosixPath で ``../`` / ``./`` を正規化してから prefix 検査する。
+        # security HIGH 反映: posixpath.normpath は ``../`` / ``./`` を実際に collapse する。
+        # PurePosixPath は collapse しないため誤った安全感を与えた (security-reviewer H-1)。
         # 絶対パス (``/abc``) は normalised が ``/abc`` のままなので prefix mismatch で弾かれる。
-        normalised = str(PurePosixPath(raw_key))
+        normalised = posixpath.normpath(raw_key)
         if not normalised.startswith(expected_prefix):
             raise ValidationError(
                 f"attachment s3_key must start with '{expected_prefix}': got {raw_key!r}"
@@ -143,43 +145,56 @@ def send_message(
     room: DMRoom,
     sender: AbstractBaseUser,
     body: str,
-    attachment_keys: list[dict],
+    attachment_keys: list[dict] | None = None,
+    attachment_ids: list[int] | None = None,
 ) -> Message:
     """DM メッセージを送信する (Consumer / API から呼ばれる) .
+
+    P3-06: 添付の渡し方は 2 経路。
+
+    1. ``attachment_ids``: 推奨 (P3-06 presign-confirm-send フロー)
+       Confirm API で作成済みの orphan ``MessageAttachment`` (message=null, room=this room,
+       uploaded_by=sender) を id で参照し、send_message が ``message`` FK を立てて紐付ける。
+    2. ``attachment_keys``: 後方互換用 (旧 Phase 3 経路)
+       ``[{"s3_key": ..., "filename": ..., "mime_type": ..., "size": ..., ...}]`` を
+       直接 bulk_create する。S3 上の実物の存在は検証しない (信頼ベース)。
+
+    両方を同時に渡すと :class:`ValueError`。指定なしは「添付ゼロ」と同義。
 
     フロー:
 
     1. **空メッセージ拒否** (``validate_message_payload``)
-    2. **添付 s3_key prefix 検証** (room_id 配下のみ許可、IDOR 防止)
-    3. **direct room の Block ガード** — 1:1 で send 側 / 受信側どちらかが Block
-       していれば :class:`PermissionDenied`。group は対象外 (N:N で各ペア判定は重い、
-       Phase 4B でグループ用の方針を再検討)
-    4. ``transaction.atomic`` 内で:
-       - ``Message.objects.create``
-       - ``MessageAttachment.objects.bulk_create``
-       - ``DMRoom.last_message_at`` を ``update_fields`` で更新
+    2. **添付 prefix 検証** (room_id 配下のみ許可、IDOR 防止) — keys 経路のみ
+    3. **direct room の Block ガード**
+    4. ``transaction.atomic`` 内で Message + Attachments + last_message_at 更新
     5. ``transaction.on_commit`` で :func:`emit_dm_message` を発火
-       (Phase 3 では no-op、Phase 4A で通知レコード生成に変わる)
-
-    Args:
-        room: 送信先 ``DMRoom``
-        sender: 送信者 (room メンバー前提、メンバー検証は Consumer 側で済んでいる前提)
-        body: Markdown 本文 (空でも attachments があれば OK)
-        attachment_keys: ``[{"s3_key": "...", "filename": "...", ...}, ...]`` のリスト
-
-    Returns:
-        作成された ``Message`` (transaction commit 済)
 
     Raises:
-        ValidationError: 空メッセージ / 添付 prefix 不一致
-        PermissionDenied: direct room で Block 関係
+        ValidationError: 空メッセージ / 添付 prefix 不一致 / orphan attachment 不存在
+        PermissionDenied: direct room で Block 関係 / orphan attachment が他 room
+        ValueError: ``attachment_keys`` と ``attachment_ids`` の両方指定
     """
 
-    # 1. 空メッセージ拒否
-    validate_message_payload(body=body, attachment_count=len(attachment_keys))
+    if attachment_keys is not None and attachment_ids is not None:
+        raise ValueError("attachment_keys と attachment_ids の両方は指定できません (どちらか一方)")
 
-    # 2. 添付 s3_key prefix 検証 (DB 書き込み前に弾く)
-    _validate_attachment_keys_for_room(room_id=room.pk, attachment_keys=attachment_keys)
+    keys: list[dict] = list(attachment_keys or [])
+    ids: list[int] = list(attachment_ids or [])
+    total_count = len(keys) + len(ids)
+
+    # SPEC §7.3 上限 (security-reviewer MEDIUM M-3 反映): 1 メッセージあたり最大 5 添付。
+    # 画像 5 枚 / ファイル 1 枚の細分化は Confirm 時の MIME 種別が必要だが、
+    # 紐付け前の orphan を全件 fetch すると無駄になるため、ここでは合計 5 で簡易制約。
+    # 詳細な mime 別検査が必要な場合は Phase 4 / 別 issue で。
+    if total_count > 5:
+        raise ValidationError(f"1 メッセージの添付は最大 5 件です (指定 {total_count} 件)")
+
+    # 1. 空メッセージ拒否
+    validate_message_payload(body=body, attachment_count=total_count)
+
+    # 2. 添付 prefix 検証 (legacy keys 経路のみ — DB 書き込み前に弾く)
+    if keys:
+        _validate_attachment_keys_for_room(room_id=room.pk, attachment_keys=keys)
 
     now = timezone.now()
     with transaction.atomic():
@@ -198,11 +213,20 @@ def send_message(
                 raise PermissionDenied("relationship blocked")
 
         message = Message.objects.create(room=room, sender=sender, body=body or "")
-        if attachment_keys:
+
+        # 添付経路: ids → 既存 orphan を locking + 検証 → message FK 立てる
+        if ids:
+            _link_orphan_attachments_to_message(
+                attachment_ids=ids, message=message, room=room, sender=sender
+            )
+        # 添付経路: keys → bulk_create で新規作成 (legacy)
+        if keys:
             MessageAttachment.objects.bulk_create(
                 [
                     MessageAttachment(
                         message=message,
+                        room=room,
+                        uploaded_by=sender,
                         s3_key=entry["s3_key"],
                         filename=entry.get("filename", ""),
                         mime_type=entry.get("mime_type", ""),
@@ -210,7 +234,7 @@ def send_message(
                         width=entry.get("width"),
                         height=entry.get("height"),
                     )
-                    for entry in attachment_keys
+                    for entry in keys
                 ]
             )
         # last_message_at は room 一覧 ordering に効く。in-place mutation を避け
@@ -224,6 +248,118 @@ def send_message(
         transaction.on_commit(lambda: _emit_dm_message_safely(message))
 
     return message
+
+
+def _link_orphan_attachments_to_message(
+    *,
+    attachment_ids: list[int],
+    message: Message,
+    room: DMRoom,
+    sender: AbstractBaseUser,
+) -> None:
+    """orphan ``MessageAttachment`` (message=null) を ``message`` に紐付ける.
+
+    検証:
+    - 全 id が存在し、``message__isnull=True`` (まだ紐付け前) であること
+    - ``room`` が今回の room と一致 (IDOR 防止)
+    - ``uploaded_by`` が ``sender`` と一致 (他人の orphan を奪わない)
+
+    並行送信で同じ orphan を 2 回紐付けてしまわないよう、対象行を SELECT FOR UPDATE で
+    ロックしてから WHERE message IS NULL 限定で UPDATE する。
+    """
+
+    with transaction.atomic():
+        # SELECT FOR UPDATE で対象行をロック (FK 更新の TOCTOU 防止)
+        orphans = list(
+            MessageAttachment.objects.select_for_update()
+            .filter(pk__in=attachment_ids, message__isnull=True)
+            .only("id", "room_id", "uploaded_by_id")
+        )
+        if len(orphans) != len(attachment_ids):
+            raise ValidationError(
+                f"添付の一部が見つかりません (要求 {len(attachment_ids)} 件、orphan {len(orphans)} 件)"
+            )
+        for att in orphans:
+            if att.room_id != room.pk:
+                raise PermissionDenied(
+                    f"添付 {att.pk} は別 room の attachment です (送信者の権限なし)"
+                )
+            if att.uploaded_by_id != sender.pk:
+                raise PermissionDenied(
+                    f"添付 {att.pk} は他ユーザーが uploaded した attachment です"
+                )
+
+        # 一斉に message FK を立てる (再 SELECT 不要)。
+        updated = MessageAttachment.objects.filter(
+            pk__in=[a.pk for a in orphans], message__isnull=True
+        ).update(message=message, updated_at=timezone.now())
+        if updated != len(orphans):
+            # 並行 link が成立した場合のセーフティネット
+            raise ValidationError(
+                "添付の紐付けに失敗しました (並行送信の可能性、再試行してください)"
+            )
+
+
+def confirm_attachment(
+    *,
+    user: AbstractBaseUser,
+    room: DMRoom,
+    s3_key: str,
+    filename: str,
+    mime_type: str,
+    size: int,
+) -> MessageAttachment:
+    """presigned PUT 完了後、S3 上の実物を head_object で再検証して orphan を作成する.
+
+    Args:
+        user: アップロード実行者 (room メンバー前提、view 側で検証済み).
+        room: アップロード先 ``DMRoom``.
+        s3_key: presign 発行時に返した key (改ざん検出のため Conditions で eq 強制済み).
+        filename: 申告ファイル名 (DB 保存用、表示用).
+        mime_type: 申告 MIME (head_object の ContentType と完全一致を要求).
+        size: 申告 bytes (head_object の ContentLength と完全一致を要求).
+
+    Returns:
+        作成された orphan ``MessageAttachment`` (``message=None``).
+
+    Raises:
+        ValidationError: prefix mismatch / S3 上に実物なし / metadata 不一致.
+    """
+
+    # P3-06 のドキュメントどおり、s3_key が dm/<room.pk>/ で始まることを再検証する
+    # (presign 経路で生成した key だが、独立コード経由で confirm 呼びされた場合の保険)。
+    # security HIGH H-1 反映: posixpath.normpath で `..` を実際に collapse する。
+    expected_prefix = f"dm/{room.pk}/"
+    normalised = posixpath.normpath(s3_key)
+    if not normalised.startswith(expected_prefix):
+        raise ValidationError(f"s3_key must start with '{expected_prefix}': got {s3_key!r}")
+
+    # 入力検証: presign 同等の MIME / size / filename を確認 (presign 経路を経ない呼びへの保険).
+    # 例外は ValidationError なので caller (view) で 400 に変換される。
+    _presign.validate_attachment_request(mime_type=mime_type, size=size, filename=filename)
+
+    # S3 で実物を再検証。フロントの申告は信用しない (security CRITICAL)。
+    info = _presign.head_object(s3_key=s3_key)
+    if info.content_length != size:
+        raise ValidationError(
+            f"S3 上のサイズ ({info.content_length}) が申告 ({size}) と一致しません"
+        )
+    # security HIGH H-2 反映: 空文字 fallback も「不一致」として明示的に弾く。
+    # if info.content_type and ... の short-circuit は MIME ヘッダ欠落時の bypass を許す。
+    if info.content_type != mime_type:
+        raise ValidationError(
+            f"S3 上の Content-Type ({info.content_type!r}) が申告 ({mime_type!r}) と一致しません"
+        )
+
+    return MessageAttachment.objects.create(
+        message=None,
+        room=room,
+        uploaded_by=user,
+        s3_key=s3_key,
+        filename=filename,
+        mime_type=mime_type,
+        size=size,
+    )
 
 
 def _emit_dm_message_safely(message: Message) -> None:

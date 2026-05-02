@@ -177,9 +177,20 @@ class MessageAttachment(models.Model):
     フォーマット: ``dm/<room_id>/<yyyy>/<mm>/<uuid>.<ext>`` (バケット相対 path)
     """
 
-    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="attachments")
+    # P3-06: presign-confirm-send フローでは Confirm API が orphan attachment
+    # (message=null) を作成し、send_message が attachment_ids 経由で紐付ける。
+    # 紐付け前は orphan として一時的に存在 (30 分の GC 対象)。
+    message = models.ForeignKey(
+        Message,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+        null=True,
+        blank=True,
+        help_text="紐付け前は null (Confirm API 経由で作成された orphan)",
+    )
     s3_key = models.CharField(
         max_length=512,
+        unique=True,
         help_text="S3 オブジェクトキー (バケット相対)。dm/<room_id>/<yyyy>/<mm>/<uuid>.<ext>",
     )
     filename = models.CharField(max_length=200)
@@ -192,8 +203,37 @@ class MessageAttachment(models.Model):
     width = models.PositiveIntegerField(null=True, blank=True)
     height = models.PositiveIntegerField(null=True, blank=True)
 
+    # P3-06: 添付確定時の uploader (room メンバー検証 / GC で他人の orphan を消さない)。
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="dm_uploaded_attachments",
+        null=True,
+        blank=True,
+        help_text="orphan 状態で uploader を保持。message が紐付くと参照は不要だが履歴用に残す。",
+    )
+    room = models.ForeignKey(
+        DMRoom,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+        null=True,
+        blank=True,
+        help_text="orphan 状態で room を保持 (IDOR 防止 + GC 用)。",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        # P3-06: orphan GC (message IS NULL AND created_at < threshold) を効かせる index。
+        # 全 attachment 件数で full scan されないよう partial index で絞り込む。
+        indexes = [
+            models.Index(
+                fields=["created_at"],
+                condition=models.Q(message__isnull=True),
+                name="dm_attachment_orphan_idx",
+            ),
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - 表示用
         return f"MessageAttachment[message={self.message_id} key={self.s3_key}]"

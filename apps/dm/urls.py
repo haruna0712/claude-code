@@ -13,6 +13,7 @@ from __future__ import annotations
 from django.urls import path
 
 from apps.dm.views import (
+    ConfirmAttachmentView,
     DMRoomDetailView,
     DMRoomInvitationsCreateView,
     DMRoomListCreateView,
@@ -23,6 +24,7 @@ from apps.dm.views import (
     InvitationDeclineView,
     InvitationListView,
     MessageDestroyView,
+    PresignAttachmentView,
 )
 
 app_name = "dm"
@@ -72,5 +74,16 @@ urlpatterns = [
         "invitations/<int:pk>/decline/",
         InvitationDeclineView.as_view(),
         name="invitation-decline",
+    ),
+    # 添付 (P3-06)
+    path(
+        "attachments/presign/",
+        PresignAttachmentView.as_view(),
+        name="attachment-presign",
+    ),
+    path(
+        "attachments/confirm/",
+        ConfirmAttachmentView.as_view(),
+        name="attachment-confirm",
     ),
 ]
