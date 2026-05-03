@@ -6,6 +6,7 @@
  * 認証必須。`useParams` で room id を解決し、`<RoomChat>` をレンダ。
  */
 
+import { getCookie } from "cookies-next";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -17,14 +18,18 @@ export default function RoomDetailPage() {
 	const router = useRouter();
 	const params = useParams<{ id: string }>();
 	const { isAuthenticated } = useAppSelector((state) => state.auth);
-	const { profile, isLoading } = useUserProfile();
+	const { profile } = useUserProfile();
 
+	// 認証チェック (#269): cookie を直接読む。Redux の `isAuthenticated` だけ
+	// だと PersistAuth hydration より前に useEffect が走って false-positive
+	// redirect が起きる。詳細は messages/page.tsx の同コメントを参照。
 	useEffect(() => {
-		if (!isAuthenticated && !isLoading) {
+		const isLoggedIn = getCookie("logged_in") === "true";
+		if (!isLoggedIn) {
 			const next = encodeURIComponent(`/messages/${params?.id ?? ""}`);
 			router.replace(`/login?next=${next}`);
 		}
-	}, [isAuthenticated, isLoading, router, params]);
+	}, [router, params]);
 
 	if (!isAuthenticated || !profile) {
 		return (

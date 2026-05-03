@@ -7,6 +7,7 @@
  * Phase 4A の通知ベル UI が完成したらそちらに統合される予定。
  */
 
+import { getCookie } from "cookies-next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -18,13 +19,16 @@ import { useAppSelector } from "@/lib/redux/hooks/typedHooks";
 export default function InvitationsPage() {
 	const router = useRouter();
 	const { isAuthenticated } = useAppSelector((state) => state.auth);
-	const { isLoading } = useUserProfile();
 
+	// 認証チェック (#269): cookie を直接読む。Redux の `isAuthenticated` だけ
+	// だと PersistAuth hydration より前に useEffect が走って false-positive
+	// redirect が起きる。詳細は messages/page.tsx の同コメントを参照。
 	useEffect(() => {
-		if (!isAuthenticated && !isLoading) {
+		const isLoggedIn = getCookie("logged_in") === "true";
+		if (!isLoggedIn) {
 			router.replace("/login?next=/messages/invitations");
 		}
-	}, [isAuthenticated, isLoading, router]);
+	}, [router]);
 
 	if (!isAuthenticated) {
 		return (
