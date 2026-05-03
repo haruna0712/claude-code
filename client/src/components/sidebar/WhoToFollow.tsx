@@ -14,6 +14,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import FollowButton from "@/components/follows/FollowButton";
 import {
 	fetchPopularUsers,
 	fetchRecommendedUsers,
@@ -129,15 +130,17 @@ export default function WhoToFollow({ isAuthenticated }: WhoToFollowProps) {
 									</span>
 								)}
 							</div>
-							<button
-								type="button"
-								aria-label={`${user.display_name} をフォロー`}
-								aria-disabled="true"
-								title="この機能はまもなく追加されます"
-								className="rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-							>
-								フォロー
-							</button>
+							{/* #296: 旧 placeholder (aria-disabled=true) を本配線に置換。
+							    認証済の時のみ button を表示 (未ログインで follow API 401 を
+							    起こさない)。recommended / popular は基本フォロー外なので
+							    initialIsFollowing=false 既定で十分。 */}
+							{isAuthenticated ? (
+								<FollowButton
+									targetHandle={user.handle}
+									initialIsFollowing={Boolean(user.is_following)}
+									size="sm"
+								/>
+							) : null}
 						</li>
 					))}
 				</ul>

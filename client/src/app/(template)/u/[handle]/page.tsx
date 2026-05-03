@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import StartDMButton from "@/components/dm/StartDMButton";
+import FollowButton from "@/components/follows/FollowButton";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
@@ -21,6 +22,9 @@ interface PublicProfile {
 	note_url: string;
 	linkedin_url: string;
 	date_joined: string;
+	/** #296: 閲覧者が既に target を follow しているか。未ログイン時は false。
+	 *  backend PublicProfileSerializer.get_is_following で算出。 */
+	is_following: boolean;
 }
 
 interface PageProps {
@@ -144,10 +148,13 @@ export default async function ProfilePage({ params }: PageProps) {
 						@{profile.username}
 					</div>
 				</div>
-				{/* #299: 認証済 & 自分以外の profile に対して「メッセージ」 button。
-				    click で direct DM room を取得 / 作成して /messages/<id> 遷移。
-				    self / 未ログイン判定は StartDMButton 内で行う。 */}
-				<div className="pb-2">
+				{/* #296 + #299: profile header の右端に Follow / DM 入口を並べる。
+				    self / 未ログイン判定は各 component 内で行うので親は条件分岐不要。 */}
+				<div className="flex items-center gap-2 pb-2">
+					<FollowButton
+						targetHandle={profile.username}
+						initialIsFollowing={profile.is_following}
+					/>
 					<StartDMButton targetHandle={profile.username} />
 				</div>
 			</header>

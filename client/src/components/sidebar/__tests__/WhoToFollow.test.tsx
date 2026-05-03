@@ -12,6 +12,19 @@ vi.mock("@/lib/api/trending", () => ({
 	fetchPopularUsers: vi.fn(),
 }));
 
+// #296: FollowButton は RTK Query を使うため Provider 配線が必要だが、
+// 本 test は WhoToFollow の挙動 (fetch / render / empty / error) を検証する
+// もので FollowButton 内部実装は対象外。dummy component に差し替え、aria-label
+// で「FollowButton が targetHandle 付きで render されたか」だけ確認する。
+vi.mock("@/components/follows/FollowButton", () => ({
+	__esModule: true,
+	default: ({ targetHandle }: { targetHandle: string }) => (
+		<button type="button" aria-label={`mock-follow-${targetHandle}`}>
+			フォロー
+		</button>
+	),
+}));
+
 const SAMPLE = [
 	{
 		handle: "alice",
@@ -69,11 +82,22 @@ describe("WhoToFollow", () => {
 		await screen.findByText("人気のユーザー");
 	});
 
-	it("renders follow button as aria-disabled placeholder (P2-15 wires action)", async () => {
+	it("renders FollowButton with targetHandle for each authenticated user (#296)", async () => {
 		vi.mocked(fetchRecommendedUsers).mockResolvedValue(SAMPLE);
 		render(<WhoToFollow isAuthenticated={true} />);
-		const btn = await screen.findByRole("button", { name: /フォロー/ });
-		expect(btn.getAttribute("aria-disabled")).toBe("true");
+		const btn = await screen.findByRole("button", {
+			name: /mock-follow-alice/,
+		});
+		expect(btn).toBeInTheDocument();
+	});
+
+	it("hides FollowButton when unauthenticated (avoid 401 on click)", async () => {
+		vi.mocked(fetchPopularUsers).mockResolvedValue(SAMPLE);
+		render(<WhoToFollow isAuthenticated={false} />);
+		await screen.findByText("Alice");
+		expect(
+			screen.queryByRole("button", { name: /mock-follow-/ }),
+		).not.toBeInTheDocument();
 	});
 
 	it("shows empty-state when no users", async () => {
