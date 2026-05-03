@@ -191,9 +191,12 @@ test.describe("Phase 2 拡張 — post-reload / LeftNav / profile 導線", () =>
 		await login(page, USER1.email, USER1.password);
 		await page.goto("/");
 
-		// home TL に表示されている任意の article 内の作者リンクを click。
-		// USER2 のツイート優先で探し、無ければ最初の article (= USER1 含む可能性)。
-		const article = page.locator("article").first();
+		// X-5 (#327) で repost / tombstone 系 article は構造が違うので、
+		// 「のプロフィール」 link を持つ article (= 通常の original/reply/quote) に絞る。
+		const article = page
+			.locator("article")
+			.filter({ has: page.getByRole("link", { name: /のプロフィール/ }) })
+			.first();
 		await expect(article).toBeVisible({ timeout: 15_000 });
 		const authorLink = article.getByRole("link", { name: /のプロフィール/ });
 		await expect(authorLink).toBeVisible();
@@ -201,7 +204,6 @@ test.describe("Phase 2 拡張 — post-reload / LeftNav / profile 導線", () =>
 		expect(href).toMatch(/^\/u\//);
 		await authorLink.click();
 		await page.waitForURL(/\/u\//);
-		// /u/<handle> page header に handle 表示があることを確認
 		await expect(page.getByRole("heading", { level: 1 })).toBeVisible({
 			timeout: 10_000,
 		});
@@ -213,10 +215,15 @@ test.describe("Phase 2 拡張 — post-reload / LeftNav / profile 導線", () =>
 		await login(page, USER1.email, USER1.password);
 		await page.goto("/");
 
-		const article = page.locator("article").first();
+		// repost button (aria-label="リポスト" or "リポストを取消") を持つ
+		// article に絞る (X-5 で repost article 自体は button 無いため)
+		const article = page
+			.locator("article")
+			.filter({
+				has: page.getByRole("button", { name: /^リポスト$|リポストを取消/ }),
+			})
+			.first();
 		await expect(article).toBeVisible({ timeout: 15_000 });
-
-		// repost button (aria-label="リポスト" or "リポストを取消") を click
 		const repostBtn = article.getByRole("button", {
 			name: /^リポスト$|リポストを取消/,
 		});
@@ -238,9 +245,13 @@ test.describe("Phase 2 拡張 — post-reload / LeftNav / profile 導線", () =>
 		await login(page, USER1.email, USER1.password);
 		await page.goto("/");
 
-		const article = page.locator("article").first();
+		// リプライ button を持つ article に絞る (#327: repost article は button 無)
+		const article = page
+			.locator("article")
+			.filter({ has: page.getByRole("button", { name: /^リプライ/ }) })
+			.first();
 		await expect(article).toBeVisible({ timeout: 15_000 });
-		const replyBtn = article.getByRole("button", { name: "リプライ" });
+		const replyBtn = article.getByRole("button", { name: /^リプライ/ });
 		await replyBtn.click();
 
 		// Dialog の textarea (aria-label="リプライの本文") に入力。
@@ -264,9 +275,14 @@ test.describe("Phase 2 拡張 — post-reload / LeftNav / profile 導線", () =>
 		await login(page, USER1.email, USER1.password);
 		await page.goto("/");
 
-		const article = page.locator("article").first();
+		// 引用リポスト button を持つ article に絞る (#327: count 付きの場合は
+		// "引用 N 件" になるので /^引用/ 前方一致で wrap)。
+		const article = page
+			.locator("article")
+			.filter({ has: page.getByRole("button", { name: /^引用/ }) })
+			.first();
 		await expect(article).toBeVisible({ timeout: 15_000 });
-		const quoteBtn = article.getByRole("button", { name: "引用リポスト" });
+		const quoteBtn = article.getByRole("button", { name: /^引用/ });
 		await quoteBtn.click();
 
 		// title="引用リポスト" → aria-label は "引用リポストの本文"
