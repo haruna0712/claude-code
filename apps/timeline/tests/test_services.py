@@ -139,3 +139,46 @@ def test_build_explore_tl_returns_only_with_reactions() -> None:
     pks = {t.pk for t in result}
     assert with_reaction.pk in pks
     assert no_reaction.pk not in pks
+
+
+@pytest.mark.django_db(transaction=True)
+def test_build_home_tl_excludes_reply_type() -> None:
+    """#334: reply は home TL に出さない (X 慣習、conversation view 経由のみ)."""
+    from apps.tweets.models import Tweet, TweetType
+
+    actor = make_user()
+    target = make_user()
+    make_follow(actor, target)
+    # フォロイーが original + reply を投稿
+    original = make_tweet(author=target, body="original tweet")
+    reply = Tweet.objects.create(
+        author=target,
+        body="reply text",
+        type=TweetType.REPLY,
+        reply_to=original,
+    )
+
+    result = build_home_tl(actor, limit=20)
+    pks = {t.pk for t in result}
+    assert original.pk in pks
+    assert reply.pk not in pks  # ← REPLY は除外
+
+
+@pytest.mark.django_db(transaction=True)
+def test_build_home_tl_excludes_self_reply_type() -> None:
+    """#334: 自分の reply も home TL に出さない (X 慣習)."""
+    from apps.tweets.models import Tweet, TweetType
+
+    actor = make_user()
+    parent = make_tweet(author=actor, body="my parent")
+    own_reply = Tweet.objects.create(
+        author=actor,
+        body="my reply to self",
+        type=TweetType.REPLY,
+        reply_to=parent,
+    )
+
+    result = build_home_tl(actor, limit=20)
+    pks = {t.pk for t in result}
+    assert parent.pk in pks
+    assert own_reply.pk not in pks  # ← REPLY は除外
