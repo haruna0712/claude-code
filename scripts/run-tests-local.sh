@@ -157,9 +157,13 @@ run_pytest() {
 ensure_compose_services
 ensure_network_attached
 
-# 引数が無ければ default 引数 (1 件 fail で即 stop、coverage 切り)
+# 引数が無ければ default 引数 (1 件 fail で即 stop、coverage 切り)。
+# `--create-db` は `pyproject.toml` の `--reuse-db` を打ち消し、stale data
+# (前回 run で transactional rollback を escaped したコミット済 row 等) を
+# 持ち越して別 test の前提を破壊する事故を防ぐ。CI の `--create-db` と挙動
+# 整合させる。CLI から `scripts/run-tests-local.sh --reuse-db` で再利用も可。
 if [ $# -eq 0 ]; then
-  run_pytest --ff -x --no-cov -q
+  run_pytest --create-db --ff -x --no-cov -q
 else
-  run_pytest "$@"
+  run_pytest --create-db "$@"
 fi
