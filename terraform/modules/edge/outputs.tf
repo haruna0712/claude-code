@@ -62,6 +62,11 @@ output "webhook_fqdn" {
   value = local.webhook_fqdn
 }
 
+output "ws_fqdn" {
+  description = "WebSocket FQDN (#281: CloudFront bypass、ALB 直)。frontend が NEXT_PUBLIC_WS_HOST として読む。"
+  value       = local.ws_fqdn
+}
+
 output "waf_web_acl_arn" {
   description = "CloudFront に紐付けた WAFv2 web ACL ARN。enable_waf = false の時は null。"
   value       = var.enable_waf ? aws_wafv2_web_acl.cloudfront[0].arn : null

@@ -14,6 +14,7 @@ locals {
 
   app_fqdn     = "${var.app_subdomain}.${var.domain_name}"
   webhook_fqdn = "${var.webhook_subdomain}.${var.app_subdomain}.${var.domain_name}"
+  ws_fqdn      = "${var.ws_subdomain}.${var.app_subdomain}.${var.domain_name}"
 
   default_tags = merge(
     {
@@ -62,7 +63,7 @@ resource "aws_acm_certificate" "cloudfront" {
 
 resource "aws_acm_certificate" "alb" {
   domain_name               = local.app_fqdn
-  subject_alternative_names = [local.webhook_fqdn]
+  subject_alternative_names = [local.webhook_fqdn, local.ws_fqdn]
   validation_method         = "DNS"
 
   lifecycle {
@@ -163,6 +164,17 @@ data "aws_cloudfront_cache_policy" "caching_optimized" {
 
 data "aws_cloudfront_origin_request_policy" "all_viewer" {
   name = "Managed-AllViewer"
+}
+
+# WebSocket /ws/* 用 (#281): AllViewer は viewer の Host ヘッダを Origin に転送するが、
+# WebSocket Upgrade 時に CloudFront → ALB の経路で Host = stg.codeplace.me が
+# CloudFront 内部処理と衝突して 403 を返すケースがある。
+# AllViewerExceptHostHeader は Host だけ excluded → CloudFront が Origin の DNS 名
+# (sns-stg-alb-...) を Host にセット。ALB は path-based routing で Host を見ないし、
+# daphne (Channels OriginValidator) は HTTP `Origin` ヘッダを見るため、
+# Host 書き換えは Phase 3 DM の動作に影響しない。
+data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
+  name = "Managed-AllViewerExceptHostHeader"
 }
 
 data "aws_cloudfront_origin_request_policy" "cors_s3" {
@@ -293,16 +305,22 @@ resource "aws_cloudfront_distribution" "this" {
   #   クライアント (reconnecting-websocket) は自動再接続するが、Phase 3 DM で
   #   長時間セッションが続く場合は 30s 間隔で ping frame を送る運用が前提。
   #   将来 ws.<domain> を別途立てて CloudFront を bypass する選択肢あり (docs/adr)。
+  #
+  # #281: viewer_protocol_policy を https-only に厳格化 (redirect-to-https は
+  # WebSocket クライアントが 301 を follow できず confuse する事例の予防)。
+  # origin_request_policy を AllViewerExceptHostHeader に変更 (Host 転送が CF
+  # WebSocket pass-through で 403 を引き起こすケースの回避、上記 data ブロック
+  # コメント参照)。
   ordered_cache_behavior {
     path_pattern           = "/ws/*"
     target_origin_id       = "alb"
-    viewer_protocol_policy = "redirect-to-https"
+    viewer_protocol_policy = "https-only"
     allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods         = ["GET", "HEAD"]
     compress               = false
 
     cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
   }
 
   viewer_certificate {
@@ -344,6 +362,22 @@ resource "aws_route53_record" "app" {
 resource "aws_route53_record" "webhook" {
   zone_id = aws_route53_zone.this.zone_id
   name    = local.webhook_fqdn
+  type    = "A"
+
+  alias {
+    name                   = var.alb_dns_name
+    zone_id                = var.alb_zone_id
+    evaluate_target_health = true
+  }
+}
+
+# #281: WebSocket 専用サブドメイン (CloudFront を bypass して ALB 直結)。
+# CloudFront 経由 wss:// が 403 を返す問題の根本対策。frontend は
+# wss://ws.<app_fqdn>/ws/dm/<id>/ で接続し、daphne (Channels) と直接 handshake する。
+# 既存の HTTP/HTTPS routes (api / next SSR / static) は引き続き CloudFront 経由。
+resource "aws_route53_record" "ws" {
+  zone_id = aws_route53_zone.this.zone_id
+  name    = local.ws_fqdn
   type    = "A"
 
   alias {

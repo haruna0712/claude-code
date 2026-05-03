@@ -76,13 +76,41 @@ function computeBackoffMs(attempt: number): number {
 	return Math.max(500, Math.floor(exp + jitter));
 }
 
+/**
+ * `<host>` から WebSocket 接続先 host を導出する (#281).
+ *
+ * stg / prod では CloudFront 経由 wss が CloudFront 403 で落ちる (#281) ため、
+ * `ws.<host>` 専用 subdomain (ALB 直結) を使う。codeplace.me 系のドメインで
+ * 自動的に ws.* を付与する。local 開発 (localhost / nginx 等) はそのまま。
+ *
+ * NOTE: 環境変数 `NEXT_PUBLIC_WS_HOST` で完全上書きも可能 (将来的な prod 切替や
+ * 別 host で WebSocket を separate したい場合用)。
+ */
+function deriveWsHost(host: string): string {
+	const override = process.env.NEXT_PUBLIC_WS_HOST;
+	if (override) {
+		return override;
+	}
+	// 既に ws.* なら二重に付けない
+	if (host.startsWith("ws.")) {
+		return host;
+	}
+	// codeplace.me 系 (stg / prod) は ws.* に差し替え
+	if (host.endsWith("codeplace.me")) {
+		return `ws.${host}`;
+	}
+	// local 開発 (localhost / nginx / 任意のドメイン) はそのまま
+	return host;
+}
+
 function defaultUrlFor(roomId: number | string): string {
 	if (typeof window === "undefined") {
 		// SSR では呼ばれない想定だが安全なフォールバック
 		return `/ws/dm/${roomId}/`;
 	}
 	const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-	return `${proto}//${window.location.host}/ws/dm/${roomId}/`;
+	const wsHost = deriveWsHost(window.location.host);
+	return `${proto}//${wsHost}/ws/dm/${roomId}/`;
 }
 
 export function useDMSocket(options: UseDMSocketOptions): UseDMSocketReturn {
@@ -252,6 +280,7 @@ export function useDMSocket(options: UseDMSocketOptions): UseDMSocketReturn {
 // テスト等から直接参照するため export.
 export const __internals = {
 	computeBackoffMs,
+	deriveWsHost,
 	MAX_BACKOFF_MS,
 	TYPING_DEBOUNCE_MS,
 };

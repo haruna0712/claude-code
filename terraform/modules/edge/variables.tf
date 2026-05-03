@@ -29,6 +29,15 @@ variable "webhook_subdomain" {
   default     = "webhook"
 }
 
+# WebSocket 専用サブドメイン (#281): CloudFront を bypass して ALB に直結する。
+# CloudFront → ALB の WebSocket Upgrade pass-through が 403 を返すため、wss は
+# ws.<app_subdomain>.<domain_name> で ALB 直、http(s) は通常通り CloudFront 経由。
+variable "ws_subdomain" {
+  description = "WebSocket 専用サブドメイン (CloudFront 非経由、ALB 直)。例: ws → wss://ws.stg.codeplace.me/ws/dm/<id>/"
+  type        = string
+  default     = "ws"
+}
+
 # ---------- ALB / S3 origin (compute / storage モジュール output を受ける) ----------
 
 variable "alb_dns_name" {
