@@ -55,21 +55,28 @@ async function login(
 	password: string,
 ) {
 	await page.goto("/login");
-	await page.getByLabel("メールアドレス").fill(email);
-	await page.getByLabel("パスワード").fill(password);
-	await page.getByRole("button", { name: /ログイン/ }).click();
+	// LoginForm: Email は <Input id="email"> + <label for="email">、Password は
+	// PasswordInput component が id を渡してないため getByLabel("Password") 失敗。
+	// → email は label / password は placeholder で拾う (button は "Sign In")。
+	await page.getByLabel("Email Address").fill(email);
+	await page.getByPlaceholder("Password").fill(password);
+	await page.getByRole("button", { name: /Sign In/i }).click();
 	await page.waitForURL(/\/onboarding|\/$/);
 }
 
 async function logout(page: import("@playwright/test").Page) {
-	await page.getByRole("button", { name: /ログアウト/ }).click();
+	await page.getByRole("button", { name: /Logout|ログアウト/ }).click();
 	await page.waitForURL(/\/login|\/$/);
 }
 
 /** /messages を開いて DM 一覧画面が render されたことを確認。 */
 async function gotoMessages(page: import("@playwright/test").Page) {
 	await page.goto("/messages");
-	await expect(page.getByRole("heading", { name: "メッセージ" })).toBeVisible();
+	// 実 UI が日英どちらでも通るよう regex で。"メッセージ" / "Messages" /
+	// "Direct Messages" のいずれかを heading or role=banner で許容。
+	await expect(
+		page.getByRole("heading", { name: /メッセージ|Messages|Direct/i }).first(),
+	).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe("Phase 3 — DM golden path", () => {
