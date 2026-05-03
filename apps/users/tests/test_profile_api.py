@@ -47,6 +47,9 @@ EXPECTED_PUBLIC_KEYS = {
     "linkedin_url",
     "full_name",
     "date_joined",
+    # #296: FollowButton 初期状態判定用 (ログイン中の閲覧者が follow 中か).
+    # PII では無く bool のみ、未ログイン時は false。
+    "is_following",
 }
 
 
