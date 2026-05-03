@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import StartDMButton from "@/components/dm/StartDMButton";
+import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
 import { stringifyJsonLd } from "@/lib/json-ld";
-import { sanitizeTweetHtml } from "@/lib/sanitize/sanitizeTweetHtml";
 
 interface PublicProfile {
 	username: string;
@@ -175,34 +175,14 @@ export default async function ProfilePage({ params }: PageProps) {
 				<h2 id="tweets-heading" className="mb-3 text-lg font-semibold">
 					ツイート
 				</h2>
-				{tweets.length === 0 ? (
-					<p className="text-sm text-muted-foreground">
-						まだツイートがありません。
-					</p>
-				) : (
-					<ul className="space-y-4">
-						{tweets.map((t) => (
-							<li key={t.id}>
-								<article className="rounded-lg border bg-card p-4 shadow-sm">
-									<a href={`/tweet/${t.id}`} className="block">
-										<div
-											className="prose prose-sm dark:prose-invert max-w-none"
-											dangerouslySetInnerHTML={{
-												__html: sanitizeTweetHtml(t.html),
-											}}
-										/>
-										<time
-											dateTime={t.created_at}
-											className="mt-2 block text-xs text-muted-foreground"
-										>
-											{new Date(t.created_at).toLocaleString("ja-JP")}
-										</time>
-									</a>
-								</article>
-							</li>
-						))}
-					</ul>
-				)}
+				{/* #298: 旧 plain link 列挙を TweetCard ベースに置換。
+				    リアクション (P2-14) / RT (P2-15) / 「もっと見る」展開 (P2-18)
+				    が本配線される。HomeFeed と同 ARIA feed pattern。 */}
+				<TweetCardList
+					tweets={tweets}
+					ariaLabel={`@${profile.username} のツイート`}
+					emptyMessage="まだツイートがありません。"
+				/>
 			</section>
 		</main>
 	);
