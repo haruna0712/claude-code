@@ -173,12 +173,23 @@ resource "aws_ecs_task_definition" "django" {
           awslogs-stream-prefix = "django"
         }
       }
+      # #291: container healthCheck は python urllib で実施する。slim-bookworm
+      # base image に curl は同梱されておらず、`curl: command not found` で
+      # exit 127 → ECS が UNHEALTHY 判定して起動 ~3 分で kill する慢性 flapping
+      # の原因だった。Dockerfile に curl を追加するより、既に存在する Python
+      # runtime で済ませる方が image size を増やさない。
+      # startPeriod=120s は collectstatic + gunicorn workers の Aurora cold
+      # connect (初回 ~2s) を見込んだ余裕。retries=5 で interval 30s × 5 =
+      # 150s の grace を取る。
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -fsSL http://localhost:8000/api/health/ || exit 1"]
+        command = [
+          "CMD-SHELL",
+          "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health/', timeout=4).status==200 else 1)\""
+        ]
         interval    = 30
         timeout     = 5
-        retries     = 3
-        startPeriod = 60
+        retries     = 5
+        startPeriod = 120
       }
     }
   ])
