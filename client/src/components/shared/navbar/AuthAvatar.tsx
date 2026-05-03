@@ -34,7 +34,7 @@ export default function AuthAvatar() {
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
 						<Avatar className="border-pumpkin cursor-pointer border-2">
-							<AvatarImage alt="auth image" src={profile.avatar} />
+							<AvatarImage alt="auth image" src={profile.avatar_url} />
 							<AvatarFallback>
 								<CircleUser className="dark:text-platinum size-8" />
 							</AvatarFallback>

@@ -8,5 +8,6 @@ export function useUserProfile() {
 		skip: !isAuthenticated,
 	});
 
-	return { profile: data?.profile, isLoading, isError };
+	// /api/v1/users/me/ は CustomUser を直接返す (旧 `{profile: ...}` ラップなし)。
+	return { profile: data, isLoading, isError };
 }
