@@ -96,14 +96,21 @@ export default function TweetCard({
 					</div>
 				)}
 
-				<div className="flex min-w-0 flex-col">
+				{/* #320: 作者名 / @handle を /u/<handle> への Link 化。Tweet 本文の
+				    click 領域 (詳細遷移) と分離するため、Link は header 内のみ。
+				    keyboard でも Tab 1 hop で focus + Enter で profile に飛べる。 */}
+				<Link
+					href={`/u/${tweet.author_handle}`}
+					className="flex min-w-0 flex-col rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:underline"
+					aria-label={`${authorName} (@${tweet.author_handle}) のプロフィール`}
+				>
 					<span className="font-semibold text-sm text-foreground truncate">
 						{authorName}
 					</span>
 					<span className="text-xs text-muted-foreground">
 						@{tweet.author_handle}
 					</span>
-				</div>
+				</Link>
 
 				<div className="ml-auto flex shrink-0 items-center gap-2">
 					{tweet.edit_count > 0 && (

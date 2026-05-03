@@ -184,4 +184,104 @@ test.describe("Phase 2 拡張 — post-reload / LeftNav / profile 導線", () =>
 		await page.waitForURL(/\/login/);
 		await expect(page).toHaveURL(/\/login/);
 	});
+
+	test("TweetCard の作者名 click → /u/<handle> プロフィール遷移 (#320)", async ({
+		page,
+	}) => {
+		await login(page, USER1.email, USER1.password);
+		await page.goto("/");
+
+		// home TL に表示されている任意の article 内の作者リンクを click。
+		// USER2 のツイート優先で探し、無ければ最初の article (= USER1 含む可能性)。
+		const article = page.locator("article").first();
+		await expect(article).toBeVisible({ timeout: 15_000 });
+		const authorLink = article.getByRole("link", { name: /のプロフィール/ });
+		await expect(authorLink).toBeVisible();
+		const href = await authorLink.getAttribute("href");
+		expect(href).toMatch(/^\/u\//);
+		await authorLink.click();
+		await page.waitForURL(/\/u\//);
+		// /u/<handle> page header に handle 表示があることを確認
+		await expect(page.getByRole("heading", { level: 1 })).toBeVisible({
+			timeout: 10_000,
+		});
+	});
+
+	test("リポスト button click で repost API が 201 (#320 関連)", async ({
+		page,
+	}) => {
+		await login(page, USER1.email, USER1.password);
+		await page.goto("/");
+
+		const article = page.locator("article").first();
+		await expect(article).toBeVisible({ timeout: 15_000 });
+
+		// repost button (aria-label="リポスト" or "リポストを取消") を click
+		const repostBtn = article.getByRole("button", {
+			name: /^リポスト$|リポストを取消/,
+		});
+		await expect(repostBtn).toBeVisible();
+		const repostResponse = page.waitForResponse(
+			(res) =>
+				res.url().includes("/api/v1/tweets/") &&
+				res.url().includes("/repost/") &&
+				(res.request().method() === "POST" ||
+					res.request().method() === "DELETE"),
+		);
+		await repostBtn.click();
+		const res = await repostResponse;
+		// 新規 repost なら 201、解除なら 204
+		expect([201, 204]).toContain(res.status());
+	});
+
+	test("リプライ Dialog → 投稿で reply API が 201", async ({ page }) => {
+		await login(page, USER1.email, USER1.password);
+		await page.goto("/");
+
+		const article = page.locator("article").first();
+		await expect(article).toBeVisible({ timeout: 15_000 });
+		const replyBtn = article.getByRole("button", { name: "リプライ" });
+		await replyBtn.click();
+
+		// Dialog の textarea (aria-label="リプライの本文") に入力。
+		// PostDialog の title が "リプライ" なので "リプライの本文" になる。
+		const textarea = page.getByRole("textbox", { name: "リプライの本文" });
+		await expect(textarea).toBeVisible({ timeout: 5_000 });
+		const marker = `e2e reply ${Date.now()}`;
+		await textarea.fill(marker);
+		const replyResponse = page.waitForResponse(
+			(res) =>
+				res.url().includes("/api/v1/tweets/") &&
+				res.url().includes("/reply/") &&
+				res.request().method() === "POST",
+		);
+		await page.getByRole("button", { name: "返信する", exact: true }).click();
+		const res = await replyResponse;
+		expect(res.status()).toBe(201);
+	});
+
+	test("引用 Dialog → 投稿で quote API が 201", async ({ page }) => {
+		await login(page, USER1.email, USER1.password);
+		await page.goto("/");
+
+		const article = page.locator("article").first();
+		await expect(article).toBeVisible({ timeout: 15_000 });
+		const quoteBtn = article.getByRole("button", { name: "引用リポスト" });
+		await quoteBtn.click();
+
+		// title="引用リポスト" → aria-label は "引用リポストの本文"
+		const textarea = page.getByRole("textbox", { name: "引用リポストの本文" });
+		await expect(textarea).toBeVisible({ timeout: 5_000 });
+		const marker = `e2e quote ${Date.now()}`;
+		await textarea.fill(marker);
+		const quoteResponse = page.waitForResponse(
+			(res) =>
+				res.url().includes("/api/v1/tweets/") &&
+				res.url().includes("/quote/") &&
+				res.request().method() === "POST",
+		);
+		await page.getByRole("button", { name: "引用する", exact: true }).click();
+		const res = await quoteResponse;
+		expect(res.status()).toBe(201);
+	});
 });
