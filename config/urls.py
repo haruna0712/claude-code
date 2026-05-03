@@ -1,21 +1,20 @@
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
-from drf_yasg import openapi
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
 from drf_yasg.views import get_schema_view
 from rest_framework import permissions
 
 from apps.common.views import csrf_token as csrf_token_view
 from apps.common.views import health as health_view
+from config.openapi import api_info
 
 schema_view = get_schema_view(
-    openapi.Info(
-        title="Alpha Apartments API",
-        default_version="v1",
-        description="An Apartment Management API for Real Estate",
-        contact=openapi.Contact(email="api.imperfect@gmail.com"),
-        license=openapi.License(name="MIT License"),
-    ),
+    api_info,
     public=True,
     permission_classes=[permissions.AllowAny],
 )
@@ -29,6 +28,20 @@ urlpatterns = [
         "redoc/",
         schema_view.with_ui("redoc", cache_timeout=0),
         name="schema-redoc",
+    ),
+    # OpenAPI 3.0 schema (drf-spectacular) — frontend codegen 用の正本。
+    # drf-yasg は /redoc/ 人間向け UI のみで残置 (APIView で action_map=None
+    # を踏むため codegen には使えない)。
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path(
+        "api/schema/swagger-ui/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="swagger-ui",
+    ),
+    path(
+        "api/schema/redoc/",
+        SpectacularRedocView.as_view(url_name="schema"),
+        name="redoc-spectacular",
     ),
     path(settings.ADMIN_URL, admin.site.urls),
     # P1-13a: SPA が state-changing POST を送る前に csrftoken cookie を種付け
