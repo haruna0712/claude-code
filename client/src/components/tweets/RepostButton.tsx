@@ -44,13 +44,18 @@ export default function RepostButton({
 				await unrepostTweet(tweetId);
 			} else {
 				const result = await repostTweet(tweetId);
+				// repost 自体は成功。後続の fetchTweet が失敗しても reposted state は
+				// rollback しない (DB 上は created 済み)。ただし TL の即時反映は
+				// 行えないので、ユーザーには「TL 反映に失敗、リロードで確認」を
+				// toast で伝える。silent fail は禁止。
 				if (onPosted) {
 					try {
 						const full = await fetchTweet(result.id);
 						onPosted(full);
 					} catch {
-						// fetch 失敗しても repost 自体は成功。silent fail で次回 reload 時に
-						// 表示される (UX のみ退化、データ整合性は維持)。
+						toast.warn(
+							"リポストは完了しましたが、画面更新に失敗しました。リロードしてください。",
+						);
 					}
 				}
 			}
