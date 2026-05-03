@@ -322,6 +322,33 @@ if _redis_url_clean.startswith("rediss://"):
     # 小文字 "required" で渡すこと (大文字 "CERT_REQUIRED" や int constant は invalid)。
     _channels_host["ssl_cert_reqs"] = "required"
 
+# #311: Django cache backend (P2-08 home TL cache 等の保存先).
+# 旧設定は CACHES 未定義 = default LocMemCache だったため、gunicorn workers
+# 間で cache が共有されず、worker A の `cache.delete(...)` が worker B に
+# 伝播しなかった (post → 別 worker での GET が stale を返す原因)。
+# REDIS_URL (Channels / Celery と同じ instance) を流用する。DB 分離より
+# KEY_PREFIX で衝突回避する方がシンプル (django-cache: "sns:cache:*" /
+# celery: "celery-task-meta-*" / channels: "asgi::*")。
+_cache_options: dict[str, object] = {
+    "CLIENT_CLASS": "django_redis.client.DefaultClient",
+    "IGNORE_EXCEPTIONS": True,
+}
+if _redis_url_clean.startswith("rediss://"):
+    _cache_options["CONNECTION_POOL_KWARGS"] = {"ssl_cert_reqs": "required"}
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": _redis_url_clean,
+        "OPTIONS": _cache_options,
+        "KEY_PREFIX": "sns:cache",
+        "TIMEOUT": 300,
+    }
+}
+# cache backend エラーで request が落ちないように (silent log のみ)。
+DJANGO_REDIS_IGNORE_EXCEPTIONS = True
+DJANGO_REDIS_LOG_IGNORED_EXCEPTIONS = True
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
