@@ -15,7 +15,7 @@ import ReactionBar from "@/components/reactions/ReactionBar";
 import ExpandableBody from "@/components/timeline/ExpandableBody";
 import PostDialog from "@/components/tweets/PostDialog";
 import RepostButton from "@/components/tweets/RepostButton";
-import type { TweetSummary } from "@/lib/api/tweets";
+import type { TweetMini, TweetSummary } from "@/lib/api/tweets";
 import { formatRelativeTime } from "@/lib/timeline/formatTime";
 
 interface TweetCardProps {
@@ -26,6 +26,94 @@ interface TweetCardProps {
 	setsize?: number;
 }
 
+/** #327: 削除済み tweet の tombstone 表示 (article 単位)。 */
+function DeletedTombstone({
+	posinset,
+	setsize,
+}: {
+	posinset?: number;
+	setsize?: number;
+}) {
+	return (
+		<article
+			className="flex flex-col gap-1 border-b border-border px-4 py-3 text-sm text-muted-foreground"
+			aria-label="削除されたツイート"
+			aria-posinset={posinset}
+			aria-setsize={setsize}
+		>
+			<p>このツイートは削除されました。</p>
+		</article>
+	);
+}
+
+/**
+ * #327: type=repost の上部に表示する banner. リポストした人 (= tweet.author_handle)
+ * を出すだけのシンプルな行。Twitter の「@X がリポスト」相当。
+ */
+function RepostBanner({
+	handle,
+	displayName,
+}: {
+	handle: string;
+	displayName?: string;
+}) {
+	const name = displayName || handle;
+	return (
+		<div className="flex items-center gap-2 text-xs text-muted-foreground">
+			<svg
+				className="size-3.5"
+				fill="none"
+				viewBox="0 0 24 24"
+				stroke="currentColor"
+				strokeWidth={1.8}
+				aria-hidden="true"
+			>
+				<path
+					strokeLinecap="round"
+					strokeLinejoin="round"
+					d="M4 7h11l-3-3m3 3l-3 3M20 17H9l3 3m-3-3l3-3"
+				/>
+			</svg>
+			<Link
+				href={`/u/${handle}`}
+				className="font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+			>
+				{name}
+			</Link>
+			<span>がリポストしました</span>
+		</div>
+	);
+}
+
+/**
+ * #327: 引用元 tweet を inline preview として表示 (枠付き縮小カード)。
+ * tombstone 時は「このツイートは削除されました」を出す。
+ */
+function QuoteEmbed({ tweet }: { tweet: TweetMini }) {
+	if (tweet.is_deleted) {
+		return (
+			<div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+				このツイートは削除されました。
+			</div>
+		);
+	}
+	const name = tweet.author_display_name || tweet.author_handle;
+	return (
+		<Link
+			href={`/tweet/${tweet.id}`}
+			className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors block"
+		>
+			<div className="mb-1 flex items-center gap-2 text-muted-foreground">
+				<span className="font-medium text-foreground">{name}</span>
+				<span>@{tweet.author_handle}</span>
+			</div>
+			<p className="line-clamp-3 whitespace-pre-wrap text-foreground">
+				{tweet.body}
+			</p>
+		</Link>
+	);
+}
+
 export default function TweetCard({
 	tweet,
 	posinset,
@@ -34,6 +122,7 @@ export default function TweetCard({
 	const [replyOpen, setReplyOpen] = useState(false);
 	const [quoteOpen, setQuoteOpen] = useState(false);
 
+	// #327: 全 hooks は早期 return より前に呼ぶ (React rules of hooks)。
 	// CRITICAL: sanitize HTML before rendering — strips <script>, event handlers,
 	// javascript: hrefs, <iframe>, <style>, and other XSS vectors.
 	const safeHtml = useMemo(
@@ -62,6 +151,88 @@ export default function TweetCard({
 			}),
 		[tweet.created_at],
 	);
+
+	// #327: 削除済み tweet は tombstone で代替 (action button 一切出さない)
+	if (tweet.is_deleted) {
+		return <DeletedTombstone posinset={posinset} setsize={setsize} />;
+	}
+
+	// #327: type=repost は本体を repost_of に差し替えて RepostBanner を被せる。
+	// repost_of が tombstone の場合は banner + tombstone を表示。
+	if (tweet.type === "repost" && tweet.repost_of) {
+		const reposter = tweet.author_display_name ?? tweet.author_handle;
+		if (tweet.repost_of.is_deleted) {
+			return (
+				<article
+					className="flex flex-col gap-2 border-b border-border px-4 py-3"
+					aria-label={`${reposter} のリポスト (削除済み)`}
+					aria-posinset={posinset}
+					aria-setsize={setsize}
+				>
+					<RepostBanner
+						handle={tweet.author_handle}
+						displayName={tweet.author_display_name}
+					/>
+					<p className="text-sm text-muted-foreground">
+						このツイートは削除されました。
+					</p>
+				</article>
+			);
+		}
+		// 元 tweet を TweetSummary 風に再構築して TweetCard を再帰呼び出し...
+		// ではなく、TweetMini しか無いので簡略表示にする。Phase 4 で repost_of を
+		// 完全な summary にする (#TBD)。今は author + body + created_at のみ。
+		const original = tweet.repost_of;
+		const originalName = original.author_display_name || original.author_handle;
+		return (
+			<article
+				className="flex flex-col gap-2 border-b border-border px-4 py-3 hover:bg-muted/40 transition-colors"
+				aria-label={`${reposter} がリポスト: ${originalName} のツイート`}
+				aria-posinset={posinset}
+				aria-setsize={setsize}
+			>
+				<RepostBanner
+					handle={tweet.author_handle}
+					displayName={tweet.author_display_name}
+				/>
+				<header className="flex items-center gap-3">
+					{original.author_avatar_url ? (
+						<img
+							src={original.author_avatar_url}
+							alt=""
+							aria-hidden="true"
+							className="size-10 shrink-0 rounded-full object-cover"
+						/>
+					) : (
+						<div
+							className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground"
+							aria-hidden="true"
+						>
+							{originalName.charAt(0).toUpperCase()}
+						</div>
+					)}
+					<Link
+						href={`/u/${original.author_handle}`}
+						className="flex min-w-0 flex-col rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:underline"
+						aria-label={`${originalName} (@${original.author_handle}) のプロフィール`}
+					>
+						<span className="font-semibold text-sm text-foreground truncate">
+							{originalName}
+						</span>
+						<span className="text-xs text-muted-foreground">
+							@{original.author_handle}
+						</span>
+					</Link>
+				</header>
+				<Link
+					href={`/tweet/${original.id}`}
+					className="rounded text-sm text-foreground whitespace-pre-wrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				>
+					{original.body}
+				</Link>
+			</article>
+		);
+	}
 
 	const authorName = tweet.author_display_name ?? tweet.author_handle;
 
@@ -168,11 +339,21 @@ export default function TweetCard({
 				</div>
 			)}
 
-			{/* Action buttons. Reactions wired in P2-14, repost/quote/reply in P2-15. */}
+			{/* #327: 引用元 inline embed (type=quote のときのみ表示) */}
+			{tweet.type === "quote" && tweet.quote_of && (
+				<QuoteEmbed tweet={tweet.quote_of} />
+			)}
+
+			{/* Action buttons. Reactions wired in P2-14, repost/quote/reply in P2-15.
+			    #327: count badge を 0 以上で表示。tweet.is_deleted のとき disable
+			    (実際には is_deleted は早期 return で tombstone なので、ここでは
+			    parent (reply_to) の削除状態でも button は出す方針。 */}
 			<footer className="mt-1 flex items-center gap-4">
 				<button
 					type="button"
-					aria-label="リプライ"
+					aria-label={
+						tweet.reply_count ? `リプライ ${tweet.reply_count} 件` : "リプライ"
+					}
 					onClick={() => setReplyOpen(true)}
 					className="flex items-center gap-1 min-h-[32px] px-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
 				>
@@ -191,18 +372,40 @@ export default function TweetCard({
 						/>
 					</svg>
 					<span>リプライ</span>
+					{tweet.reply_count ? (
+						<span aria-hidden="true" className="font-semibold">
+							{tweet.reply_count}
+						</span>
+					) : null}
 				</button>
 
-				<RepostButton tweetId={tweet.id} />
+				<div className="flex items-center gap-1">
+					<RepostButton tweetId={tweet.id} />
+					{tweet.repost_count ? (
+						<span
+							className="text-xs text-muted-foreground"
+							aria-label={`リポスト ${tweet.repost_count} 件`}
+						>
+							{tweet.repost_count}
+						</span>
+					) : null}
+				</div>
 
 				<button
 					type="button"
-					aria-label="引用リポスト"
+					aria-label={
+						tweet.quote_count ? `引用 ${tweet.quote_count} 件` : "引用リポスト"
+					}
 					onClick={() => setQuoteOpen(true)}
 					className="flex items-center gap-1 min-h-[32px] px-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
 				>
 					<span aria-hidden="true">”</span>
 					<span>引用</span>
+					{tweet.quote_count ? (
+						<span aria-hidden="true" className="font-semibold">
+							{tweet.quote_count}
+						</span>
+					) : null}
 				</button>
 
 				<ReactionBar tweetId={tweet.id} />
