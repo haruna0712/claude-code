@@ -18,6 +18,23 @@ export interface CreateTweetPayload {
 	images?: TweetImagePayload[];
 }
 
+/**
+ * #324: 親 tweet (reply_to / quote_of / repost_of) を nested で受け取る薄い型。
+ * backend `TweetMiniSerializer` と一対一。
+ */
+export interface TweetMini {
+	id: number;
+	author_handle: string;
+	author_display_name?: string;
+	author_avatar_url?: string;
+	body: string;
+	created_at: string;
+	is_deleted: boolean;
+}
+
+/** Tweet kind 4 種 (TweetType TextChoices: lowercase value)。 */
+export type TweetKind = "original" | "reply" | "repost" | "quote";
+
 export interface TweetSummary {
 	id: number;
 	body: string;
@@ -31,6 +48,18 @@ export interface TweetSummary {
 	created_at: string;
 	updated_at: string;
 	edit_count: number;
+	// #324 (Closes #323 backend changes 経由): UI 分岐 + counts + nested parent.
+	// 旧 backend (この PR 前) はこれらを返さないので optional にしている。
+	// PR #328 (X-1) merge 後は server から必ず付与される想定。
+	type?: TweetKind;
+	is_deleted?: boolean;
+	reply_count?: number;
+	repost_count?: number;
+	quote_count?: number;
+	reaction_count?: number;
+	reply_to?: TweetMini | null;
+	quote_of?: TweetMini | null;
+	repost_of?: TweetMini | null;
 }
 
 export async function createTweet(
