@@ -1346,6 +1346,7 @@ export interface components {
 		GroupInvitation: {
 			readonly id: number;
 			readonly room_id: number;
+			readonly room_name: string;
 			inviter_id: number | null;
 			readonly inviter_handle: string;
 			invitee_id: number;

@@ -60,21 +60,21 @@ export interface DMRoomListResponse {
 /**
  * SPEC §7.2: グループ招待 (1:1 では生成されない).
  *
- * NOTE: backend の実 serializer 形に合わせて再確認が必要。現状は frontend の
- * `InvitationList` が `inv.inviter.username` / `inv.room.name` で参照しているため
- * その形を保っているが、Phase 4A で notification と整合させる時に再点検する。
+ * backend `GroupInvitationSerializer` (apps/dm/serializers.py) と完全一致させる。
+ * 旧定義は `{inviter: {...}, room: {...}}` の nested 想定だったが、実 API は
+ * flat (`inviter_handle` / `room_id` / `room_name`)。 #276 で fix。
  */
 export interface GroupInvitation {
 	id: number;
-	room: {
-		id: number;
-		kind: DMRoomKind;
-		name: string;
-	};
-	inviter: DMUserSummary;
-	invitee: DMUserSummary;
+	room_id: number;
+	room_name: string;
+	inviter_id: number | null;
+	inviter_handle: string | null;
+	invitee_id: number;
+	invitee_handle: string;
 	/** null = pending, true = accepted, false = declined. */
 	accepted: boolean | null;
+	responded_at: string | null;
 	created_at: string;
 	updated_at: string;
 }

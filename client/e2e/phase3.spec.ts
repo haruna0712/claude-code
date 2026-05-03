@@ -347,11 +347,39 @@ test.describe("Phase 3 — DM golden path", () => {
 		}
 	});
 
-	test("グループ招待拒否: alice が API で group + bob 招待 → bob が UI で「拒否」", async () => {
-		// `client/src/components/dm/InvitationList.tsx` で `inv.inviter.username` /
-		// `inv.room.name` を参照するが API は flat (`inviter_handle` / `room_id`)。
-		// 型 drift で runtime crash → 招待主 / group 名が表示されない。#276 で別途 fix。
-		test.skip(true, "InvitationList の型 drift bug (#276 待ち)");
+	test("グループ招待拒否: alice が API で group + bob 招待 → bob が UI で「拒否」", async ({
+		browser,
+	}) => {
+		// #276 で InvitationList の type drift 修正 + room_name field 追加済。
+		const aliceApi = await apiAuthed(ALICE.email, ALICE.password);
+		const groupName = `decline-test-${Date.now()}`;
+		await apiCreateGroupWithInvite(aliceApi, groupName, [BOB.handle]);
+		await aliceApi.api.dispose();
+
+		const bobCtx = await browser.newContext();
+		const bobPage = await bobCtx.newPage();
+		try {
+			await login(bobPage, BOB.email, BOB.password);
+			await bobPage.goto("/messages/invitations");
+
+			// 招待が表示されている
+			await expect(bobPage.getByText(groupName)).toBeVisible({
+				timeout: 10_000,
+			});
+
+			// 「拒否」ボタン click → 該当招待が消える
+			const declineBtn = bobPage
+				.getByRole("button", { name: /拒否|decline/i })
+				.first();
+			await declineBtn.click();
+
+			// 拒否後はリストから消える (RTK Query invalidatesTags で auto refetch)
+			await expect(bobPage.getByText(groupName)).not.toBeVisible({
+				timeout: 10_000,
+			});
+		} finally {
+			await bobCtx.close();
+		}
 	});
 
 	test("グループ作成 + 招待承諾 + 双方向送受信 (UI wire-up #273 待ち)", async ({

@@ -159,6 +159,33 @@ class TestInvitationLifecycle:
         results = body["results"] if isinstance(body, dict) and "results" in body else body
         assert len(results) == 1
 
+    def test_invitation_serializer_includes_flat_handles_and_room_name(self) -> None:
+        """frontend `InvitationList` が `inviter_handle` / `room_name` を直接読むため
+        nested object ではなく flat に出ることを保証する (#276 type drift fix)."""
+        creator = make_user(username="alice_inviter")
+        invitee = make_user(username="bob_invitee")
+        room = create_group_room(creator=creator, name="phase3-test-group")
+        invite_user_to_room(room=room, inviter=creator, invitee=invitee)
+
+        response = _api(invitee).get("/api/v1/dm/invitations/")
+        assert response.status_code == 200
+        body = response.json()
+        results = body["results"] if isinstance(body, dict) and "results" in body else body
+        assert len(results) == 1
+        inv = results[0]
+
+        # flat fields (旧 nested は frontend で undefined access を起こしていた)
+        assert inv["inviter_id"] == creator.pk
+        assert inv["inviter_handle"] == "alice_inviter"
+        assert inv["invitee_id"] == invitee.pk
+        assert inv["invitee_handle"] == "bob_invitee"
+        assert inv["room_id"] == room.pk
+        assert inv["room_name"] == "phase3-test-group"
+        # nested object は存在しない (back-compat の保証も兼ねる)
+        assert "inviter" not in inv
+        assert "invitee" not in inv
+        assert "room" not in inv
+
     def test_accept_creates_membership(self) -> None:
         creator = make_user()
         invitee = make_user()

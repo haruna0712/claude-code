@@ -136,12 +136,17 @@ class GroupInvitationSerializer(serializers.ModelSerializer):
     invitee_id = serializers.IntegerField(source="invitee.pk")
     inviter_handle = serializers.CharField(source="inviter.username", read_only=True, default=None)
     invitee_handle = serializers.CharField(source="invitee.username", read_only=True)
+    # frontend (`InvitationList.tsx`) で「@inviter から <group_name> への招待」を
+    # 表示するため room.name を inline で返す (#276)。room の他フィールドは
+    # 不要なので flat に追加 (round trip 削減)。
+    room_name = serializers.CharField(source="room.name", read_only=True)
 
     class Meta:
         model = GroupInvitation
         fields = (
             "id",
             "room_id",
+            "room_name",
             "inviter_id",
             "inviter_handle",
             "invitee_id",
