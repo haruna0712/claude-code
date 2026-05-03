@@ -20,7 +20,6 @@ import { redirect } from "next/navigation";
 
 import HeroBanner from "@/components/explore/HeroBanner";
 import StickyLoginBanner from "@/components/explore/StickyLoginBanner";
-import RightSidebar from "@/components/sidebar/RightSidebar";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import { fetchExploreTimeline } from "@/lib/api/explore";
@@ -105,8 +104,8 @@ export default async function ExplorePage() {
 						/>
 					</section>
 				</main>
-
-				<RightSidebar isAuthenticated={false} />
+				{/* #316: RightSidebar は (template) layout で全 page 共通 mount。
+				    重複防止のため explore 個別の mount は撤去。 */}
 			</div>
 
 			<StickyLoginBanner />
