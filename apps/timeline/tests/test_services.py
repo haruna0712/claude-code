@@ -55,7 +55,12 @@ def test_dedup_repost_originals_collapses_to_one_logical_id() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
-def test_build_home_tl_returns_following_tweets() -> None:
+def test_build_home_tl_returns_following_and_self_tweets() -> None:
+    """#311: home TL は フォロイー + **自分** のツイートを含む。
+
+    旧仕様 (`.exclude(author=user)`) では新規ユーザーが投稿しても自 TL に
+    何も出ず UX が壊れていた。X / Twitter 慣習に合わせて self を含める。
+    """
     actor = make_user()
     target = make_user()
     make_follow(actor, target)
@@ -63,15 +68,25 @@ def test_build_home_tl_returns_following_tweets() -> None:
     # フォロイーがツイート
     t1 = make_tweet(author=target, body="hello1")
     t2 = make_tweet(author=target, body="hello2")
-    # 自分のツイートは TL に出ない
-    make_tweet(author=actor, body="my own tweet")
+    # 自分のツイートも TL に出る
+    own = make_tweet(author=actor, body="my own tweet")
 
     result = build_home_tl(actor, limit=20)
     pks = {t.pk for t in result}
     assert t1.pk in pks
     assert t2.pk in pks
-    # 自分のツイートが出ないこと
-    assert all(t.author_id != actor.pk for t in result)
+    assert own.pk in pks  # #311: self tweet が含まれる
+
+
+@pytest.mark.django_db(transaction=True)
+def test_build_home_tl_works_for_user_with_no_follows() -> None:
+    """#311: フォロー 0 人の新規ユーザーが投稿した直後に self tweet が見える。"""
+    actor = make_user()
+    own = make_tweet(author=actor, body="first tweet")
+
+    result = build_home_tl(actor, limit=20)
+    pks = {t.pk for t in result}
+    assert own.pk in pks
 
 
 @pytest.mark.django_db(transaction=True)

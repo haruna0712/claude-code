@@ -77,6 +77,14 @@ def on_tweet_created(sender: type[Tweet], instance: Tweet, created: bool, **kwar
 
                 fetch_ogp_for_tweet.delay(tweet_pk)
 
+        # #311: 投稿者の home TL cache を invalidate。これがないと cache TTL
+        # (10 min) 経過まで自分の新規投稿が home に出ない。フォロワーの cache
+        # invalidate は fan-out コストが大きいので Phase 4 で fan-out-on-write
+        # を検討する際にまとめて対応 (本 PR では author 自身のみ)。
+        from apps.timeline.services import invalidate_home_tl
+
+        invalidate_home_tl(actor)
+
     transaction.on_commit(_bump)
 
 
