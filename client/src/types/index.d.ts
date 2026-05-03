@@ -1,7 +1,25 @@
+/** lucide-react から render する icon 識別子。LeftNavbar / MobileNavbar 内で
+ *  実際のコンポーネントへマッピングする (#297). */
+export type LeftNavIconName =
+	| "Home"
+	| "Compass"
+	| "Search"
+	| "MessageSquare"
+	| "User";
+
 export interface LeftNavLink {
+	/** 静的 path。`isProfile=true` の時は無視され self handle を組み立てる。 */
 	path: string;
 	label: string;
-	imgLocation: string;
+	/** 旧 SVG 資産の path (Phase 1 から残存)。新 link は iconName を使う。 */
+	imgLocation?: string;
+	/** lucide-react icon 名。imgLocation と排他、両方無ければ label のみ render。 */
+	iconName?: LeftNavIconName;
+	/** 認証必須なら true。`useAuthNavigation` の filter で未認証時に隠す。 */
+	requiresAuth?: boolean;
+	/** プロフィール link 専用フラグ。LeftNavbar 側で path を `/u/<self.handle>`
+	 *  に動的に組み立てる。self handle 未取得時は disabled or 非表示にする。 */
+	isProfile?: boolean;
 }
 
 export interface UserCommonData {
