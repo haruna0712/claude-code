@@ -83,17 +83,63 @@ class TweetImageSerializer(serializers.ModelSerializer):
 # -----------------------------------------------------------------------------
 
 
+class TweetMiniSerializer(serializers.ModelSerializer):
+    """#323: 親 tweet (reply_to / quote_of / repost_of) を nested で返す薄い serializer.
+
+    循環参照を避けるため body / author info / id / created_at / is_deleted のみ。
+    UI 側 (QuoteEmbed / RepostBanner / Reply preview) で表示する最小限のフィールド。
+    """
+
+    author_handle = serializers.SerializerMethodField()
+    author_display_name = serializers.SerializerMethodField()
+    author_avatar_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Tweet
+        fields = [
+            "id",
+            "author_handle",
+            "author_display_name",
+            "author_avatar_url",
+            "body",
+            "created_at",
+            "is_deleted",
+        ]
+        read_only_fields = fields
+
+    def get_author_handle(self, obj: Tweet) -> str:
+        return obj.author.username
+
+    def get_author_display_name(self, obj: Tweet) -> str:
+        return obj.author.display_name or obj.author.username
+
+    def get_author_avatar_url(self, obj: Tweet) -> str:
+        return obj.author.avatar_url or ""
+
+
 class TweetListSerializer(serializers.ModelSerializer):
     """List (GET /api/v1/tweets/) 用の read-only serializer。
 
     tags は through テーブル TweetTag を経由するが、API 消費側には
     ``[name, name, ...]`` の配列で返す (UI が扱いやすい)。
+
+    #323: P2-15 受入消化のため以下を追加:
+    - ``type``: original / reply / repost / quote (UI 分岐用)
+    - ``is_deleted``: 削除済みなら true (button disable / tombstone 用)
+    - ``reply_count`` / ``repost_count`` / ``quote_count`` / ``reaction_count``: count badge
+    - ``reply_to`` / ``quote_of`` / ``repost_of``: 親 tweet の nested summary
     """
 
     author_handle = serializers.SerializerMethodField()
     html = serializers.SerializerMethodField()
     images = TweetImageSerializer(many=True, read_only=True)
     tags = serializers.SerializerMethodField()
+    # #323: nested parent (1 階層のみ、循環防止)。soft-delete された parent も
+    # tombstone (is_deleted=True) として返したいので、Tweet.objects (is_deleted
+    # =False filter) ではなく all_objects 経由で取得する MethodField にする。
+    reply_to = serializers.SerializerMethodField()
+    quote_of = serializers.SerializerMethodField()
+    repost_of = serializers.SerializerMethodField()
 
     class Meta:
         model = Tweet
@@ -107,6 +153,16 @@ class TweetListSerializer(serializers.ModelSerializer):
             "last_edited_at",
             "images",
             "tags",
+            # #323 P2-15 follow-up
+            "type",
+            "is_deleted",
+            "reply_count",
+            "repost_count",
+            "quote_count",
+            "reaction_count",
+            "reply_to",
+            "quote_of",
+            "repost_of",
         ]
         read_only_fields = fields
 
@@ -119,6 +175,30 @@ class TweetListSerializer(serializers.ModelSerializer):
     def get_tags(self, obj: Tweet) -> list[str]:
         # prefetch 済み (view 側で prefetch_related) を前提に、追加の SQL を撃たない。
         return [t.name for t in obj.tags.all()]
+
+    def _resolve_parent(self, parent_id: int | None) -> dict[str, Any] | None:
+        """nested parent (reply_to / quote_of / repost_of) を all_objects 経由で取得.
+
+        soft-delete された tweet も tombstone (is_deleted=True) として返すため、
+        Tweet.objects (is_deleted=False filter) ではなく all_objects を使う。
+        N+1 を避けるため select_related("author") を view 側で適用済 (FK 経由で
+        cache されている前提)。
+        """
+        if parent_id is None:
+            return None
+        parent = Tweet.all_objects.filter(pk=parent_id).select_related("author").first()
+        if parent is None:
+            return None
+        return TweetMiniSerializer(parent, context=self.context).data
+
+    def get_reply_to(self, obj: Tweet) -> dict[str, Any] | None:
+        return self._resolve_parent(obj.reply_to_id)
+
+    def get_quote_of(self, obj: Tweet) -> dict[str, Any] | None:
+        return self._resolve_parent(obj.quote_of_id)
+
+    def get_repost_of(self, obj: Tweet) -> dict[str, Any] | None:
+        return self._resolve_parent(obj.repost_of_id)
 
 
 class TweetDetailSerializer(TweetListSerializer):
