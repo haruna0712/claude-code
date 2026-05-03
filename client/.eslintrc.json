@@ -1,5 +1,5 @@
 {
-	"ignorePatterns": ["src/components/ui/**"],
+	"ignorePatterns": ["src/components/ui/**", "src/types/api.generated.ts"],
 	"extends": [
 		"next/core-web-vitals",
 		"standard",

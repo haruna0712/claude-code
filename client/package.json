@@ -11,7 +11,9 @@
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",
 		"test:e2e": "playwright test",
-		"test:e2e:install": "playwright install chromium --with-deps"
+		"test:e2e:install": "playwright install chromium --with-deps",
+		"gen:api-types": "openapi-typescript ${API_SCHEMA_URL:-http://localhost:8080/swagger.json} --output src/types/api.generated.ts && prettier --write src/types/api.generated.ts",
+		"gen:api-types:check": "npm run gen:api-types && git diff --exit-code -- src/types/api.generated.ts || (echo '\\nERROR: src/types/api.generated.ts is stale. Run: cd client && npm run gen:api-types' >&2; exit 1)"
 	},
 	"dependencies": {
 		"@heroicons/react": "^2.2.0",
@@ -73,6 +75,7 @@
 		"eslint-plugin-promise": "^6.6.0",
 		"eslint-plugin-tailwindcss": "^3.14.1",
 		"jsdom": "^25.0.1",
+		"openapi-typescript": "^7.4.4",
 		"postcss": "^8",
 		"prettier": "3.3.3",
 		"sharp": "^0.33.2",

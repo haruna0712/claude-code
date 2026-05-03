@@ -87,6 +87,7 @@ THIRD_PARTY_APPS = [
     "django_countries",
     "phonenumber_field",
     "drf_yasg",
+    "drf_spectacular",
     "djoser",
     "taggit",
     "django_filters",
@@ -177,6 +178,25 @@ WSGI_APPLICATION = "config.wsgi.application"
 # stg / prod は daphne が直接 `config.asgi:application` を起動するため不要だが、
 # local の runserver 互換のために明示する。
 ASGI_APPLICATION = "config.asgi.application"
+
+# drf-yasg の `generate_swagger` 管理コマンド向け。Info オブジェクトを import
+# string で渡すことで server なしで schema を吐ける (人間向け /redoc/ UI 用)。
+SWAGGER_SETTINGS = {
+    "DEFAULT_INFO": "config.openapi.api_info",
+}
+
+# drf-spectacular: frontend codegen 用 OpenAPI 3.0 schema を吐くため。
+# drf-yasg は APIView (非 ViewSet) で `action_map=None` で落ちるため、modern な
+# drf-spectacular に schema 生成は寄せる (UI は redoc のままで OK)。
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Alpha Apartments API",
+    "DESCRIPTION": "エンジニア向け SNS API。Frontend codegen の source。",
+    "VERSION": "v1",
+    "SERVE_INCLUDE_SCHEMA": False,
+    # 認証スキームは Cookie JWT。OpenAPI 上は明示しない (`/api/v1/auth/cookie/...`
+    # 経由でブラウザが cookie 取得済前提)。
+    "SCHEMA_PATH_PREFIX": "/api/v1/",
+}
 
 
 # Database
@@ -368,6 +388,10 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    # drf-spectacular に schema 生成を寄せる (OpenAPI 3.0)。drf-yasg の `redoc/`
+    # UI は依然動く (drf-yasg は内部で coreapi schema 経由)。frontend codegen は
+    # /api/schema/ → openapi-typescript で生成。
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
     ],
