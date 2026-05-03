@@ -41,6 +41,14 @@ describe("TweetCard — basic rendering", () => {
 		expect(screen.getByText("@alice")).toBeInTheDocument();
 	});
 
+	it("renders author header as link to /u/<handle> (#320)", () => {
+		render(<TweetCard tweet={BASE_TWEET} />);
+		const link = screen.getByRole("link", {
+			name: /Alice Smith.*@alice.*プロフィール/,
+		});
+		expect(link).toHaveAttribute("href", "/u/alice");
+	});
+
 	it("renders relative time", () => {
 		render(<TweetCard tweet={BASE_TWEET} />);
 		// Just check that some time element exists (relative formatting varies)
