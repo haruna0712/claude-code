@@ -37,7 +37,8 @@ export default function InvitationList() {
 		setProcessingId(inv.id);
 		try {
 			const result = await acceptInvitation(inv.id).unwrap();
-			router.push(`/messages/${result.room.id}`);
+			// API は flat (`room_id`)。旧 `result.room.id` (nested) は #276 で修正。
+			router.push(`/messages/${result.room_id}`);
 		} catch {
 			setActionError("招待の承諾に失敗しました。再試行してください。");
 		} finally {
@@ -105,13 +106,14 @@ export default function InvitationList() {
 							aria-hidden="true"
 							className="bg-baby_grey/30 text-baby_white flex size-12 shrink-0 items-center justify-center rounded-full text-base font-semibold"
 						>
-							{inv.inviter.username[0]?.toUpperCase() ?? "?"}
+							{inv.inviter_handle?.[0]?.toUpperCase() ?? "?"}
 						</div>
 						<div className="min-w-0 flex-1">
 							<p className="text-baby_white truncate text-sm">
-								<strong>@{inv.inviter.username}</strong> から
+								<strong>@{inv.inviter_handle ?? "(削除されたユーザー)"}</strong>{" "}
+								から
 								<span className="mx-1 font-semibold">
-									{inv.room.name || "(無名のグループ)"}
+									{inv.room_name || "(無名のグループ)"}
 								</span>
 								への招待
 							</p>
