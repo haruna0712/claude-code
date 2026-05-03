@@ -439,13 +439,71 @@ test.describe("Phase 3 — DM golden path", () => {
 		}
 	});
 
-	test("メッセージ削除 — alice が削除すると bob 側でも消える (UI #274 待ち)", async ({
+	test("メッセージ削除 — alice が削除すると bob 側でも消える", async ({
 		browser,
 	}) => {
-		test.skip(
-			true,
-			"削除 UI (long-press / hover メニュー) は P3-09 範囲外、フォローアップ #274 で wire-up",
-		);
+		// #274 で MessageBubble に hover delete button + RoomChat に
+		// useDeleteMessageMutation 配線済。alice が send → 自分のバブルから
+		// 削除 → bob 側で WebSocket `message.deleted` event を受けて消える。
+		const aliceApi = await apiAuthed(ALICE.email, ALICE.password);
+		const roomId = await apiEnsureDirectRoom(aliceApi, BOB.handle);
+		await aliceApi.api.dispose();
+
+		const aliceCtx = await browser.newContext();
+		const bobCtx = await browser.newContext();
+		const alicePage = await aliceCtx.newPage();
+		const bobPage = await bobCtx.newPage();
+
+		try {
+			await login(alicePage, ALICE.email, ALICE.password);
+			await login(bobPage, BOB.email, BOB.password);
+			await alicePage.goto(`/messages/${roomId}`);
+			await bobPage.goto(`/messages/${roomId}`);
+
+			// composer 表示待ち = WebSocket 接続完了の代理
+			await expect(alicePage.getByPlaceholder("メッセージを入力")).toBeVisible({
+				timeout: 15_000,
+			});
+			await expect(bobPage.getByPlaceholder("メッセージを入力")).toBeVisible({
+				timeout: 15_000,
+			});
+
+			// alice が message を送信
+			const marker = `delete-test ${Date.now()}`;
+			await alicePage.getByPlaceholder("メッセージを入力").fill(marker);
+			await alicePage.getByRole("button", { name: "送信" }).click();
+			await expect(alicePage.getByText(marker)).toBeVisible({
+				timeout: 5_000,
+			});
+			// bob 側にも届く
+			await expect(bobPage.getByText(marker)).toBeVisible({ timeout: 10_000 });
+
+			// 自分のバブル内の delete button (aria-label="メッセージを削除") を click。
+			// confirm() が auto-dismiss されないよう dialog ハンドラを登録。
+			alicePage.once("dialog", (dialog) => dialog.accept());
+			const myBubble = alicePage
+				.getByTestId("message-bubble")
+				.filter({
+					hasText: marker,
+					has: alicePage.locator('[data-mine="true"]'),
+				})
+				.first();
+			// hover で button を露出させてから click
+			await myBubble.hover();
+			await myBubble.getByRole("button", { name: "メッセージを削除" }).click();
+
+			// alice 側で消える
+			await expect(alicePage.getByText(marker)).not.toBeVisible({
+				timeout: 5_000,
+			});
+			// bob 側でも消える (WebSocket message.deleted broadcast 経由)
+			await expect(bobPage.getByText(marker)).not.toBeVisible({
+				timeout: 10_000,
+			});
+		} finally {
+			await aliceCtx.close();
+			await bobCtx.close();
+		}
 	});
 
 	test("典型的な a11y 観点 — keyboard で /messages → 招待へ遷移", async ({

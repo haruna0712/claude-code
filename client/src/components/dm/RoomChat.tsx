@@ -23,6 +23,7 @@ import MessageList from "@/components/dm/MessageList";
 import TypingIndicator from "@/components/dm/TypingIndicator";
 import { useDMSocket } from "@/hooks/useDMSocket";
 import {
+	useDeleteMessageMutation,
 	useGetDMRoomQuery,
 	useListRoomMessagesQuery,
 	useMarkRoomReadMutation,
@@ -39,6 +40,33 @@ export default function RoomChat({ roomId, currentUserId }: RoomChatProps) {
 	const roomQuery = useGetDMRoomQuery(roomId);
 	const messagesQuery = useListRoomMessagesQuery({ roomId });
 	const [markRoomRead] = useMarkRoomReadMutation();
+	const [deleteMessage] = useDeleteMessageMutation();
+	// #274: 削除 button からのコールバック。楽観的に deletedIds に追加 + REST DELETE。
+	// backend は WebSocket で `message.deleted` を broadcast するので、相手側にも
+	// 自動反映される (frame.type === "message.deleted" 経路)。失敗時は undo して
+	// inline error を出す。
+	const onDelete = useCallback(
+		async (messageId: number) => {
+			setDeletedIds((prev) => {
+				if (prev.has(messageId)) return prev;
+				const next = new Set(prev);
+				next.add(messageId);
+				return next;
+			});
+			try {
+				await deleteMessage(messageId).unwrap();
+			} catch {
+				setDeletedIds((prev) => {
+					if (!prev.has(messageId)) return prev;
+					const next = new Set(prev);
+					next.delete(messageId);
+					return next;
+				});
+				setSendError("メッセージの削除に失敗しました。再試行してください。");
+			}
+		},
+		[deleteMessage],
+	);
 	const [liveMessages, setLiveMessages] = useState<DMMessage[]>([]);
 	const [deletedIds, setDeletedIds] = useState<Set<number>>(() => new Set());
 	const [sendError, setSendError] = useState<string | null>(null);
@@ -143,7 +171,11 @@ export default function RoomChat({ roomId, currentUserId }: RoomChatProps) {
 					onReconnect={socket.reconnect}
 				/>
 			</header>
-			<MessageList messages={merged} currentUserId={currentUserId} />
+			<MessageList
+				messages={merged}
+				currentUserId={currentUserId}
+				onDelete={onDelete}
+			/>
 			<TypingIndicator
 				typingUserId={typing?.userId ?? null}
 				startedAt={typing?.startedAt}

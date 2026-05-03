@@ -122,6 +122,17 @@ export const dmApiSlice = baseApiSlice.injectEndpoints({
 				{ type: "DMRoom" as const, id: "LIST" },
 			],
 		}),
+		// #274: 自分の DM message を soft-delete する。SPEC §7.3。
+		// backend (apps/dm/views.py MessageDestroyView) は WebSocket 経由で
+		// `message.deleted` イベントを broadcast するため、UI 側はサーバ応答を
+		// 待たず楽観的に消す or broadcast を待つ。RoomChat は WS 経由で
+		// `setMessages(prev => prev.filter(m => m.id !== id))` する想定 (P3-09)。
+		deleteMessage: builder.mutation<void, number>({
+			query: (id) => ({
+				url: `/dm/messages/${id}/`,
+				method: "DELETE",
+			}),
+		}),
 	}),
 	overrideExisting: false,
 });
@@ -135,4 +146,5 @@ export const {
 	useDeclineInvitationMutation,
 	useListRoomMessagesQuery,
 	useMarkRoomReadMutation,
+	useDeleteMessageMutation,
 } = dmApiSlice;

@@ -22,6 +22,8 @@ interface MessageBubbleProps {
 	currentUserId: number;
 	status?: MessageStatus;
 	onRetry?: () => void;
+	/** #274: 自分の送信メッセージで delete button を出す callback. mine=false 時は無視。 */
+	onDelete?: (messageId: number) => void;
 }
 
 export default function MessageBubble({
@@ -29,25 +31,47 @@ export default function MessageBubble({
 	currentUserId,
 	status = "sent",
 	onRetry,
+	onDelete,
 }: MessageBubbleProps) {
 	const mine = message.sender_id === currentUserId;
+	const canDelete = mine && status === "sent" && onDelete;
 	return (
 		<div
 			data-testid="message-bubble"
 			data-mine={mine ? "true" : "false"}
 			data-status={status}
 			className={
-				"flex w-full px-4 py-1 " + (mine ? "justify-end" : "justify-start")
+				"group flex w-full px-4 py-1 " +
+				(mine ? "justify-end" : "justify-start")
 			}
 		>
 			<div
 				className={
-					"max-w-[75%] rounded-2xl px-3 py-2 text-sm break-words " +
+					"relative max-w-[75%] rounded-2xl px-3 py-2 text-sm break-words " +
 					(mine
 						? "bg-baby_blue text-baby_white rounded-br-sm"
 						: "bg-baby_grey/20 text-baby_white rounded-bl-sm")
 				}
 			>
+				{/* #274: hover で出る削除 button (desktop)。focus-within で keyboard ユーザにも露出。 */}
+				{canDelete ? (
+					<button
+						type="button"
+						onClick={() => {
+							if (
+								typeof window !== "undefined" &&
+								!window.confirm("このメッセージを削除しますか？")
+							) {
+								return;
+							}
+							onDelete(message.id);
+						}}
+						aria-label="メッセージを削除"
+						className="bg-baby_red text-baby_white absolute -top-2 -right-2 hidden size-6 items-center justify-center rounded-full text-xs opacity-0 transition group-hover:flex group-hover:opacity-100 focus-visible:flex focus-visible:opacity-100 focus-visible:ring-2"
+					>
+						✕
+					</button>
+				) : null}
 				{message.body ? (
 					<p className="whitespace-pre-wrap">{message.body}</p>
 				) : null}
