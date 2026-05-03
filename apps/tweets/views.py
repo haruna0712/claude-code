@@ -121,8 +121,20 @@ class TweetViewSet(viewsets.ModelViewSet):
 
         ``created_at desc`` は Tweet.Meta.ordering で既定。
         N+1 を避けるため author / images / tags を prefetch する。
+        #323: nested parent (reply_to / quote_of / repost_of) も author 込みで select_related。
         """
-        qs = Tweet.objects.all().select_related("author").prefetch_related("images", "tags")
+        qs = (
+            Tweet.objects.all()
+            .select_related(
+                "author",
+                # #323: TweetMiniSerializer が parent.author.username 等を引くので
+                # __author まで select_related で N+1 抑制。
+                "reply_to__author",
+                "quote_of__author",
+                "repost_of__author",
+            )
+            .prefetch_related("images", "tags")
+        )
 
         request = getattr(self, "request", None)
         if request is None:
@@ -150,7 +162,12 @@ class TweetViewSet(viewsets.ModelViewSet):
         """
         pk = kwargs.get(self.lookup_field)
         tweet = (
-            Tweet.all_objects.select_related("author")
+            Tweet.all_objects.select_related(
+                "author",
+                "reply_to__author",
+                "quote_of__author",
+                "repost_of__author",
+            )
             .prefetch_related("images", "tags")
             .filter(pk=pk)
             .first()

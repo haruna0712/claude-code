@@ -600,3 +600,118 @@ class TestTagHandling:
         # Assert
         assert res.status_code == status.HTTP_201_CREATED
         assert res.json()["tags"] == ["python"]
+
+
+# =============================================================================
+# #323: TweetSerializer に count fields + nested parent + type / is_deleted
+# =============================================================================
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+class TestSerializerExtension323:
+    """#323 で追加した count fields + nested parent + type / is_deleted を検証."""
+
+    def _detail(self, api_client: APIClient, pk: int) -> dict[str, Any]:
+        res = api_client.get(reverse("tweets-detail", kwargs={"pk": pk}))
+        assert res.status_code == status.HTTP_200_OK, res.content
+        return res.json()
+
+    def test_serializer_includes_count_and_meta_fields(self, api_client: APIClient) -> None:
+        # Arrange
+        author = make_user()
+        tweet = make_tweet(author=author, body="hello")
+        # Act
+        body = self._detail(api_client, tweet.pk)
+        # Assert
+        for key in (
+            "type",
+            "is_deleted",
+            "reply_count",
+            "repost_count",
+            "quote_count",
+            "reaction_count",
+            "reply_to",
+            "quote_of",
+            "repost_of",
+        ):
+            assert key in body, f"missing key: {key}"
+        assert body["type"] == "original"
+        assert body["is_deleted"] is False
+        assert body["reply_count"] == 0
+        assert body["reply_to"] is None
+        assert body["quote_of"] is None
+        assert body["repost_of"] is None
+
+    def test_quote_returns_nested_quote_of(self, api_client: APIClient) -> None:
+        # Arrange: A が tweet → B が quote する
+        author_a = make_user(username="a-user")
+        author_b = make_user(username="b-user")
+        original = make_tweet(author=author_a, body="quoted body")
+        from apps.tweets.models import Tweet as _T
+        from apps.tweets.models import TweetType
+
+        quote = _T.objects.create(
+            author=author_b,
+            body="quote comment",
+            type=TweetType.QUOTE,
+            quote_of=original,
+        )
+        # Act
+        body = self._detail(api_client, quote.pk)
+        # Assert
+        assert body["type"] == "quote"
+        assert body["quote_of"] is not None
+        assert body["quote_of"]["id"] == original.pk
+        assert body["quote_of"]["author_handle"] == "a-user"
+        assert body["quote_of"]["body"] == "quoted body"
+        assert body["quote_of"]["is_deleted"] is False
+        # reply_to / repost_of は None
+        assert body["reply_to"] is None
+        assert body["repost_of"] is None
+
+    def test_repost_nested_includes_is_deleted_for_tombstone(self, api_client: APIClient) -> None:
+        # Arrange: A の tweet を B が repost、その後 A が delete
+        author_a = make_user()
+        author_b = make_user()
+        original = make_tweet(author=author_a, body="will be deleted")
+        from apps.tweets.models import Tweet as _T
+        from apps.tweets.models import TweetType
+
+        repost = _T.objects.create(
+            author=author_b,
+            body="",
+            type=TweetType.REPOST,
+            repost_of=original,
+        )
+        # soft delete original (hard delete だと FK が破壊されるので soft_delete を使う)
+        original.soft_delete()
+        # Act
+        body = self._detail(api_client, repost.pk)
+        # Assert
+        assert body["type"] == "repost"
+        assert body["repost_of"] is not None
+        assert body["repost_of"]["id"] == original.pk
+        assert body["repost_of"]["is_deleted"] is True
+
+    def test_reply_returns_nested_reply_to(self, api_client: APIClient) -> None:
+        # Arrange
+        author_a = make_user()
+        author_b = make_user()
+        parent = make_tweet(author=author_a, body="parent")
+        from apps.tweets.models import Tweet as _T
+        from apps.tweets.models import TweetType
+
+        reply = _T.objects.create(
+            author=author_b,
+            body="reply text",
+            type=TweetType.REPLY,
+            reply_to=parent,
+        )
+        # Act
+        body = self._detail(api_client, reply.pk)
+        # Assert
+        assert body["type"] == "reply"
+        assert body["reply_to"] is not None
+        assert body["reply_to"]["id"] == parent.pk
+        assert body["reply_to"]["body"] == "parent"
