@@ -33,12 +33,17 @@ vi.mock("next/navigation", () => ({
 function makeInvitation(
 	overrides: Partial<GroupInvitation> = {},
 ): GroupInvitation {
+	// PR #278 (#276) で GroupInvitation を flat 化済 (room_id / inviter_handle 等)。
 	return {
 		id: 1,
-		room: { id: 100, kind: "group", name: "Engineers" },
-		inviter: { pkid: 200, username: "alice" },
-		invitee: { pkid: 100, username: "me" },
+		room_id: 100,
+		room_name: "Engineers",
+		inviter_id: 200,
+		inviter_handle: "alice",
+		invitee_id: 100,
+		invitee_handle: "me",
 		accepted: null,
+		responded_at: null,
 		created_at: "2026-05-01T12:00:00Z",
 		updated_at: "2026-05-01T12:00:00Z",
 		...overrides,
@@ -110,11 +115,7 @@ describe("InvitationList", () => {
 			isError: false,
 		});
 		mockAccept.mockReturnValue({
-			unwrap: () =>
-				Promise.resolve({
-					id: 1,
-					room: { id: 100, kind: "group", name: "Engineers" },
-				}),
+			unwrap: () => Promise.resolve(makeInvitation()),
 		});
 		render(<InvitationList />);
 		await userEvent.click(screen.getByRole("button", { name: "承諾" }));
