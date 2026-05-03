@@ -10,9 +10,40 @@ import { Mutex } from "async-mutex";
 
 const mutex = new Mutex();
 
+const CSRF_COOKIE_NAME = "csrftoken";
+const CSRF_HEADER_NAME = "X-CSRFToken";
+
+/**
+ * `csrftoken` cookie 値を `document.cookie` から抽出。SSR では `document` 未定義
+ * のため null を返す (RTK Query の prepareHeaders は viewer 側でだけ実行される
+ * 想定だが安全のためガード)。
+ */
+function readCsrfTokenFromCookie(): string | null {
+	if (typeof document === "undefined") return null;
+	const match = document.cookie.match(
+		new RegExp(`(?:^|;\\s*)${CSRF_COOKIE_NAME}=([^;]+)`),
+	);
+	return match ? decodeURIComponent(match[1]) : null;
+}
+
 const baseQuery = fetchBaseQuery({
 	baseUrl: "/api/v1",
 	credentials: "include",
+	// #285 fix: state-changing requests (POST / PUT / PATCH / DELETE) には
+	// CSRF Double-Submit cookie のため X-CSRFToken header を注入する必要がある。
+	// 既存の axios client (lib/api/client.ts) と同じ仕組みを RTK Query にも適用。
+	// 未注入だと Django 側 CSRFEnforcingAuthentication が 403 を返す。
+	prepareHeaders: (headers, { type }) => {
+		// type は "query" | "mutation"。mutation は概ね unsafe method なので
+		// 全て CSRF token を注入する。
+		if (type === "mutation") {
+			const csrfToken = readCsrfTokenFromCookie();
+			if (csrfToken) {
+				headers.set(CSRF_HEADER_NAME, csrfToken);
+			}
+		}
+		return headers;
+	},
 });
 
 const baseQueryWithReauth: BaseQueryFn<

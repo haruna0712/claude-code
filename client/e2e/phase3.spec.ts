@@ -359,20 +359,28 @@ test.describe("Phase 3 — DM golden path", () => {
 			await bobPage.goto("/messages/invitations");
 
 			// 招待が表示されている
-			await expect(bobPage.getByText(groupName)).toBeVisible({
-				timeout: 10_000,
-			});
+			const inviteRow = bobPage
+				.getByRole("listitem")
+				.filter({ hasText: groupName });
+			await expect(inviteRow).toBeVisible({ timeout: 10_000 });
 
-			// 「拒否」ボタン click → 該当招待が消える
-			const declineBtn = bobPage
-				.getByRole("button", { name: /拒否|decline/i })
-				.first();
-			await declineBtn.click();
+			// 「拒否」ボタン click + decline mutation 完了待ち。
+			// #285 fix: 過去テスト残留 invitation で `.first()` が別招待を decline
+			// する事故を防ぐため、当該 row 内の button に絞る。
+			const declineRequest = bobPage.waitForResponse(
+				(res) =>
+					res.url().includes("/api/v1/dm/invitations/") &&
+					res.url().includes("/decline/") &&
+					res.request().method() === "POST",
+			);
+			await inviteRow.getByRole("button", { name: /拒否|decline/i }).click();
+			const res = await declineRequest;
+			expect(res.status(), "decline API は 200 OK").toBe(200);
 
+			// RTK Query の自動 refetch がブラウザ tab 非表示時に止まることがあるため、
+			// 明示的に invitations API 完了を待ってから再 query を待つ。
 			// 拒否後はリストから消える (RTK Query invalidatesTags で auto refetch)
-			await expect(bobPage.getByText(groupName)).not.toBeVisible({
-				timeout: 10_000,
-			});
+			await expect(inviteRow).not.toBeVisible({ timeout: 15_000 });
 		} finally {
 			await bobCtx.close();
 		}
