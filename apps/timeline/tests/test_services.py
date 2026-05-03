@@ -90,6 +90,43 @@ def test_build_home_tl_works_for_user_with_no_follows() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
+def test_build_home_tl_includes_others_recent_tweets_when_no_reactions() -> None:
+    """#317: フォロー 0 人 + reaction 全て 0 件 でも他人の最新ツイートが
+    home TL に出る (global query の fallback)。"""
+    actor = make_user()
+    other = make_user()
+    # actor は other を follow していない & 誰もリアクションしていない
+    others_tweet = make_tweet(author=other, body="hello from other")
+
+    result = build_home_tl(actor, limit=20)
+    pks = {t.pk for t in result}
+    assert others_tweet.pk in pks
+
+
+@pytest.mark.django_db(transaction=True)
+def test_build_home_tl_prefers_reaction_count_over_recent_in_global() -> None:
+    """#317: reaction>0 ツイートが limit を埋められる時は旧挙動 (reaction 優先)
+    に収束する。reaction=0 fallback は不足分のみ。"""
+    actor = make_user()
+    a = make_user()
+    b = make_user()
+    # actor は誰もフォローしていない
+    popular = make_tweet(author=a, body="popular")
+    Tweet.objects.filter(pk=popular.pk).update(reaction_count=5)
+    no_reaction = make_tweet(author=b, body="recent but no reaction")
+
+    # limit=1 で primary (popular) のみが返ってくることを確認
+    result = build_home_tl(actor, limit=1)
+    pks = {t.pk for t in result}
+    assert popular.pk in pks
+    # limit=20 (余裕あり) で fallback も含む
+    result_all = build_home_tl(actor, limit=20)
+    pks_all = {t.pk for t in result_all}
+    assert popular.pk in pks_all
+    assert no_reaction.pk in pks_all
+
+
+@pytest.mark.django_db(transaction=True)
 def test_build_explore_tl_returns_only_with_reactions() -> None:
     """explore は reaction_count > 0 のツイートのみ."""
     a = make_user()

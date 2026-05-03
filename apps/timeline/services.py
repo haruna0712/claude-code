@@ -132,18 +132,41 @@ def _query_following(user, blocked_ids: set[int], limit: int) -> list[Tweet]:
 
 
 def _query_global(blocked_ids: set[int], exclude_author_id: int | None, limit: int) -> list[Tweet]:
-    """全体候補 (30%): 24h 以内の reaction 数上位 (original / quote のみ、repost は重複防止のため除外)."""
+    """全体候補 (30%): 24h 以内の original / quote (repost は重複防止のため除外).
+
+    #317: 旧実装は ``reaction_count > 0`` only だったため、サービス開始期
+    (誰もリアクションしていない) や少人数 stg では global 候補が空になり、
+    フォロー 0 人ユーザーの home TL が完全に空になっていた。
+
+    本実装は 2 段 fallback:
+      1) reaction_count > 0 を高優先 (旧挙動)、(reaction_count, created_at) で sort
+      2) limit に満たない場合のみ reaction_count == 0 から最新順で補充
+    reaction が活発になれば自然に primary が limit を埋め、旧挙動に収束する。
+    """
     cutoff = timezone.now() - timedelta(hours=24)
-    qs = Tweet.objects.select_related("author").filter(
+    base_qs = Tweet.objects.select_related("author").filter(
         created_at__gte=cutoff,
         type__in=[TweetType.ORIGINAL, TweetType.QUOTE],
-        reaction_count__gt=0,
     )
     if blocked_ids:
-        qs = qs.exclude(author_id__in=blocked_ids)
+        base_qs = base_qs.exclude(author_id__in=blocked_ids)
     if exclude_author_id is not None:
-        qs = qs.exclude(author_id=exclude_author_id)
-    return list(qs.order_by("-reaction_count", "-created_at")[:limit])
+        base_qs = base_qs.exclude(author_id=exclude_author_id)
+
+    # 1st: reaction>0 を優先取得
+    primary = list(
+        base_qs.filter(reaction_count__gt=0).order_by("-reaction_count", "-created_at")[:limit]
+    )
+    if len(primary) >= limit:
+        return primary
+
+    # 2nd: 不足分を reaction=0 から最新順で補充 (重複除外)
+    needed = limit - len(primary)
+    seen = {t.pk for t in primary}
+    fallback = list(
+        base_qs.filter(reaction_count=0).exclude(pk__in=seen).order_by("-created_at")[:needed]
+    )
+    return primary + fallback
 
 
 def _interleave_70_30(following: list[Tweet], global_: list[Tweet]) -> list[Tweet]:
