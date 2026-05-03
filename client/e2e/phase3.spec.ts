@@ -420,10 +420,13 @@ test.describe("Phase 3 — DM golden path", () => {
 
 			// bob が招待を承諾
 			await bobPage.goto("/messages/invitations");
-			await expect(bobPage.getByText(groupName)).toBeVisible({
-				timeout: 10_000,
-			});
-			await bobPage.getByRole("button", { name: "承諾" }).click();
+			// 過去テストで残存している招待が複数あるので、当該 row に scope する
+			// (locator strict mode で 承諾 が複数 match して fail するのを防ぐ)
+			const groupInviteRow = bobPage
+				.getByRole("listitem")
+				.filter({ hasText: groupName });
+			await expect(groupInviteRow).toBeVisible({ timeout: 10_000 });
+			await groupInviteRow.getByRole("button", { name: "承諾" }).click();
 			await bobPage.waitForURL(/\/messages\/\d+/);
 
 			// alice 側で message を送信、bob 側にも届くこと
@@ -481,12 +484,11 @@ test.describe("Phase 3 — DM golden path", () => {
 			// 自分のバブル内の delete button (aria-label="メッセージを削除") を click。
 			// confirm() が auto-dismiss されないよう dialog ハンドラを登録。
 			alicePage.once("dialog", (dialog) => dialog.accept());
+			// MessageBubble 自身に data-mine が付いているので CSS attribute selector で
+			// scope する (`has:` は子孫検索なので bubble 自身の data-mine を拾えない)。
 			const myBubble = alicePage
-				.getByTestId("message-bubble")
-				.filter({
-					hasText: marker,
-					has: alicePage.locator('[data-mine="true"]'),
-				})
+				.locator('[data-testid="message-bubble"][data-mine="true"]')
+				.filter({ hasText: marker })
 				.first();
 			// hover で button を露出させてから click
 			await myBubble.hover();
