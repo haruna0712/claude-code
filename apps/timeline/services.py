@@ -116,6 +116,10 @@ def _query_following(user, blocked_ids: set[int], limit: int) -> list[Tweet]:
     #311: 旧実装は `.exclude(author=user)` で self を除外していたが、
     X / Twitter の慣習に合わせて home TL に self tweet を含める。新規ユーザー
     (フォロー 0 人) も投稿後すぐに自 TL で確認できる UX を保証する。
+
+    #334: REPLY type は home TL に出さない (X 慣習)。reply は conversation
+    view (/tweet/<parent>) からのみ閲覧可能、TL は ORIGINAL / REPOST / QUOTE
+    のみ。
     """
     cutoff = timezone.now() - timedelta(hours=24)
     qs = (
@@ -124,6 +128,8 @@ def _query_following(user, blocked_ids: set[int], limit: int) -> list[Tweet]:
             # フォロイーのツイート OR 自分のツイート
             Q(author__follower_set__follower=user) | Q(author=user),
             created_at__gte=cutoff,
+            # #334: reply は home TL に出さない
+            type__in=[TweetType.ORIGINAL, TweetType.REPOST, TweetType.QUOTE],
         )
         .exclude(author_id__in=blocked_ids)
         .order_by("-created_at")[:limit]

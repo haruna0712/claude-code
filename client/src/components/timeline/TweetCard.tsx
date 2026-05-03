@@ -121,6 +121,15 @@ export default function TweetCard({
 }: TweetCardProps) {
 	const [replyOpen, setReplyOpen] = useState(false);
 	const [quoteOpen, setQuoteOpen] = useState(false);
+	// #334: reply / quote 投稿成功時に楽観的に親 count badge を +1 する。
+	// PostDialog onPosted コールバック → ここで state を更新し、再レンダーで
+	// footer の count が即時反映される。リロード不要。
+	const [replyCountOptimistic, setReplyCountOptimistic] = useState(
+		tweet.reply_count ?? 0,
+	);
+	const [quoteCountOptimistic, setQuoteCountOptimistic] = useState(
+		tweet.quote_count ?? 0,
+	);
 
 	// #327: 全 hooks は早期 return より前に呼ぶ (React rules of hooks)。
 	// CRITICAL: sanitize HTML before rendering — strips <script>, event handlers,
@@ -359,7 +368,9 @@ export default function TweetCard({
 				<button
 					type="button"
 					aria-label={
-						tweet.reply_count ? `リプライ ${tweet.reply_count} 件` : "リプライ"
+						replyCountOptimistic
+							? `リプライ ${replyCountOptimistic} 件`
+							: "リプライ"
 					}
 					onClick={() => setReplyOpen(true)}
 					className="flex items-center gap-1 min-h-[32px] px-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
@@ -379,9 +390,9 @@ export default function TweetCard({
 						/>
 					</svg>
 					<span>リプライ</span>
-					{tweet.reply_count ? (
+					{replyCountOptimistic ? (
 						<span aria-hidden="true" className="font-semibold">
-							{tweet.reply_count}
+							{replyCountOptimistic}
 						</span>
 					) : null}
 				</button>
@@ -401,16 +412,18 @@ export default function TweetCard({
 				<button
 					type="button"
 					aria-label={
-						tweet.quote_count ? `引用 ${tweet.quote_count} 件` : "引用リポスト"
+						quoteCountOptimistic
+							? `引用 ${quoteCountOptimistic} 件`
+							: "引用リポスト"
 					}
 					onClick={() => setQuoteOpen(true)}
 					className="flex items-center gap-1 min-h-[32px] px-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
 				>
 					<span aria-hidden="true">”</span>
 					<span>引用</span>
-					{tweet.quote_count ? (
+					{quoteCountOptimistic ? (
 						<span aria-hidden="true" className="font-semibold">
-							{tweet.quote_count}
+							{quoteCountOptimistic}
 						</span>
 					) : null}
 				</button>
@@ -423,6 +436,7 @@ export default function TweetCard({
 				mode="reply"
 				open={replyOpen}
 				onOpenChange={setReplyOpen}
+				onPosted={() => setReplyCountOptimistic((n) => n + 1)}
 				parentTweet={{
 					id: tweet.id,
 					author_handle: tweet.author_handle,
@@ -438,6 +452,7 @@ export default function TweetCard({
 				mode="quote"
 				open={quoteOpen}
 				onOpenChange={setQuoteOpen}
+				onPosted={() => setQuoteCountOptimistic((n) => n + 1)}
 				parentTweet={{
 					id: tweet.id,
 					author_handle: tweet.author_handle,
