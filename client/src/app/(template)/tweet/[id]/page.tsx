@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
 import { stringifyJsonLd } from "@/lib/json-ld";
-import { sanitizeTweetHtml } from "@/lib/sanitize/sanitizeTweetHtml";
 
 interface PageProps {
 	params: { id: string };
@@ -118,80 +118,12 @@ export default async function TweetDetailPage({ params }: PageProps) {
 				// `</script>` が含まれうるため stringifyJsonLd で </ をエスケープする。
 				dangerouslySetInnerHTML={{ __html: stringifyJsonLd(jsonLd) }}
 			/>
-			<article className="rounded-lg border bg-card p-6 shadow-sm">
-				<header className="mb-4 flex items-center gap-3">
-					{tweet.author_avatar_url && (
-						// eslint-disable-next-line @next/next/no-img-element
-						<img
-							src={tweet.author_avatar_url}
-							alt=""
-							width={48}
-							height={48}
-							className="size-12 rounded-full"
-						/>
-					)}
-					<div>
-						<div className="font-semibold">
-							{tweet.author_display_name ?? tweet.author_handle}
-						</div>
-						<a
-							href={`/u/${tweet.author_handle}`}
-							className="text-sm text-muted-foreground hover:underline"
-						>
-							@{tweet.author_handle}
-						</a>
-					</div>
-				</header>
-
-				<div
-					className="prose prose-sm dark:prose-invert max-w-none"
-					// Backend (markdown2 + bleach) sanitizes on write, but client-side
-					// sanitize is a mandatory second layer (SPEC sec CRITICAL #2).
-					dangerouslySetInnerHTML={{ __html: sanitizeTweetHtml(tweet.html) }}
-				/>
-
-				{tweet.images.length > 0 && (
-					<ul className="mt-4 grid grid-cols-2 gap-2">
-						{tweet.images.map((img) => (
-							<li key={img.image_url}>
-								{/* eslint-disable-next-line @next/next/no-img-element */}
-								<img
-									src={img.image_url}
-									alt=""
-									loading="lazy"
-									width={img.width}
-									height={img.height}
-									className="w-full rounded-md"
-								/>
-							</li>
-						))}
-					</ul>
-				)}
-
-				{tweet.tags.length > 0 && (
-					<ul className="mt-4 flex flex-wrap gap-2 text-sm">
-						{tweet.tags.map((tag) => (
-							<li key={tag}>
-								<a
-									href={`/tag/${tag}`}
-									className="rounded-full bg-muted px-2 py-0.5 hover:bg-accent"
-								>
-									#{tag}
-								</a>
-							</li>
-						))}
-					</ul>
-				)}
-
-				<footer className="mt-6 text-xs text-muted-foreground">
-					<time dateTime={tweet.created_at}>
-						{new Date(tweet.created_at).toLocaleString("ja-JP")}
-					</time>
-					{tweet.edit_count > 0 && (
-						<span className="ml-2">(編集済み × {tweet.edit_count})</span>
-					)}
-				</footer>
-			</article>
+			{/* #301: 旧 inline render を TweetCardList (1 件) に置換。
+			    リアクション (P2-14) / RT・引用・返信 (P2-15) / 「もっと見る」展開
+			    (P2-18) が動作する。Tombstone は前段で別 component に分岐済。
+			    edit_count バッジは TweetCard 内に未実装なので、本 PR では
+			    一旦削除 (#301 の scope は配線、edit_count 表示は別 issue)。 */}
+			<TweetCardList tweets={[tweet]} ariaLabel="ツイート詳細" />
 		</main>
 	);
 }

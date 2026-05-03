@@ -21,9 +21,9 @@ import { redirect } from "next/navigation";
 import HeroBanner from "@/components/explore/HeroBanner";
 import StickyLoginBanner from "@/components/explore/StickyLoginBanner";
 import RightSidebar from "@/components/sidebar/RightSidebar";
+import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import { fetchExploreTimeline } from "@/lib/api/explore";
-import { sanitizeTweetHtml } from "@/lib/sanitize/sanitizeTweetHtml";
 import { stringifyJsonLd } from "@/lib/json-ld";
 
 export const metadata: Metadata = {
@@ -94,58 +94,15 @@ export default async function ExplorePage() {
 							トレンドツイート
 						</h2>
 
-						{page.results.length === 0 ? (
-							<p className="px-2 text-sm text-muted-foreground">
-								今は表示できるツイートがありません。
-							</p>
-						) : (
-							<ul className="space-y-3">
-								{page.results.map((tweet) => (
-									<li key={tweet.id}>
-										<article className="rounded-lg border border-border bg-card p-4 shadow-sm">
-											<header className="mb-2 flex items-baseline gap-2 text-sm">
-												<span className="font-semibold text-foreground">
-													{tweet.author_display_name ?? tweet.author_handle}
-												</span>
-												<Link
-													href={`/u/${tweet.author_handle}`}
-													className="text-muted-foreground hover:underline"
-												>
-													@{tweet.author_handle}
-												</Link>
-											</header>
-
-											<Link
-												href={`/tweet/${tweet.id}`}
-												className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-											>
-												<div
-													className="prose prose-sm dark:prose-invert max-w-none"
-													dangerouslySetInnerHTML={{
-														__html: sanitizeTweetHtml(tweet.html),
-													}}
-												/>
-											</Link>
-
-											{tweet.tags.length > 0 && (
-												<ul className="mt-2 flex flex-wrap gap-1.5">
-													{tweet.tags.map((tag) => (
-														<li key={tag}>
-															<Link
-																href={`/tag/${tag}`}
-																className="rounded-full bg-lime-500/10 px-2 py-0.5 text-xs text-lime-700 dark:text-lime-400 hover:bg-lime-500/20"
-															>
-																#{tag}
-															</Link>
-														</li>
-													))}
-												</ul>
-											)}
-										</article>
-									</li>
-								))}
-							</ul>
-						)}
+						{/* #301: explore も TweetCardList で render。
+						    リアクション / RT は未ログインユーザでも表示はされ、click 時
+						    に 401 → 各 button 内の placeholder 挙動 (ReactionBar
+						    / RepostButton 既存実装) でログイン誘導。 */}
+						<TweetCardList
+							tweets={page.results}
+							ariaLabel="トレンドツイート"
+							emptyMessage="今は表示できるツイートがありません。"
+						/>
 					</section>
 				</main>
 
