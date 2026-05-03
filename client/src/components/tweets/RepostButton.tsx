@@ -13,15 +13,22 @@ import { useState } from "react";
 import { toast } from "react-toastify";
 
 import { repostTweet, unrepostTweet } from "@/lib/api/repost";
+import { fetchTweet, type TweetSummary } from "@/lib/api/tweets";
 
 interface RepostButtonProps {
 	tweetId: number;
 	initialReposted?: boolean;
+	/**
+	 * #337: repost 成功時に新規 REPOST tweet (TweetSummary) を返す。
+	 * 上位 (HomeFeed 等) で TL に prepend して即時反映するために使う。
+	 */
+	onPosted?: (tweet: TweetSummary) => void;
 }
 
 export default function RepostButton({
 	tweetId,
 	initialReposted = false,
+	onPosted,
 }: RepostButtonProps) {
 	const [reposted, setReposted] = useState(initialReposted);
 	const [busy, setBusy] = useState(false);
@@ -36,7 +43,16 @@ export default function RepostButton({
 			if (previous) {
 				await unrepostTweet(tweetId);
 			} else {
-				await repostTweet(tweetId);
+				const result = await repostTweet(tweetId);
+				if (onPosted) {
+					try {
+						const full = await fetchTweet(result.id);
+						onPosted(full);
+					} catch {
+						// fetch 失敗しても repost 自体は成功。silent fail で次回 reload 時に
+						// 表示される (UX のみ退化、データ整合性は維持)。
+					}
+				}
 			}
 		} catch {
 			setReposted(previous);

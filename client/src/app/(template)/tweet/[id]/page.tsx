@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import ConversationReplies from "@/components/timeline/ConversationReplies";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
@@ -176,25 +177,9 @@ export default async function TweetDetailPage({ params }: PageProps) {
 				</section>
 			) : null}
 
-			<section
-				aria-label="このツイート"
-				className="border-l-2 border-baby_blue pl-2 my-1"
-			>
-				<TweetCardList tweets={[tweet]} ariaLabel="ツイート詳細" />
-			</section>
-
-			{replies.length > 0 ? (
-				<section aria-label="リプライ" className="mt-2">
-					<h2 className="px-4 py-2 text-sm font-semibold text-muted-foreground">
-						リプライ ({replies.length})
-					</h2>
-					<TweetCardList tweets={replies} ariaLabel="リプライ一覧" />
-				</section>
-			) : (
-				<p className="px-4 py-6 text-sm text-muted-foreground">
-					まだリプライはありません。
-				</p>
-			)}
+			{/* #337: focal + replies を client component に切り出して、reply 投稿時
+			    に即時 append できるようにする (リロード不要)。 */}
+			<ConversationReplies focal={tweet} initialReplies={replies} />
 		</main>
 	);
 }

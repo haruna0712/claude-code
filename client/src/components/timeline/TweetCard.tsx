@@ -24,6 +24,12 @@ interface TweetCardProps {
 	posinset?: number;
 	/** Total feed size; pair with ``posinset`` to satisfy WAI-ARIA feed pattern. */
 	setsize?: number;
+	/**
+	 * #337: 子 dialog (PostDialog reply / quote) と RepostButton で新規 tweet が
+	 * 投稿された際、上位 (HomeFeed / ConversationReplies) に bubble up する。
+	 * 上位は受け取った tweet.type を見て prepend / append を判断する。
+	 */
+	onDescendantPosted?: (tweet: TweetSummary) => void;
 }
 
 /** #327: 削除済み tweet の tombstone 表示 (article 単位)。 */
@@ -118,6 +124,7 @@ export default function TweetCard({
 	tweet,
 	posinset,
 	setsize,
+	onDescendantPosted,
 }: TweetCardProps) {
 	const [replyOpen, setReplyOpen] = useState(false);
 	const [quoteOpen, setQuoteOpen] = useState(false);
@@ -398,7 +405,7 @@ export default function TweetCard({
 				</button>
 
 				<div className="flex items-center gap-1">
-					<RepostButton tweetId={tweet.id} />
+					<RepostButton tweetId={tweet.id} onPosted={onDescendantPosted} />
 					{tweet.repost_count ? (
 						<span
 							className="text-xs text-muted-foreground"
@@ -436,7 +443,10 @@ export default function TweetCard({
 				mode="reply"
 				open={replyOpen}
 				onOpenChange={setReplyOpen}
-				onPosted={() => setReplyCountOptimistic((n) => n + 1)}
+				onPosted={(posted) => {
+					setReplyCountOptimistic((n) => n + 1);
+					onDescendantPosted?.(posted);
+				}}
 				parentTweet={{
 					id: tweet.id,
 					author_handle: tweet.author_handle,
@@ -452,7 +462,10 @@ export default function TweetCard({
 				mode="quote"
 				open={quoteOpen}
 				onOpenChange={setQuoteOpen}
-				onPosted={() => setQuoteCountOptimistic((n) => n + 1)}
+				onPosted={(posted) => {
+					setQuoteCountOptimistic((n) => n + 1);
+					onDescendantPosted?.(posted);
+				}}
 				parentTweet={{
 					id: tweet.id,
 					author_handle: tweet.author_handle,
