@@ -145,6 +145,18 @@ class TweetViewSet(viewsets.ModelViewSet):
             # username は大文字小文字を区別しない (users 側と揃える)
             qs = qs.filter(author__username__iexact=author)
 
+        # #326: 親 tweet の reply 一覧 (conversation view 用)。
+        # `?reply_to=<id>` で reply_to が一致する子 tweet のみ返す。
+        # 古い順 (created_at asc) が UX 自然なので明示 reorder する。
+        reply_to = request.query_params.get("reply_to")
+        if reply_to:
+            try:
+                reply_to_id = int(reply_to)
+            except (TypeError, ValueError):
+                reply_to_id = None
+            if reply_to_id is not None:
+                qs = qs.filter(reply_to_id=reply_to_id).order_by("created_at", "id")
+
         tag = request.query_params.get("tag")
         if tag:
             qs = qs.filter(tags__name=tag.lower())

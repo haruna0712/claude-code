@@ -41,6 +41,48 @@ async function loadTweet(id: string): Promise<TweetResponse | null> {
 	}
 }
 
+interface TweetListPage {
+	count: number;
+	next: string | null;
+	previous: string | null;
+	results: TweetSummary[];
+}
+
+/**
+ * #326: 親 reply chain (ancestor) を最大 5 段遡って取得する。
+ * focal が reply なら focal.reply_to の id から fetch を始め、reply_to が
+ * 削除済み (TweetMini.is_deleted=true) ならそこで止まる。
+ */
+const MAX_ANCESTORS = 5;
+async function loadAncestors(
+	startId: number | null | undefined,
+): Promise<TweetSummary[]> {
+	const ancestors: TweetSummary[] = [];
+	let cursorId = startId;
+	for (let i = 0; i < MAX_ANCESTORS; i += 1) {
+		if (!cursorId) break;
+		const t = await loadTweet(String(cursorId));
+		if (!t || isTombstone(t)) break;
+		ancestors.unshift(t);
+		cursorId = t.reply_to?.id ?? null;
+	}
+	return ancestors;
+}
+
+/**
+ * #326: focal の直下 reply 一覧を 20 件取得 (created_at asc)。
+ */
+async function loadReplies(focalId: number): Promise<TweetSummary[]> {
+	try {
+		const page = await serverFetch<TweetListPage>(
+			`/tweets/?reply_to=${focalId}`,
+		);
+		return page.results;
+	} catch {
+		return [];
+	}
+}
+
 function truncate(text: string, limit: number): string {
 	if (text.length <= limit) return text;
 	return text.slice(0, limit - 1) + "…";
@@ -95,6 +137,13 @@ export default async function TweetDetailPage({ params }: PageProps) {
 		return <Tombstoned deletedAt={tweet.deleted_at} />;
 	}
 
+	// #326: conversation view — ancestor chain (parent 方向) + replies (子方向)
+	// を server-side で並行取得。focal は中央に表示。
+	const [ancestors, replies] = await Promise.all([
+		loadAncestors(tweet.reply_to?.id),
+		loadReplies(tweet.id),
+	]);
+
 	const jsonLd = {
 		"@context": "https://schema.org",
 		"@type": "SocialMediaPosting",
@@ -106,7 +155,7 @@ export default async function TweetDetailPage({ params }: PageProps) {
 		datePublished: tweet.created_at,
 		dateModified: tweet.updated_at,
 		articleBody: tweet.body,
-		commentCount: 0,
+		commentCount: replies.length,
 		...(tweet.images[0]?.image_url ? { image: tweet.images[0].image_url } : {}),
 	};
 
@@ -118,12 +167,34 @@ export default async function TweetDetailPage({ params }: PageProps) {
 				// `</script>` が含まれうるため stringifyJsonLd で </ をエスケープする。
 				dangerouslySetInnerHTML={{ __html: stringifyJsonLd(jsonLd) }}
 			/>
-			{/* #301: 旧 inline render を TweetCardList (1 件) に置換。
-			    リアクション (P2-14) / RT・引用・返信 (P2-15) / 「もっと見る」展開
-			    (P2-18) が動作する。Tombstone は前段で別 component に分岐済。
-			    edit_count バッジは TweetCard 内に未実装なので、本 PR では
-			    一旦削除 (#301 の scope は配線、edit_count 表示は別 issue)。 */}
-			<TweetCardList tweets={[tweet]} ariaLabel="ツイート詳細" />
+
+			{/* #326: ancestor chain (上から古い順) → focal (強調) → replies の縦スレ.
+			    focal は border-l 強調で視覚的に区別する (Twitter conversation view)。 */}
+			{ancestors.length > 0 ? (
+				<section aria-label="親ツイート" className="mb-2">
+					<TweetCardList tweets={ancestors} ariaLabel="親ツイート" />
+				</section>
+			) : null}
+
+			<section
+				aria-label="このツイート"
+				className="border-l-2 border-baby_blue pl-2 my-1"
+			>
+				<TweetCardList tweets={[tweet]} ariaLabel="ツイート詳細" />
+			</section>
+
+			{replies.length > 0 ? (
+				<section aria-label="リプライ" className="mt-2">
+					<h2 className="px-4 py-2 text-sm font-semibold text-muted-foreground">
+						リプライ ({replies.length})
+					</h2>
+					<TweetCardList tweets={replies} ariaLabel="リプライ一覧" />
+				</section>
+			) : (
+				<p className="px-4 py-6 text-sm text-muted-foreground">
+					まだリプライはありません。
+				</p>
+			)}
 		</main>
 	);
 }
