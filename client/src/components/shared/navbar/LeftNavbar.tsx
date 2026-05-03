@@ -88,6 +88,7 @@ export default function LeftNavbar() {
 						<Link
 							href={href}
 							key={linkItem.label}
+							aria-label={linkItem.label}
 							aria-current={isActive ? "page" : undefined}
 							className={`${
 								isActive
@@ -96,7 +97,11 @@ export default function LeftNavbar() {
 							} flex items-center justify-start gap-4 bg-transparent p-4 transition`}
 						>
 							<NavIcon link={linkItem} isActive={isActive} />
+							{/* lg 以下では label を視覚的に隠すが、a11y のため Link 自体に
+							    aria-label を付与している (max-lg で text を display:none に
+							    した場合も SR からは label が読み上げられる)。 */}
 							<p
+								aria-hidden="true"
 								className={`${isActive ? "base-bold" : "base-medium"} max-lg:hidden`}
 							>
 								{linkItem.label}
