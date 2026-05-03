@@ -313,3 +313,95 @@ describe("TweetCard — accessibility (review fixes)", () => {
 		});
 	});
 });
+
+// ============================================================================
+// #327: type 別分岐 / count badge / tombstone
+// ============================================================================
+
+describe("TweetCard — #327 extensions", () => {
+	it("renders tombstone for is_deleted tweet", () => {
+		const tweet = { ...BASE_TWEET, is_deleted: true };
+		render(<TweetCard tweet={tweet} />);
+		expect(screen.getByText(/削除されました/)).toBeInTheDocument();
+		// action buttons are not rendered
+		expect(screen.queryByRole("button", { name: "リプライ" })).toBeNull();
+	});
+
+	it("renders RepostBanner when type=repost with repost_of", () => {
+		const tweet: TweetSummary = {
+			...BASE_TWEET,
+			type: "repost",
+			body: "",
+			repost_of: {
+				id: 99,
+				author_handle: "bob",
+				author_display_name: "Bob",
+				body: "original post",
+				created_at: "2024-01-15T09:00:00Z",
+				is_deleted: false,
+			},
+		};
+		render(<TweetCard tweet={tweet} />);
+		expect(screen.getByText(/がリポストしました/)).toBeInTheDocument();
+		expect(screen.getByText("original post")).toBeInTheDocument();
+	});
+
+	it("renders tombstone for repost when repost_of.is_deleted", () => {
+		const tweet: TweetSummary = {
+			...BASE_TWEET,
+			type: "repost",
+			body: "",
+			repost_of: {
+				id: 99,
+				author_handle: "bob",
+				author_display_name: "Bob",
+				body: "deleted",
+				created_at: "2024-01-15T09:00:00Z",
+				is_deleted: true,
+			},
+		};
+		render(<TweetCard tweet={tweet} />);
+		expect(screen.getByText(/がリポストしました/)).toBeInTheDocument();
+		expect(screen.getByText(/削除されました/)).toBeInTheDocument();
+	});
+
+	it("renders QuoteEmbed when type=quote with quote_of", () => {
+		const tweet: TweetSummary = {
+			...BASE_TWEET,
+			type: "quote",
+			quote_of: {
+				id: 88,
+				author_handle: "carol",
+				author_display_name: "Carol",
+				body: "quoted body content",
+				created_at: "2024-01-15T08:00:00Z",
+				is_deleted: false,
+			},
+		};
+		render(<TweetCard tweet={tweet} />);
+		expect(screen.getByText("quoted body content")).toBeInTheDocument();
+		expect(screen.getByText("Carol")).toBeInTheDocument();
+	});
+
+	it("displays count badge when reply_count > 0", () => {
+		const tweet = {
+			...BASE_TWEET,
+			reply_count: 5,
+			repost_count: 3,
+			quote_count: 2,
+		};
+		render(<TweetCard tweet={tweet} />);
+		const replyBtn = screen.getByRole("button", { name: /リプライ 5 件/ });
+		expect(replyBtn).toHaveTextContent("5");
+		const quoteBtn = screen.getByRole("button", { name: /引用 2 件/ });
+		expect(quoteBtn).toHaveTextContent("2");
+	});
+
+	it("does not display count when 0", () => {
+		const tweet = { ...BASE_TWEET, reply_count: 0 };
+		render(<TweetCard tweet={tweet} />);
+		const replyBtn = screen.getByRole("button", { name: "リプライ" });
+		// no number in text
+		expect(replyBtn.textContent?.trim()).toBe("リプライ");
+	});
+});
