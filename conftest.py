@@ -40,6 +40,94 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 # -----------------------------------------------------------------------------
+# orphan connection cleaner (Issue #302)
+# -----------------------------------------------------------------------------
+# 背景:
+#   `@pytest.mark.django_db(transaction=True)` を使うテストは、teardown で
+#   `flush` を呼んで TRUNCATE + post_migrate を発行する。前回 pytest run が
+#   abort (Ctrl-C / OOM / -x) すると、postgres 側に "idle in transaction" の
+#   死に connection が残り、次回 run の TRUNCATE で **AccessExclusiveLock 取得
+#   待ちのデッドロック** が発生 (`psycopg2.errors.DeadlockDetected`).
+#
+#   このデッドロックで TRUNCATE が失敗すると後続の post_migrate も実行されず、
+#   `auth_permission` / `django_content_type` が不整合 (UniqueViolation /
+#   ForeignKeyViolation) のまま残り、以降のテストが ERROR になる
+#   (Issue #302 の三症状: pagination count 13, csrf IntegrityError, reaction
+#   ERROR はすべて同じ root cause の派生).
+#
+# 対策:
+#   セッション開始時に `django_db_setup` よりも前で、test DB に居る前回 run の
+#   死に connection を `pg_terminate_backend` で全部叩き落とす。本セッションが
+#   実際に開く connection は対象外 (まだ存在しないので)。
+#
+#   psycopg2 を直接 import して短命 connection で実行する。Django の
+#   connections は `django_db_setup` 後でないと安全に使えない。
+@pytest.fixture(scope="session", autouse=True)
+def _terminate_orphan_test_db_connections() -> Iterator[None]:
+    """`test_<DB>` への前 run 由来の死に connection を session 開始時に終了させる.
+
+    autouse + session scope で **全 pytest run で必ず先頭に走る**.
+    pytest-django の `django_db_setup` よりも前に走らせたいので、
+    pytest が collection 直後に session fixture を解決する性質を利用する.
+    """
+    try:
+        import psycopg2  # type: ignore[import-not-found]
+    except ImportError:  # pragma: no cover - psycopg2 未導入環境では skip
+        yield
+        return
+
+    # 接続パラメータは pytest-django と同じ env を見る (run-tests-local.sh と CI の双方で同じ).
+    # pytest-django は `test_<NAME>` を test DB として使う既定。
+    db_name = os.environ.get("POSTGRES_DB", "")
+    test_db_name = f"test_{db_name}" if db_name else None
+    if not test_db_name:
+        yield
+        return
+
+    host = os.environ.get("POSTGRES_HOST", "localhost")
+    port = os.environ.get("POSTGRES_PORT", "5432")
+    user = os.environ.get("POSTGRES_USER", "postgres")
+    password = os.environ.get("POSTGRES_PASSWORD", "")
+
+    # 管理用 DB (postgres) に接続して `pg_terminate_backend` を打つ。
+    # test DB 自体に接続すると自分の connection も対象になりかねないため別 DB から。
+    try:
+        admin_conn = psycopg2.connect(
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            dbname="postgres",
+            connect_timeout=3,
+        )
+    except psycopg2.Error:  # pragma: no cover - DB 不到達なら skip (CI とは関係ない別環境)
+        yield
+        return
+
+    try:
+        admin_conn.autocommit = True
+        with admin_conn.cursor() as cur:
+            # `idle` / `idle in transaction` のみが対象。`active` (= 他の pytest が
+            # テスト実行中) は kill しない。state_change が古い (= 60 秒以上前)
+            # の `idle in transaction` を「死に connection」と見なす。
+            # 自身の bookend connection (admin_conn) は datname='postgres' なので
+            # `datname=test_<DB>` の filter で自動的に除外される。
+            cur.execute(
+                "SELECT pg_terminate_backend(pid) "
+                "FROM pg_stat_activity "
+                "WHERE datname = %s "
+                "  AND pid <> pg_backend_pid() "
+                "  AND state IN ('idle', 'idle in transaction', 'idle in transaction (aborted)') "
+                "  AND state_change < now() - interval '60 seconds'",
+                (test_db_name,),
+            )
+    finally:
+        admin_conn.close()
+
+    yield
+
+
+# -----------------------------------------------------------------------------
 # 共通 API fixtures
 # -----------------------------------------------------------------------------
 
