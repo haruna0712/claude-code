@@ -201,11 +201,9 @@ test.describe("Phase 3 — DM golden path", () => {
 	test("direct DM (API bootstrap) → /messages/<id> で送信 → bob 側 WebSocket 受信", async ({
 		browser,
 	}) => {
-		// stg で wss://stg.codeplace.me/ws/dm/<id>/ が CloudFront 403 で接続不可
-		// (#275)。WebSocket が確立できないと composer が disabled のままなので spec
-		// 完走不能。infra fix 後に skip 解除。
-		test.skip(true, "stg WebSocket /ws/* CloudFront 403 (#275)");
-
+		// #281 で wss://ws.<domain>/ws/dm/<id>/ 経路に切替 (CloudFront bypass)、
+		// channels Redis SSL も #279/#280 で fix 済。WebSocket 完全動作するため
+		// skip 解除。
 		// alice / bob の API context で direct room を確保 (UI に DM 起動 button が
 		// 無くても fixture 経由でセットアップできる。#272 の wire-up 完了後は
 		// プロフィール経由 click に置き換える)。
@@ -259,9 +257,8 @@ test.describe("Phase 3 — DM golden path", () => {
 		browser,
 	}) => {
 		// REST POST /api/v1/dm/rooms/<id>/messages/ は GET only (405)。送信は
-		// WebSocket 経由のみ → stg では #275 で blocked。
-		test.skip(true, "WebSocket 必須 (#275 待ち)");
-
+		// WebSocket 経由のみ。#281 で WebSocket 経路 (ws.<domain>) が完全動作する
+		// ため、UI 経由で alice が送信 → bob 側未読バッジ表示の golden path を検証。
 		const aliceApi = await apiAuthed(ALICE.email, ALICE.password);
 		const roomId = await apiEnsureDirectRoom(aliceApi, BOB.handle);
 		await aliceApi.api.dispose();
@@ -303,9 +300,8 @@ test.describe("Phase 3 — DM golden path", () => {
 	test("typing インジケータ: alice 入力中 → bob 側に '入力中...' 表示", async ({
 		browser,
 	}) => {
-		// typing.update は WebSocket broadcast 経由なので #275 で blocked。
-		test.skip(true, "WebSocket 必須 (#275 待ち)");
-
+		// typing.update は WebSocket broadcast 経由。#281 で ws.<domain> 経路が
+		// 完全動作するため skip 解除。
 		const aliceApi = await apiAuthed(ALICE.email, ALICE.password);
 		const roomId = await apiEnsureDirectRoom(aliceApi, BOB.handle);
 		await aliceApi.api.dispose();

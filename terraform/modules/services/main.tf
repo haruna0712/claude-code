@@ -43,6 +43,10 @@ locals {
     { name = "CELERY_RESULT_BACKEND", value = var.redis_url_template },
     { name = "DJANGO_ADMIN_URL", value = "admin/" },
     { name = "COOKIE_SECURE", value = "True" },
+    # #281 follow-up: cookie を親 domain で発行して ws.<domain> サブドメイン
+    # (CloudFront bypass の WebSocket 専用) と stg.<domain> で共有する。
+    # 先頭 "." 必須 (RFC 6265: subdomain 包含)。
+    { name = "COOKIE_DOMAIN", value = ".${var.domain}" },
     { name = "CORS_ALLOWED_ORIGINS", value = var.cors_allowed_origins },
     # ALB target group health check は target IP を Host ヘッダに使うため (例
     # `Host: 10.0.12.176:8000`)、stg では VPC CIDR の各 IP を網羅できないので
