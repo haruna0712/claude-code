@@ -13,15 +13,22 @@ import { useState } from "react";
 import { toast } from "react-toastify";
 
 import { repostTweet, unrepostTweet } from "@/lib/api/repost";
+import { fetchTweet, type TweetSummary } from "@/lib/api/tweets";
 
 interface RepostButtonProps {
 	tweetId: number;
 	initialReposted?: boolean;
+	/**
+	 * #337: repost 成功時に新規 REPOST tweet (TweetSummary) を返す。
+	 * 上位 (HomeFeed 等) で TL に prepend して即時反映するために使う。
+	 */
+	onPosted?: (tweet: TweetSummary) => void;
 }
 
 export default function RepostButton({
 	tweetId,
 	initialReposted = false,
+	onPosted,
 }: RepostButtonProps) {
 	const [reposted, setReposted] = useState(initialReposted);
 	const [busy, setBusy] = useState(false);
@@ -36,7 +43,21 @@ export default function RepostButton({
 			if (previous) {
 				await unrepostTweet(tweetId);
 			} else {
-				await repostTweet(tweetId);
+				const result = await repostTweet(tweetId);
+				// repost 自体は成功。後続の fetchTweet が失敗しても reposted state は
+				// rollback しない (DB 上は created 済み)。ただし TL の即時反映は
+				// 行えないので、ユーザーには「TL 反映に失敗、リロードで確認」を
+				// toast で伝える。silent fail は禁止。
+				if (onPosted) {
+					try {
+						const full = await fetchTweet(result.id);
+						onPosted(full);
+					} catch {
+						toast.warn(
+							"リポストは完了しましたが、画面更新に失敗しました。リロードしてください。",
+						);
+					}
+				}
 			}
 		} catch {
 			setReposted(previous);

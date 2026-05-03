@@ -103,6 +103,22 @@ export default function HomeFeed({ initialTab, initialTweets }: HomeFeedProps) {
 		setLiveMessage("新しいツイートを投稿しました");
 	}, []);
 
+	// #337: TweetCard 配下 (PostDialog reply/quote, RepostButton) で投稿された
+	// tweet を TL 上部に prepend する。reply は home TL に出さない (#334) ので
+	// type が REPLY のときは何もしない (count badge の楽観 +1 は TweetCard 内で
+	// 完結しているので、ここで何もしなくても親の見た目は更新済み)。
+	const handleDescendantPosted = useCallback((tweet: TweetSummary) => {
+		if (tweet.type === "reply") return;
+		setTweets((prev) => dedupById([tweet, ...prev]));
+		setLiveMessage(
+			tweet.type === "repost"
+				? "リポストしました"
+				: tweet.type === "quote"
+					? "引用リポストしました"
+					: "新しいツイートを投稿しました",
+		);
+	}, []);
+
 	return (
 		<div className="flex flex-col gap-0">
 			{/* SR-only live region for optimistic prepend announcement */}
@@ -134,6 +150,7 @@ export default function HomeFeed({ initialTab, initialTweets }: HomeFeedProps) {
 								tweet={tweet}
 								posinset={idx + 1}
 								setsize={tweets.length}
+								onDescendantPosted={handleDescendantPosted}
 							/>
 						))}
 					</div>

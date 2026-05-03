@@ -27,12 +27,17 @@ interface TweetCardListProps {
 	 * 空配列のときに表示する文言。default は "ツイートがありません。"。
 	 */
 	emptyMessage?: string;
+	/**
+	 * #337: TweetCard 内で reply / quote / repost が投稿された際に bubble up.
+	 */
+	onDescendantPosted?: (tweet: TweetSummary) => void;
 }
 
 export default function TweetCardList({
 	tweets,
 	ariaLabel,
 	emptyMessage = "ツイートがありません。",
+	onDescendantPosted,
 }: TweetCardListProps) {
 	if (tweets.length === 0) {
 		return <p className="text-sm text-muted-foreground">{emptyMessage}</p>;
@@ -50,6 +55,7 @@ export default function TweetCardList({
 					tweet={tweet}
 					posinset={index + 1}
 					setsize={tweets.length}
+					onDescendantPosted={onDescendantPosted}
 				/>
 			))}
 		</section>
