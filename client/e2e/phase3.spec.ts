@@ -30,17 +30,24 @@
 
 import { expect, test, type BrowserContext } from "@playwright/test";
 
-const ALICE = {
-	email: "alice@example.com",
-	password: "supersecret12", // pragma: allowlist secret
-	handle: "alice",
+// 2 ユーザー分の認証情報を環境変数で上書きできるようにする (stg E2E や別 fixture
+// で alice/bob 以外を使う場合)。default は local docker fixture の alice / bob。
+// stg 用 credentials は git 管理外の docs/local/e2e-stg.md を参照。
+const USER1 = {
+	email: process.env.PLAYWRIGHT_USER1_EMAIL ?? "alice@example.com",
+	password: process.env.PLAYWRIGHT_USER1_PASSWORD ?? "supersecret12", // pragma: allowlist secret
+	handle: process.env.PLAYWRIGHT_USER1_HANDLE ?? "alice",
 };
 
-const BOB = {
-	email: "bob@example.com",
-	password: "supersecret12", // pragma: allowlist secret
-	handle: "bob",
+const USER2 = {
+	email: process.env.PLAYWRIGHT_USER2_EMAIL ?? "bob@example.com",
+	password: process.env.PLAYWRIGHT_USER2_PASSWORD ?? "supersecret12", // pragma: allowlist secret
+	handle: process.env.PLAYWRIGHT_USER2_HANDLE ?? "bob",
 };
+
+// 既存スペック内の参照名 (alice / bob) を維持して diff を最小化する。
+const ALICE = USER1;
+const BOB = USER2;
 
 async function login(
 	page: import("@playwright/test").Page,

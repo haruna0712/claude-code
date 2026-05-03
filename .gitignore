@@ -5,6 +5,10 @@ staticfiles/
 !.envs/.env.example
 # !.envs/.env.production
 
+# 個人ローカルメモ (E2E credentials など、git に入れたくないもの)。
+# 例: docs/local/e2e-stg.md (stg test user の email/password)
+docs/local/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

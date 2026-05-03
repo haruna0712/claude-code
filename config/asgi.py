@@ -15,11 +15,17 @@ P3-02 (Issue #227) で以下を追加配線:
 
 from __future__ import annotations
 
-import os
-
 from django.core.asgi import get_asgi_application
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+# DJANGO_SETTINGS_MODULE は外部から明示的に設定されている前提:
+# - 本番 (ECS): terraform/modules/services/main.tf の common_env で設定
+# - CI: .github/workflows/ci.yml で設定
+# - local docker (daphne): local.yml daphne service の environment で設定
+# - local manage.py 経由 (api runserver): manage.py:10 で setdefault される
+# 旧コードは setdefault("config.settings") を呼んでいたが、これは settings package
+# パスであり module ではないため、env 未設定で daphne が立ち上がると
+# "Model class ... isn't in INSTALLED_APPS" で fail していた。間違った default を
+# 残すと silent な setting 違いを招くため削除。
 
 # Django の設定読み込みを Channels のインポートより先に行う
 django_asgi_app = get_asgi_application()

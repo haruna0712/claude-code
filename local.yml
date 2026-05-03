@@ -104,6 +104,13 @@ services:
     # security-reviewer: api から <<: *api で継承すると user: root になるため上書き
     # (django ベースイメージの非 root ユーザーを使用)
     user: django
+    # api コンテナは manage.py:10 が DJANGO_SETTINGS_MODULE を setdefault するが、
+    # daphne は manage.py を経由せず config.asgi を直接 import するため、env で
+    # 明示的に指定しないと config/asgi.py:22 の壊れた setdefault("config.settings")
+    # (= package パス) で立ち上がらない。stg / CI は terraform / ci.yml 側で同名
+    # env を設定済なので影響範囲は local 限定。
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.local
     expose:
       - "8001"
     command: daphne -b 0.0.0.0 -p 8001 config.asgi:application
