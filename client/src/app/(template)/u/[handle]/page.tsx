@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import StartDMButton from "@/components/dm/StartDMButton";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
 import { stringifyJsonLd } from "@/lib/json-ld";
@@ -135,13 +136,19 @@ export default async function ProfilePage({ params }: PageProps) {
 						aria-hidden
 					/>
 				)}
-				<div className="pb-2">
+				<div className="pb-2 flex-1">
 					<h1 className="text-xl font-bold sm:text-2xl">
 						{profile.display_name || profile.username}
 					</h1>
 					<div className="text-sm text-muted-foreground">
 						@{profile.username}
 					</div>
+				</div>
+				{/* #299: 認証済 & 自分以外の profile に対して「メッセージ」 button。
+				    click で direct DM room を取得 / 作成して /messages/<id> 遷移。
+				    self / 未ログイン判定は StartDMButton 内で行う。 */}
+				<div className="pb-2">
+					<StartDMButton targetHandle={profile.username} />
 				</div>
 			</header>
 
