@@ -1,20 +1,22 @@
 "use client";
 
 /**
- * PostDialog — minimal modal for Quote / Reply composer (P2-15 / Issue #188).
+ * PostDialog — modal for Quote / Reply composer (P2-15 / Issue #188).
  *
- * MVP: Uses Radix Dialog primitive (already a dep). Inline textarea +
- * submit button; tag chips and images are deferred — Phase 1 Composer is
- * not reused as-is because that component owns POST /tweets/, while
- * Quote/Reply target sub-actions on /tweets/<id>/{quote,reply}/.
+ * #325 で受入消化:
+ * - parentTweet を受け取り、上部に元 tweet の inline preview を表示
+ *   (Reply: "Replying to @<handle>" banner、Quote: 引用カード形式)
+ * - 文字数カウントを countTweetChars で計算 (URL=23 字換算等)
+ * - parentTweet.is_deleted=true なら open を block (toast)
  */
 
 import { Dialog, DialogContent, DialogTitle } from "@radix-ui/react-dialog";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "react-toastify";
 
 import { quoteTweet, replyToTweet } from "@/lib/api/repost";
-import type { TweetSummary } from "@/lib/api/tweets";
+import type { TweetMini, TweetSummary } from "@/lib/api/tweets";
+import { TWEET_MAX_CHARS, countTweetChars } from "@/lib/tweets/charCount";
 
 export type PostDialogMode = "quote" | "reply";
 
@@ -24,9 +26,9 @@ interface PostDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	onPosted?: (tweet: TweetSummary) => void;
+	/** #325: 元 tweet (preview 表示 + is_deleted guard 用)。 */
+	parentTweet?: TweetMini | null;
 }
-
-const MAX_BODY = 180;
 
 export default function PostDialog({
 	tweetId,
@@ -34,6 +36,7 @@ export default function PostDialog({
 	open,
 	onOpenChange,
 	onPosted,
+	parentTweet,
 }: PostDialogProps) {
 	const [body, setBody] = useState("");
 	const [busy, setBusy] = useState(false);
@@ -41,10 +44,22 @@ export default function PostDialog({
 	const title = mode === "quote" ? "引用リポスト" : "リプライ";
 	const submitLabel = mode === "quote" ? "引用する" : "返信する";
 
+	// #325: parentTweet が削除済みなら dialog を強制 close + toast
+	useEffect(() => {
+		if (open && parentTweet?.is_deleted) {
+			toast.error("削除されたツイートには操作できません。");
+			onOpenChange(false);
+		}
+	}, [open, parentTweet?.is_deleted, onOpenChange]);
+
+	// #325: countTweetChars で URL 23 字換算 / Markdown 除外。
+	const visibleCount = countTweetChars(body);
+	const overLimit = visibleCount > TWEET_MAX_CHARS;
+
 	const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		const trimmed = body.trim();
-		if (!trimmed || busy) return;
+		if (!trimmed || busy || overLimit) return;
 
 		setBusy(true);
 		try {
@@ -76,11 +91,37 @@ export default function PostDialog({
 					{title}
 				</DialogTitle>
 
+				{/* #325: 元 tweet の inline preview。Reply は banner、Quote は枠カード。 */}
+				{parentTweet && !parentTweet.is_deleted ? (
+					<div className="mb-3">
+						{mode === "reply" ? (
+							<p className="text-xs text-muted-foreground mb-2">
+								Replying to{" "}
+								<span className="font-medium text-foreground">
+									@{parentTweet.author_handle}
+								</span>
+							</p>
+						) : null}
+						<div
+							className={`rounded-md border border-border bg-muted/30 px-3 py-2 text-xs ${mode === "reply" ? "" : "border-l-4"}`}
+						>
+							<div className="mb-1 flex items-center gap-2 text-muted-foreground">
+								<span className="font-medium text-foreground">
+									{parentTweet.author_display_name || parentTweet.author_handle}
+								</span>
+								<span>@{parentTweet.author_handle}</span>
+							</div>
+							<p className="line-clamp-3 whitespace-pre-wrap text-foreground">
+								{parentTweet.body}
+							</p>
+						</div>
+					</div>
+				) : null}
+
 				<form onSubmit={onSubmit} className="flex flex-col gap-3">
 					<textarea
 						value={body}
 						onChange={(e) => setBody(e.target.value)}
-						maxLength={MAX_BODY}
 						rows={4}
 						placeholder={
 							mode === "quote"
@@ -91,8 +132,11 @@ export default function PostDialog({
 						className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					/>
 					<div className="flex items-center justify-between gap-2">
-						<span className="text-xs text-muted-foreground">
-							{body.length} / {MAX_BODY}
+						<span
+							className={`text-xs ${overLimit ? "text-baby_red font-semibold" : "text-muted-foreground"}`}
+							aria-live="polite"
+						>
+							{visibleCount} / {TWEET_MAX_CHARS}
 						</span>
 						<div className="flex gap-2">
 							<button
@@ -104,7 +148,7 @@ export default function PostDialog({
 							</button>
 							<button
 								type="submit"
-								disabled={busy || body.trim().length === 0}
+								disabled={busy || body.trim().length === 0 || overLimit}
 								className="rounded-md bg-lime-500 px-3 py-1.5 text-sm font-semibold text-black hover:bg-lime-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
 							>
 								{submitLabel}

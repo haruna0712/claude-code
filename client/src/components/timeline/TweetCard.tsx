@@ -416,12 +416,30 @@ export default function TweetCard({
 				mode="reply"
 				open={replyOpen}
 				onOpenChange={setReplyOpen}
+				parentTweet={{
+					id: tweet.id,
+					author_handle: tweet.author_handle,
+					author_display_name: tweet.author_display_name,
+					author_avatar_url: tweet.author_avatar_url,
+					body: tweet.body,
+					created_at: tweet.created_at,
+					is_deleted: tweet.is_deleted ?? false,
+				}}
 			/>
 			<PostDialog
 				tweetId={tweet.id}
 				mode="quote"
 				open={quoteOpen}
 				onOpenChange={setQuoteOpen}
+				parentTweet={{
+					id: tweet.id,
+					author_handle: tweet.author_handle,
+					author_display_name: tweet.author_display_name,
+					author_avatar_url: tweet.author_avatar_url,
+					body: tweet.body,
+					created_at: tweet.created_at,
+					is_deleted: tweet.is_deleted ?? false,
+				}}
 			/>
 		</article>
 	);
