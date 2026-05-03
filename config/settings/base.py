@@ -1,5 +1,4 @@
 import re
-import ssl
 from datetime import timedelta
 from os import getenv, path
 from pathlib import Path
@@ -302,20 +301,26 @@ CELERY_WORKERS_SEND_TASKS_EVENTS = True
 # はメッセージの TTL 秒。共に Channels の defaults よりやや余裕を持たせた値。
 #
 # #275: stg の REDIS_URL は kombu/celery 互換のため `?ssl_cert_reqs=CERT_REQUIRED`
-# (文字列) を含む。channels_redis (= redis-py async) はこの query string を解釈
-# できず "Invalid SSL Certificate Requirements Flag: CERT_REQUIRED" で fail する。
-# → URL から query 部分を剥がして dict 形式の `address` に渡し、SSL 設定は
-# redis-py の expected な constants (`ssl.CERT_REQUIRED` / `ssl.CERT_NONE`) で
-# 渡す。この差異は同じ rediss:// URL を共有しつつ celery は kombu パーサ、channels
-# は redis-py async パーサが処理する非対称性に起因する (channels-redis #361 参照)。
+# (大文字文字列) を含む。channels_redis (= redis-py async 5.0.x) はこの URL の
+# query を parse して `cert_reqs="CERT_REQUIRED"` を試行するが、redis-py が
+# 期待するのは小文字の {"none", "optional", "required"} のみで、"CERT_REQUIRED"
+# は invalid として `Invalid SSL Certificate Requirements Flag: CERT_REQUIRED`。
+#
+# 解決策: URL の query を strip して address だけ渡し、`ssl_cert_reqs` は dict
+# 形式の host kwarg として **小文字 "required"** で明示する。redis-py 5.0.x の
+# `RedisSSLContext` は文字列を内部で `ssl.CERT_REQUIRED` 等の constant に変換
+# する (PR #279 1st attempt で int constant を直接渡したところ
+# `'RedisSSLContext' object has no attribute 'cert_reqs'` の AttributeError で
+# crash した、redis/asyncio/connection.py:RedisSSLContext.__init__ 参照)。
+#
+# celery / kombu は引き続き query 付き URL を直接使用 (parser が違うため影響なし)。
 _redis_url_raw = getenv("REDIS_URL", "redis://redis:6379/0")
-# query string (`?ssl_cert_reqs=...&...`) を strip
 _redis_url_clean = re.sub(r"\?.*$", "", _redis_url_raw)
 _channels_host: dict[str, object] = {"address": _redis_url_clean}
 if _redis_url_clean.startswith("rediss://"):
-    # ElastiCache はサーバ証明書が AWS 管理の CA で署名されているため verify する
-    # (CERT_REQUIRED)。Local 開発の rediss:// 検証は不要なので呼び分けないこと。
-    _channels_host["ssl_cert_reqs"] = ssl.CERT_REQUIRED
+    # ElastiCache はサーバ証明書が AWS 管理の CA で署名されているため verify する。
+    # 小文字 "required" で渡すこと (大文字 "CERT_REQUIRED" や int constant は invalid)。
+    _channels_host["ssl_cert_reqs"] = "required"
 
 CHANNEL_LAYERS = {
     "default": {
