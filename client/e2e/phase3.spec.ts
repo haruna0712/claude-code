@@ -1,34 +1,47 @@
 /**
- * Phase 3 golden path E2E (P3-21 / Issue #246).
+ * Phase 3 golden path E2E (P3-21 / Issue #246, 拡張: Issue #275).
  *
  * Phase 3 で実装した DM 機能の主要フローを Playwright で検証する。
  * Phase 1/2 と同様、シードされたテストアカウント (alice / bob) を前提とし、
  * 別 worker で動かさず 1 spec 内で session を切り替えて確認する。
  *
+ * 拡張背景 (Issue #275):
+ *   元の golden path は UI 起動 button (DM 開始 / グループ作成) 待ちで多くが
+ *   skip されていた。本拡張では `apiCreateDirectRoom` / `apiCreateGroupWithInvite`
+ *   helper で fixture をブートストラップし、UI を直接検証できるようにした。
+ *
  * カバーするシナリオ:
- *   1. alice が /messages を開き、empty state または既存 room を確認
- *   2. alice が bob の profile から DM (direct room) を開始
- *   3. WebSocket 接続が open になる
- *   4. alice が message を送信、bob 側で受信を確認
- *   5. (オプション) bob が typing → alice 側に typing インジケータが見える
- *   6. group room を作成 → bob を招待 → bob が承諾
- *   7. group room で双方向 message
- *   8. alice が message を削除 → bob 側からも消えることを確認
+ *   1. /messages の loading / empty / 一覧 state
+ *   2. direct DM (API bootstrap) → /messages/<id> で送信 → 相手側 WebSocket 受信
+ *   3. 未読バッジ (alice 送信 → bob /messages 一覧で unread count 表示)
+ *   4. typing インジケータ (alice composer 入力 → bob 側に "入力中..." 表示)
+ *   5. グループ招待拒否 (alice が API で group + bob 招待 → bob が UI で「拒否」)
+ *   6. UI からのグループ作成 + 招待承諾 (UI wire-up #273 待ちで skip される可能性)
+ *   7. メッセージ削除 (#274 待ちで skip)
+ *   8. a11y: keyboard ナビ (/messages → 招待ページ)
  *
- * 添付 (P3-10) は CI 上で S3 を mock しないと再現困難なため manual / stg E2E に回す。
+ * 添付 (P3-10) は CI 上で S3 を mock しないと再現困難なため stg 手動 E2E に回す。
  *
- * 実行手順:
+ * 実行手順 (local docker):
  *   docker compose -f local.yml up -d --build
  *   docker compose -f local.yml exec api python manage.py migrate
  *   # alice@example.com / bob@example.com をシード (Phase 2 spec と同じ前提)
  *   cd client && npx playwright install chromium
- *   npm run test:e2e -- e2e/phase3.spec.ts
+ *   PLAYWRIGHT_BASE_URL=http://nginx npm run test:e2e -- e2e/phase3.spec.ts
  *
- * NOTE: 本 spec は CI で自動実行しない。Phase 3 stg deploy (#247) 後に
- * stg 環境で手動実行する想定。CI 化は P3-22 範囲外。
+ * 実行手順 (stg):
+ *   docs/local/e2e-stg.md (gitignored) の credentials を env で渡して実行
+ *
+ * NOTE: 本 spec は CI で自動実行しない (P3-22 範囲外、CI 化は #266 で別途対応予定)。
  */
 
-import { expect, test, type BrowserContext } from "@playwright/test";
+import {
+	expect,
+	request,
+	test,
+	type APIRequestContext,
+	type BrowserContext,
+} from "@playwright/test";
 
 // 2 ユーザー分の認証情報を環境変数で上書きできるようにする (stg E2E や別 fixture
 // で alice/bob 以外を使う場合)。default は local docker fixture の alice / bob。
@@ -74,10 +87,101 @@ async function gotoMessages(page: import("@playwright/test").Page) {
 	await page.goto("/messages");
 	// 実 UI が日英どちらでも通るよう regex で。"メッセージ" / "Messages" /
 	// "Direct Messages" のいずれかを heading or role=banner で許容。
+	// 30s 余裕: cold load → PersistAuth (useEffect) → Redux hydrate → /api/v1/users/me/
+	// fetch まで複数 round trip があるため、stg backend が遅い時 10s では足りない。
 	await expect(
 		page.getByRole("heading", { name: /メッセージ|Messages|Direct/i }).first(),
-	).toBeVisible({ timeout: 10_000 });
+	).toBeVisible({ timeout: 30_000 });
 }
+
+// ---------------------------------------------------------------------------
+// API helpers (Issue #275): UI 起動 button が未 wire-up なシナリオを補うため、
+// fixture を REST API で直接ブートストラップする。
+// ---------------------------------------------------------------------------
+
+const API_BASE = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:8080";
+
+interface AuthedApi {
+	api: APIRequestContext;
+	csrf: string;
+	pkid: number;
+}
+
+/** API クライアントを作って login + CSRF 取得 + pkid 取得まで済ませる。 */
+async function apiAuthed(email: string, password: string): Promise<AuthedApi> {
+	const api = await request.newContext({ baseURL: API_BASE });
+	// 1. CSRF cookie を種付け
+	await api.get("/api/v1/auth/csrf/");
+	const cookies = await api.storageState();
+	const csrf = cookies.cookies.find((c) => c.name === "csrftoken")?.value ?? "";
+
+	// 2. Cookie JWT login
+	const loginRes = await api.post("/api/v1/auth/cookie/create/", {
+		headers: {
+			"Content-Type": "application/json",
+			"X-CSRFToken": csrf,
+			Referer: `${API_BASE}/login`,
+		},
+		data: { email, password },
+	});
+	expect(loginRes.status(), `login failed for ${email}`).toBe(200);
+
+	// 3. CSRF cookie は login レスポンスでローテートされうるので再取得
+	const cookies2 = await api.storageState();
+	const csrf2 =
+		cookies2.cookies.find((c) => c.name === "csrftoken")?.value ?? csrf;
+
+	// 4. pkid 取得
+	const meRes = await api.get("/api/v1/users/me/");
+	expect(meRes.status()).toBe(200);
+	const me = await meRes.json();
+	return { api, csrf: csrf2, pkid: me.pkid };
+}
+
+/** alice の API context で bob との direct room を取得 or 作成し、room id を返す。 */
+async function apiEnsureDirectRoom(
+	authed: AuthedApi,
+	memberHandle: string,
+): Promise<number> {
+	const res = await authed.api.post("/api/v1/dm/rooms/", {
+		headers: {
+			"Content-Type": "application/json",
+			"X-CSRFToken": authed.csrf,
+			Referer: `${API_BASE}/messages`,
+		},
+		data: { kind: "direct", member_handle: memberHandle },
+	});
+	expect([200, 201]).toContain(res.status());
+	const body = await res.json();
+	return body.id as number;
+}
+
+/** alice の API context で group room を作成し、bob を招待する。room id を返す。 */
+async function apiCreateGroupWithInvite(
+	authed: AuthedApi,
+	name: string,
+	inviteeHandles: string[],
+): Promise<number> {
+	const res = await authed.api.post("/api/v1/dm/rooms/", {
+		headers: {
+			"Content-Type": "application/json",
+			"X-CSRFToken": authed.csrf,
+			Referer: `${API_BASE}/messages`,
+		},
+		data: { kind: "group", name, invitee_handles: inviteeHandles },
+	});
+	expect([200, 201], `group create failed: ${await res.text()}`).toContain(
+		res.status(),
+	);
+	const body = await res.json();
+	return body.id as number;
+}
+
+/**
+ * 注意: メッセージ送信 REST endpoint は GET only (DMRoomMessagesView は ListAPIView)。
+ * 送信は WebSocket consumer の `send_message` event 経由のみ可能。テストでは
+ * ブラウザ UI 経由で送信する。
+ */
 
 test.describe("Phase 3 — DM golden path", () => {
 	test("/messages の loading / empty / 一覧 state が描画される", async ({
@@ -94,10 +198,21 @@ test.describe("Phase 3 — DM golden path", () => {
 		await expect(list).toBeVisible({ timeout: 5_000 });
 	});
 
-	test("alice → bob の direct DM 開始 + メッセージ送受信 (WebSocket 経由)", async ({
+	test("direct DM (API bootstrap) → /messages/<id> で送信 → bob 側 WebSocket 受信", async ({
 		browser,
 	}) => {
-		// alice / bob の context を別々に持って双方向送受信を観測する。
+		// stg で wss://stg.codeplace.me/ws/dm/<id>/ が CloudFront 403 で接続不可
+		// (#275)。WebSocket が確立できないと composer が disabled のままなので spec
+		// 完走不能。infra fix 後に skip 解除。
+		test.skip(true, "stg WebSocket /ws/* CloudFront 403 (#275)");
+
+		// alice / bob の API context で direct room を確保 (UI に DM 起動 button が
+		// 無くても fixture 経由でセットアップできる。#272 の wire-up 完了後は
+		// プロフィール経由 click に置き換える)。
+		const aliceApi = await apiAuthed(ALICE.email, ALICE.password);
+		const roomId = await apiEnsureDirectRoom(aliceApi, BOB.handle);
+		await aliceApi.api.dispose();
+
 		const aliceCtx: BrowserContext = await browser.newContext();
 		const bobCtx: BrowserContext = await browser.newContext();
 		const alicePage = await aliceCtx.newPage();
@@ -107,53 +222,32 @@ test.describe("Phase 3 — DM golden path", () => {
 			await login(alicePage, ALICE.email, ALICE.password);
 			await login(bobPage, BOB.email, BOB.password);
 
-			// alice が bob のプロフィールから DM を開始 (Phase 2 で実装済の "DM を送る" 導線想定。
-			// 動線が無ければ /messages 一覧経由で room 作成 API を直接叩いてもよいが、
-			// MVP では invite 経路 or プロフィールリンクを優先する)。
-			await alicePage.goto(`/u/${BOB.handle}`);
-			const dmButton = alicePage.getByRole("button", { name: /メッセージ|DM/ });
-			if (await dmButton.isVisible().catch(() => false)) {
-				await dmButton.click();
-			} else {
-				// Fallback: /messages から bob に対する direct room を開く API を裏で叩く
-				// 実装が無ければ admin / fixture でシード済 room を選ぶ前提に切替。
-				test.skip(
-					true,
-					"DM 開始の導線がプロフィール画面に未実装。fixture で direct room をシードする経路に切替必要",
-				);
-				return;
-			}
+			// 両者とも room 詳細画面に遷移
+			await alicePage.goto(`/messages/${roomId}`);
+			await bobPage.goto(`/messages/${roomId}`);
 
-			// /messages/<id> に遷移し WebSocket が open になる
-			await alicePage.waitForURL(/\/messages\/\d+/);
-			await expect(alicePage.getByText("オンライン")).toBeVisible({
+			// composer が見えるまで待つ (WebSocket 接続完了の代理シグナル)
+			const aliceComposer = alicePage.getByPlaceholder("メッセージを入力");
+			const bobComposer = bobPage.getByPlaceholder("メッセージを入力");
+			await expect(aliceComposer).toBeVisible({ timeout: 15_000 });
+			await expect(bobComposer).toBeVisible({ timeout: 15_000 });
+
+			// alice → bob
+			const marker = `phase3 e2e ${Date.now()}`;
+			await aliceComposer.fill(marker);
+			await alicePage.getByRole("button", { name: "送信" }).click();
+			await expect(alicePage.getByText(marker)).toBeVisible();
+			await expect(bobPage.getByText(marker)).toBeVisible({
 				timeout: 10_000,
 			});
 
-			// alice が message を送信
-			const composer = alicePage.getByLabel("メッセージを入力");
-			const marker = `phase3 e2e ${Date.now()}`;
-			await composer.fill(marker);
-			await alicePage.getByRole("button", { name: "送信" }).click();
-			await expect(alicePage.getByText(marker)).toBeVisible();
-
-			// bob 側で同じ room を開く (一覧から)
-			await gotoMessages(bobPage);
-			await bobPage
-				.getByRole("link", { name: new RegExp(`@${ALICE.handle}`) })
-				.click();
-			await bobPage.waitForURL(/\/messages\/\d+/);
-			await expect(bobPage.getByText(marker)).toBeVisible({ timeout: 5_000 });
-
-			// bob が返信
+			// bob → alice (返信)
 			const replyMarker = `phase3 reply ${Date.now()}`;
-			await bobPage.getByLabel("メッセージを入力").fill(replyMarker);
+			await bobComposer.fill(replyMarker);
 			await bobPage.getByRole("button", { name: "送信" }).click();
 			await expect(bobPage.getByText(replyMarker)).toBeVisible();
-
-			// alice 側にも reply が届く (WebSocket broadcast)
 			await expect(alicePage.getByText(replyMarker)).toBeVisible({
-				timeout: 5_000,
+				timeout: 10_000,
 			});
 		} finally {
 			await aliceCtx.close();
@@ -161,7 +255,108 @@ test.describe("Phase 3 — DM golden path", () => {
 		}
 	});
 
-	test("グループ作成 + 招待承諾 + 双方向送受信", async ({ browser }) => {
+	test("未読バッジ: alice が UI で送信 → bob /messages 一覧に unread count が出る", async ({
+		browser,
+	}) => {
+		// REST POST /api/v1/dm/rooms/<id>/messages/ は GET only (405)。送信は
+		// WebSocket 経由のみ → stg では #275 で blocked。
+		test.skip(true, "WebSocket 必須 (#275 待ち)");
+
+		const aliceApi = await apiAuthed(ALICE.email, ALICE.password);
+		const roomId = await apiEnsureDirectRoom(aliceApi, BOB.handle);
+		await aliceApi.api.dispose();
+
+		// alice が UI で message を送信 (REST POST は 405、WebSocket 経由のみ)
+		const aliceCtx = await browser.newContext();
+		const alicePage = await aliceCtx.newPage();
+		const marker = `unread ${Date.now()}`;
+		try {
+			await login(alicePage, ALICE.email, ALICE.password);
+			await alicePage.goto(`/messages/${roomId}`);
+			const composer = alicePage.getByPlaceholder("メッセージを入力");
+			await expect(composer).toBeVisible({ timeout: 15_000 });
+			await composer.fill(marker);
+			await alicePage.getByRole("button", { name: "送信" }).click();
+			await expect(alicePage.getByText(marker)).toBeVisible({
+				timeout: 5_000,
+			});
+		} finally {
+			await aliceCtx.close();
+		}
+
+		// bob が /messages を開いて unread badge を確認
+		// 別 context で開くことで「room を未読のまま開く」状態を保つ
+		const bobCtx = await browser.newContext();
+		const bobPage = await bobCtx.newPage();
+		try {
+			await login(bobPage, BOB.email, BOB.password);
+			await gotoMessages(bobPage);
+
+			// 未読バッジは aria-label="未読 N 件" で出ている (RoomListItem.tsx)
+			const unreadBadge = bobPage.getByLabel(/未読 \d+ 件/);
+			await expect(unreadBadge.first()).toBeVisible({ timeout: 10_000 });
+		} finally {
+			await bobCtx.close();
+		}
+	});
+
+	test("typing インジケータ: alice 入力中 → bob 側に '入力中...' 表示", async ({
+		browser,
+	}) => {
+		// typing.update は WebSocket broadcast 経由なので #275 で blocked。
+		test.skip(true, "WebSocket 必須 (#275 待ち)");
+
+		const aliceApi = await apiAuthed(ALICE.email, ALICE.password);
+		const roomId = await apiEnsureDirectRoom(aliceApi, BOB.handle);
+		await aliceApi.api.dispose();
+
+		const aliceCtx = await browser.newContext();
+		const bobCtx = await browser.newContext();
+		const alicePage = await aliceCtx.newPage();
+		const bobPage = await bobCtx.newPage();
+
+		try {
+			await login(alicePage, ALICE.email, ALICE.password);
+			await login(bobPage, BOB.email, BOB.password);
+
+			await alicePage.goto(`/messages/${roomId}`);
+			await bobPage.goto(`/messages/${roomId}`);
+
+			// composer 表示待ち = WebSocket 接続完了の代理
+			await expect(alicePage.getByPlaceholder("メッセージを入力")).toBeVisible({
+				timeout: 15_000,
+			});
+			await expect(bobPage.getByPlaceholder("メッセージを入力")).toBeVisible({
+				timeout: 15_000,
+			});
+
+			// alice が type → bob に typing.update が WebSocket 経由で届く
+			await alicePage.getByPlaceholder("メッセージを入力").type("hi", {
+				delay: 50,
+			});
+
+			// bob 側で「入力中...」が表示されること (TypingIndicator.tsx)
+			// 表示文言は実装に応じて regex で許容。3 秒で auto-dismiss なので一度
+			// visible になればすぐ消える可能性があるため待ちは短く。
+			await expect(bobPage.getByText(/入力中|typing/i)).toBeVisible({
+				timeout: 8_000,
+			});
+		} finally {
+			await aliceCtx.close();
+			await bobCtx.close();
+		}
+	});
+
+	test("グループ招待拒否: alice が API で group + bob 招待 → bob が UI で「拒否」", async () => {
+		// `client/src/components/dm/InvitationList.tsx` で `inv.inviter.username` /
+		// `inv.room.name` を参照するが API は flat (`inviter_handle` / `room_id`)。
+		// 型 drift で runtime crash → 招待主 / group 名が表示されない。#276 で別途 fix。
+		test.skip(true, "InvitationList の型 drift bug (#276 待ち)");
+	});
+
+	test("グループ作成 + 招待承諾 + 双方向送受信 (UI wire-up #273 待ち)", async ({
+		browser,
+	}) => {
 		const aliceCtx = await browser.newContext();
 		const bobCtx = await browser.newContext();
 		const alicePage = await aliceCtx.newPage();
@@ -172,9 +367,6 @@ test.describe("Phase 3 — DM golden path", () => {
 			await login(alicePage, ALICE.email, ALICE.password);
 			await login(bobPage, BOB.email, BOB.password);
 
-			// alice がグループ作成画面を開いて bob を招待
-			// MVP では /messages から「+」ボタン → モーダル経路だが、UI が wire-up 未完なら
-			// /messages/group/new 等の専用ルートを将来追加する想定。
 			await gotoMessages(alicePage);
 			const newGroupButton = alicePage.getByRole("button", {
 				name: /グループ|新規/,
@@ -182,7 +374,7 @@ test.describe("Phase 3 — DM golden path", () => {
 			if (!(await newGroupButton.isVisible().catch(() => false))) {
 				test.skip(
 					true,
-					"グループ作成 UI が /messages 一覧に wire-up されていない (フォローアップ issue)",
+					"グループ作成 UI が /messages 一覧に wire-up されていない (#273)",
 				);
 				return;
 			}
@@ -202,12 +394,12 @@ test.describe("Phase 3 — DM golden path", () => {
 			await bobPage.getByRole("button", { name: "承諾" }).click();
 			await bobPage.waitForURL(/\/messages\/\d+/);
 
-			// alice 側で 'message を送信、bob 側にも届くこと
+			// alice 側で message を送信、bob 側にも届くこと
 			const groupMarker = `group e2e ${Date.now()}`;
-			await alicePage.getByLabel("メッセージを入力").fill(groupMarker);
+			await alicePage.getByPlaceholder("メッセージを入力").fill(groupMarker);
 			await alicePage.getByRole("button", { name: "送信" }).click();
 			await expect(bobPage.getByText(groupMarker)).toBeVisible({
-				timeout: 5_000,
+				timeout: 10_000,
 			});
 		} finally {
 			await aliceCtx.close();
@@ -215,12 +407,12 @@ test.describe("Phase 3 — DM golden path", () => {
 		}
 	});
 
-	test("メッセージ削除 — alice が削除すると bob 側でも消える", async ({
+	test("メッセージ削除 — alice が削除すると bob 側でも消える (UI #274 待ち)", async ({
 		browser,
 	}) => {
 		test.skip(
 			true,
-			"削除 UI (long-press / hover メニュー) は P3-09 範囲外、フォローアップ issue で wire-up",
+			"削除 UI (long-press / hover メニュー) は P3-09 範囲外、フォローアップ #274 で wire-up",
 		);
 	});
 
