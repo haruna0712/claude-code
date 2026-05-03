@@ -1,3 +1,5 @@
+import re
+import ssl
 from datetime import timedelta
 from os import getenv, path
 from pathlib import Path
@@ -298,11 +300,28 @@ CELERY_WORKERS_SEND_TASKS_EVENTS = True
 # REDIS_URL は Celery 用 (DB 0) と同じインスタンスを共有する想定。本番は ElastiCache
 # (Multi-AZ replica 1) に向く。capacity=1500 は 1 group へのバッファ上限、expiry=60
 # はメッセージの TTL 秒。共に Channels の defaults よりやや余裕を持たせた値。
+#
+# #275: stg の REDIS_URL は kombu/celery 互換のため `?ssl_cert_reqs=CERT_REQUIRED`
+# (文字列) を含む。channels_redis (= redis-py async) はこの query string を解釈
+# できず "Invalid SSL Certificate Requirements Flag: CERT_REQUIRED" で fail する。
+# → URL から query 部分を剥がして dict 形式の `address` に渡し、SSL 設定は
+# redis-py の expected な constants (`ssl.CERT_REQUIRED` / `ssl.CERT_NONE`) で
+# 渡す。この差異は同じ rediss:// URL を共有しつつ celery は kombu パーサ、channels
+# は redis-py async パーサが処理する非対称性に起因する (channels-redis #361 参照)。
+_redis_url_raw = getenv("REDIS_URL", "redis://redis:6379/0")
+# query string (`?ssl_cert_reqs=...&...`) を strip
+_redis_url_clean = re.sub(r"\?.*$", "", _redis_url_raw)
+_channels_host: dict[str, object] = {"address": _redis_url_clean}
+if _redis_url_clean.startswith("rediss://"):
+    # ElastiCache はサーバ証明書が AWS 管理の CA で署名されているため verify する
+    # (CERT_REQUIRED)。Local 開発の rediss:// 検証は不要なので呼び分けないこと。
+    _channels_host["ssl_cert_reqs"] = ssl.CERT_REQUIRED
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [getenv("REDIS_URL", "redis://redis:6379/0")],
+            "hosts": [_channels_host],
             "capacity": 1500,
             "expiry": 60,
         },
