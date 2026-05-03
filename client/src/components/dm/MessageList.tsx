@@ -25,6 +25,8 @@ interface MessageListProps {
 	currentUserId: number;
 	pendingByClientKey?: Map<string, MessageStatus>;
 	onRetry?: (localKey: string) => void;
+	/** #274: 自分の sent メッセージを削除する callback. 未指定なら delete UI 非表示。 */
+	onDelete?: (messageId: number) => void;
 }
 
 const NEAR_BOTTOM_PX = 80;
@@ -34,6 +36,7 @@ export default function MessageList({
 	currentUserId,
 	pendingByClientKey,
 	onRetry,
+	onDelete,
 }: MessageListProps) {
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const lastLengthRef = useRef(0);
@@ -78,6 +81,7 @@ export default function MessageList({
 							currentUserId={currentUserId}
 							status={status}
 							onRetry={onRetry ? () => onRetry(localKey) : undefined}
+							onDelete={onDelete}
 						/>
 					);
 				})}
