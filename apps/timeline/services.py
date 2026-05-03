@@ -111,16 +111,21 @@ def _dedup_repost_originals(tweets: Iterable[Tweet]) -> list[Tweet]:
 
 
 def _query_following(user, blocked_ids: set[int], limit: int) -> list[Tweet]:
-    """フォロー候補 (70%): 24h 以内のフォロイーのツイート (original / repost / reply / quote)."""
+    """フォロー候補 (70%): 24h 以内のフォロイー OR 自分のツイート.
+
+    #311: 旧実装は `.exclude(author=user)` で self を除外していたが、
+    X / Twitter の慣習に合わせて home TL に self tweet を含める。新規ユーザー
+    (フォロー 0 人) も投稿後すぐに自 TL で確認できる UX を保証する。
+    """
     cutoff = timezone.now() - timedelta(hours=24)
     qs = (
         Tweet.objects.select_related("author", "repost_of")
         .filter(
-            author__follower_set__follower=user,  # フォロイーのツイート
+            # フォロイーのツイート OR 自分のツイート
+            Q(author__follower_set__follower=user) | Q(author=user),
             created_at__gte=cutoff,
         )
         .exclude(author_id__in=blocked_ids)
-        .exclude(author=user)  # 自分のツイートは TL に出さない
         .order_by("-created_at")[:limit]
     )
     return list(qs)
