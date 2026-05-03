@@ -7,6 +7,7 @@
  * 自分が参加中の DM ルーム一覧を表示。
  */
 
+import { getCookie } from "cookies-next";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -19,11 +20,17 @@ export default function MessagesPage() {
 	const { isAuthenticated } = useAppSelector((state) => state.auth);
 	const { profile, isLoading } = useUserProfile();
 
+	// 認証チェック (#269): cookie (`logged_in`) を直接読んで判定する。
+	// PersistAuth (app/layout.tsx) の useEffect は本ページ useEffect より「後」に
+	// 走るため、Redux の `isAuthenticated` だけ見ると cold load (page.goto 等)
+	// で常に false → 即 /login に redirect される race が起きる。
+	// cookie を直接読めば、まだ Redux が hydrate されていなくても正しく判定できる。
 	useEffect(() => {
-		if (!isAuthenticated && !isLoading) {
+		const isLoggedIn = getCookie("logged_in") === "true";
+		if (!isLoggedIn) {
 			router.replace("/login?next=/messages");
 		}
-	}, [isAuthenticated, isLoading, router]);
+	}, [router]);
 
 	if (!isAuthenticated || !profile) {
 		return (
