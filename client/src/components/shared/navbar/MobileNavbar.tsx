@@ -7,36 +7,95 @@ import {
 	SheetFooter,
 	SheetTrigger,
 } from "@/components/ui/sheet";
-import { leftNavLinks } from "@/constants";
 import { useAuthNavigation } from "@/hooks";
+import { useUserProfile } from "@/hooks/useUseProfile";
+import type { LeftNavIconName, LeftNavLink } from "@/types";
 import { HomeModernIcon } from "@heroicons/react/24/solid";
+import { Compass, Home, MessageSquare, Search, User } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ComponentType } from "react";
+
+const ICON_MAP: Record<
+	LeftNavIconName,
+	ComponentType<{ className?: string }>
+> = {
+	Home,
+	Compass,
+	Search,
+	MessageSquare,
+	User,
+};
+
+function resolveLinkPath(
+	link: LeftNavLink,
+	selfHandle: string | undefined,
+): string | null {
+	if (!link.isProfile) return link.path;
+	if (!selfHandle) return null;
+	return `/u/${selfHandle}`;
+}
+
+function NavIcon({ link, isActive }: { link: LeftNavLink; isActive: boolean }) {
+	if (link.iconName) {
+		const Icon = ICON_MAP[link.iconName];
+		return (
+			<Icon
+				className={`size-[22px] ${isActive ? "text-babyPowder" : "text-baby_richBlack dark:text-babyPowder"}`}
+			/>
+		);
+	}
+	if (link.imgLocation) {
+		return (
+			<Image
+				src={link.imgLocation}
+				alt=""
+				width={22}
+				height={22}
+				className={`${isActive ? "" : "color-invert"}`}
+			/>
+		);
+	}
+	return null;
+}
 
 function LeftNavContent() {
 	const pathname = usePathname();
 
 	const { filteredNavLinks } = useAuthNavigation();
+	const { profile } = useUserProfile();
+	const selfHandle = profile?.username;
+
 	return (
-		<section className="flex h-full flex-col gap-6 pt-16">
+		<nav
+			aria-label="メインナビゲーション"
+			className="flex h-full flex-col gap-2 pt-16"
+		>
 			{filteredNavLinks.map((linkItem) => {
+				const href = resolveLinkPath(linkItem, selfHandle);
+				if (!href) {
+					return (
+						<span
+							key={linkItem.label}
+							aria-disabled="true"
+							className="text-baby_richBlack/50 flex items-center justify-start gap-4 p-4"
+						>
+							<NavIcon link={linkItem} isActive={false} />
+							<p className="base-medium">{linkItem.label}</p>
+						</span>
+					);
+				}
 				const isActive =
-					(pathname.includes(linkItem.path) && linkItem.path.length > 1) ||
-					pathname === linkItem.path;
+					(pathname.includes(href) && href.length > 1) || pathname === href;
 				return (
-					<SheetClose asChild key={linkItem.path}>
+					<SheetClose asChild key={linkItem.label}>
 						<Link
-							href={linkItem.path}
+							href={href}
+							aria-current={isActive ? "page" : undefined}
 							className={`${isActive ? "electricIndigo-gradient text-babyPowder rounded-lg" : "text-baby_richBlack"} flex items-center justify-start gap-4 bg-transparent p-4`}
 						>
-							<Image
-								src={linkItem.imgLocation}
-								alt={linkItem.label}
-								width={22}
-								height={22}
-								className={`${isActive ? "" : "color-invert"}`}
-							/>
+							<NavIcon link={linkItem} isActive={isActive} />
 							<p className={`${isActive ? "base-bold" : "base-medium"}`}>
 								{linkItem.label}
 							</p>
@@ -44,7 +103,7 @@ function LeftNavContent() {
 					</SheetClose>
 				);
 			})}
-		</section>
+		</nav>
 	);
 }
 

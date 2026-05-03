@@ -24,18 +24,10 @@ export function useAuthNavigation() {
 		}
 	};
 
+	// #297: 旧 hard-code path 列挙ではなく、各 link の `requiresAuth` flag で
+	// 判定する。新規 link 追加時に hook を触らずに constants だけで完結する。
 	const filteredNavLinks = leftNavLinks.filter((link) => {
-		if (
-			link.path === "/profile" ||
-			link.path === "/tenants" ||
-			link.path === "/bookmark" ||
-			link.path === "/report-issue" ||
-			link.path === "/report-tenant" ||
-			link.path === "/technicians" ||
-			link.path === "/add_post"
-		) {
-			return isAuthenticated;
-		}
+		if (link.requiresAuth) return isAuthenticated;
 		return true;
 	});
 
