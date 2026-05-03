@@ -368,6 +368,11 @@ COOKIE_SAMESITE = "Lax"
 COOKIE_PATH = "/"
 COOKIE_HTTPONLY = True
 COOKIE_SECURE = getenv("COOKIE_SECURE", "False").lower() == "true"
+# #281 follow-up: stg/prod で wss を別 subdomain (ws.stg.codeplace.me) に分けたため、
+# cookies を親 domain (.stg.codeplace.me) に設定して subdomain 間で共有する。
+# 未設定 (= local) では cookie の domain は request host に固定される (subdomain
+# 共有しない)。stg/prod では env で `.stg.codeplace.me` 等を設定すること。
+COOKIE_DOMAIN: str | None = getenv("COOKIE_DOMAIN") or None
 
 if SENTRY_ENVIRONMENT in ("stg", "production") and not COOKIE_SECURE:
     from django.core.exceptions import ImproperlyConfigured

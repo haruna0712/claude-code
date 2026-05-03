@@ -57,13 +57,18 @@ def set_auth_cookies(
     response: Response, access_token: str, refresh_token: str | None = None
 ) -> None:
     access_token_lifetime = settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()
-    cookie_settings = {
+    cookie_settings: dict[str, object] = {
         "path": settings.COOKIE_PATH,
         "secure": settings.COOKIE_SECURE,
         "httponly": settings.COOKIE_HTTPONLY,
         "samesite": settings.COOKIE_SAMESITE,
         "max_age": access_token_lifetime,
     }
+    # #281 follow-up: stg/prod で wss を ws.<domain> サブドメインに分離したため、
+    # 親 domain (.stg.codeplace.me 等) で cookie を発行して subdomain 間で共有する。
+    # 未設定 (local) は host-only cookie のまま。
+    if settings.COOKIE_DOMAIN:
+        cookie_settings["domain"] = settings.COOKIE_DOMAIN
     response.set_cookie(settings.COOKIE_NAME, access_token, **cookie_settings)
 
     if refresh_token:
@@ -91,15 +96,18 @@ def _delete_auth_cookie(response: Response, name: str) -> None:
     delete 指示する。
     """
 
-    response.set_cookie(
-        name,
-        "",
-        max_age=0,
-        path=settings.COOKIE_PATH,
-        secure=settings.COOKIE_SECURE,
-        httponly=settings.COOKIE_HTTPONLY,
-        samesite=settings.COOKIE_SAMESITE,
-    )
+    delete_kwargs: dict[str, object] = {
+        "max_age": 0,
+        "path": settings.COOKIE_PATH,
+        "secure": settings.COOKIE_SECURE,
+        "httponly": settings.COOKIE_HTTPONLY,
+        "samesite": settings.COOKIE_SAMESITE,
+    }
+    # #281 follow-up: 削除も同 domain で発行しないとブラウザが別 cookie 扱いして
+    # クライアント側に古い cookie が残る。set 時と同じ domain attr を使う。
+    if settings.COOKIE_DOMAIN:
+        delete_kwargs["domain"] = settings.COOKIE_DOMAIN
+    response.set_cookie(name, "", **delete_kwargs)
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
