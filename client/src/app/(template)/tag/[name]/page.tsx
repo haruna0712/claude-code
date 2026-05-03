@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
-import { sanitizeTweetHtml } from "@/lib/sanitize/sanitizeTweetHtml";
 
 interface TagDetail {
 	name: string;
@@ -108,37 +108,13 @@ export default async function TagPage({ params }: PageProps) {
 				<h2 id="tweets-heading" className="mb-3 text-lg font-semibold">
 					このタグのツイート
 				</h2>
-				{tweets.length === 0 ? (
-					<p className="text-sm text-muted-foreground">
-						まだこのタグのツイートはありません。
-					</p>
-				) : (
-					<ul className="space-y-4">
-						{tweets.map((t) => (
-							<li key={t.id}>
-								<article className="rounded-lg border bg-card p-4 shadow-sm">
-									<a href={`/tweet/${t.id}`} className="block">
-										<div className="mb-2 text-sm font-semibold">
-											@{t.author_handle}
-										</div>
-										<div
-											className="prose prose-sm dark:prose-invert max-w-none"
-											dangerouslySetInnerHTML={{
-												__html: sanitizeTweetHtml(t.html),
-											}}
-										/>
-										<time
-											dateTime={t.created_at}
-											className="mt-2 block text-xs text-muted-foreground"
-										>
-											{new Date(t.created_at).toLocaleString("ja-JP")}
-										</time>
-									</a>
-								</article>
-							</li>
-						))}
-					</ul>
-				)}
+				{/* #301: 旧 inline link 列挙を TweetCardList に置換。リアクション
+				    / RT / 「もっと見る」展開が動作する。 */}
+				<TweetCardList
+					tweets={tweets}
+					ariaLabel={`${tag.display_name} タグのツイート`}
+					emptyMessage="まだこのタグのツイートはありません。"
+				/>
 			</section>
 		</main>
 	);

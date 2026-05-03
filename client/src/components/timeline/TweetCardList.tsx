@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * TweetCardList (#298).
+ * TweetCardList (#298 / #301).
  *
  * Server Component から受け取った tweet 配列を Client な TweetCard で render する
  * 薄いラッパ。/u/[handle] / /tweet/[id] / /tag/[name] / /explore など、
