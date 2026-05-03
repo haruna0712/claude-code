@@ -46,12 +46,36 @@ const baseQuery = fetchBaseQuery({
 	},
 });
 
+/**
+ * stg/prod では login レスポンスに csrftoken cookie が乗らない (cookie_create_view
+ * は @ensure_csrf_cookie を持たない) ため、初回 mutation 時に document.cookie 上
+ * に csrftoken が無いと X-CSRFToken header が空になり Django が 403 を返す。
+ * 本 helper は mutation 直前に csrftoken cookie 不在を検知したら GET /auth/csrf/
+ * (axios client と同じ endpoint) で 1 回 seed する。SSR では document が無いので
+ * no-op。
+ */
+async function ensureCsrfCookie(): Promise<void> {
+	if (typeof document === "undefined") return;
+	if (readCsrfTokenFromCookie()) return;
+	try {
+		await fetch("/api/v1/auth/csrf/", { credentials: "include" });
+	} catch {
+		// network error は呼び出し側 mutation 自体が拾うので握りつぶす。
+	}
+}
+
 const baseQueryWithReauth: BaseQueryFn<
 	string | FetchArgs,
 	unknown,
 	FetchBaseQueryError
 > = async (args, api, extraOptions) => {
 	await mutex.waitForUnlock();
+
+	// mutation の場合だけ csrftoken cookie の seed を保証する。
+	// (api.type は createApi 内部で "query" | "mutation" として渡される)
+	if ((api as { type?: string }).type === "mutation") {
+		await ensureCsrfCookie();
+	}
 
 	let response = await baseQuery(args, api, extraOptions);
 
