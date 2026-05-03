@@ -67,6 +67,26 @@ afterEach(() => {
 
 const factory = (url: string) => new MockWebSocket(url) as unknown as WebSocket;
 
+describe("deriveWsHost (#281)", () => {
+	it("codeplace.me 系は ws.* に差し替え", () => {
+		expect(__internals.deriveWsHost("stg.codeplace.me")).toBe(
+			"ws.stg.codeplace.me",
+		);
+		expect(__internals.deriveWsHost("codeplace.me")).toBe("ws.codeplace.me");
+	});
+
+	it("既に ws.* なら二重付与しない", () => {
+		expect(__internals.deriveWsHost("ws.stg.codeplace.me")).toBe(
+			"ws.stg.codeplace.me",
+		);
+	});
+
+	it("local 開発 host (localhost / nginx) はそのまま", () => {
+		expect(__internals.deriveWsHost("localhost:8080")).toBe("localhost:8080");
+		expect(__internals.deriveWsHost("nginx")).toBe("nginx");
+	});
+});
+
 describe("useDMSocket", () => {
 	it("roomId が null なら closed のまま", () => {
 		const { result } = renderHook(() =>
