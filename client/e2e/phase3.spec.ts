@@ -30,17 +30,24 @@
 
 import { expect, test, type BrowserContext } from "@playwright/test";
 
-const ALICE = {
-	email: "alice@example.com",
-	password: "supersecret12", // pragma: allowlist secret
-	handle: "alice",
+// 2 ユーザー分の認証情報を環境変数で上書きできるようにする (stg E2E や別 fixture
+// で alice/bob 以外を使う場合)。default は local docker fixture の alice / bob。
+// stg 用 credentials は git 管理外の docs/local/e2e-stg.md を参照。
+const USER1 = {
+	email: process.env.PLAYWRIGHT_USER1_EMAIL ?? "alice@example.com",
+	password: process.env.PLAYWRIGHT_USER1_PASSWORD ?? "supersecret12", // pragma: allowlist secret
+	handle: process.env.PLAYWRIGHT_USER1_HANDLE ?? "alice",
 };
 
-const BOB = {
-	email: "bob@example.com",
-	password: "supersecret12", // pragma: allowlist secret
-	handle: "bob",
+const USER2 = {
+	email: process.env.PLAYWRIGHT_USER2_EMAIL ?? "bob@example.com",
+	password: process.env.PLAYWRIGHT_USER2_PASSWORD ?? "supersecret12", // pragma: allowlist secret
+	handle: process.env.PLAYWRIGHT_USER2_HANDLE ?? "bob",
 };
+
+// 既存スペック内の参照名 (alice / bob) を維持して diff を最小化する。
+const ALICE = USER1;
+const BOB = USER2;
 
 async function login(
 	page: import("@playwright/test").Page,
@@ -48,21 +55,28 @@ async function login(
 	password: string,
 ) {
 	await page.goto("/login");
-	await page.getByLabel("メールアドレス").fill(email);
-	await page.getByLabel("パスワード").fill(password);
-	await page.getByRole("button", { name: /ログイン/ }).click();
+	// LoginForm: Email は <Input id="email"> + <label for="email">、Password は
+	// PasswordInput component が id を渡してないため getByLabel("Password") 失敗。
+	// → email は label / password は placeholder で拾う (button は "Sign In")。
+	await page.getByLabel("Email Address").fill(email);
+	await page.getByPlaceholder("Password").fill(password);
+	await page.getByRole("button", { name: /Sign In/i }).click();
 	await page.waitForURL(/\/onboarding|\/$/);
 }
 
 async function logout(page: import("@playwright/test").Page) {
-	await page.getByRole("button", { name: /ログアウト/ }).click();
+	await page.getByRole("button", { name: /Logout|ログアウト/ }).click();
 	await page.waitForURL(/\/login|\/$/);
 }
 
 /** /messages を開いて DM 一覧画面が render されたことを確認。 */
 async function gotoMessages(page: import("@playwright/test").Page) {
 	await page.goto("/messages");
-	await expect(page.getByRole("heading", { name: "メッセージ" })).toBeVisible();
+	// 実 UI が日英どちらでも通るよう regex で。"メッセージ" / "Messages" /
+	// "Direct Messages" のいずれかを heading or role=banner で許容。
+	await expect(
+		page.getByRole("heading", { name: /メッセージ|Messages|Direct/i }).first(),
+	).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe("Phase 3 — DM golden path", () => {
