@@ -111,14 +111,25 @@ export default function MobileNavbar() {
 	const { handleLogout, isAuthenticated } = useAuthNavigation();
 	return (
 		<Sheet>
-			<SheetTrigger asChild className="cursor-pointer">
-				<Image
-					src="/assets/icons/mobile-menu.svg"
-					alt="Mobile Menu"
-					width={36}
-					height={36}
-					className="invert-colors sm:hidden"
-				/>
+			{/* a11y: Image を直接 SheetTrigger の child にすると button role が
+			    付かず SR / keyboard で operable と認識されない (WCAG 4.1.2)。
+			    button でラップ + aria-label でメニューを開く意図を明示。
+			    sm:hidden は親 button 側に移し、icon は装飾として aria-hidden。 */}
+			<SheetTrigger asChild>
+				<button
+					type="button"
+					aria-label="メインナビゲーションを開く"
+					className="cursor-pointer sm:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+				>
+					<Image
+						src="/assets/icons/mobile-menu.svg"
+						alt=""
+						aria-hidden="true"
+						width={36}
+						height={36}
+						className="invert-colors"
+					/>
+				</button>
 			</SheetTrigger>
 			<SheetContent side="left" className="bg-baby_rich border-none">
 				<Link href="/" className="flex items-center gap-1">
