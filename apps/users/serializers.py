@@ -116,12 +116,29 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     ``GET /api/v1/users/<handle>/`` で使用。未ログインでも閲覧可能。
 
     公開する: display_name, bio, avatar_url, header_url, SNS URL 6 種,
-              @handle (username), full_name, date_joined
+              @handle (username), full_name, date_joined,
+              is_following (#296: ログイン中なら閲覧者がこの handle を follow 中か)
     公開しない: id, email, is_premium, needs_onboarding, first_name, last_name
     (= 内部 flag / PII を漏らさない)
     """
 
     full_name = serializers.ReadOnlyField()
+    # #296: FollowButton の初期状態判定用。ログイン中の閲覧者が target handle を
+    # フォローしているか。未ログイン時 / 自分自身 / target 不在は false。
+    # 1 query (Follow.objects.filter(...).exists()) で済むので N+1 リスク無し。
+    is_following = serializers.SerializerMethodField()
+
+    def get_is_following(self, obj: User) -> bool:
+        request = self.context.get("request")
+        if not request or not getattr(request, "user", None):
+            return False
+        viewer = request.user
+        if not viewer.is_authenticated or viewer.pk == obj.pk:
+            return False
+        # circular import 回避のため遅延 import (apps.follows は users に依存)
+        from apps.follows.models import Follow
+
+        return Follow.objects.filter(follower=viewer, followee=obj).exists()
 
     class Meta:
         model = User
@@ -139,6 +156,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             "linkedin_url",
             "full_name",
             "date_joined",
+            "is_following",
         ]
         # 公開 API はすべて read_only (PATCH は /me/ 経由のみ)。
         # ``fields`` と同じ list を参照させると、DRF 内部で片方に mutate が走った
