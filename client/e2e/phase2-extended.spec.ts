@@ -43,7 +43,14 @@ async function login(
 	// 日英 fallback (#294)
 	await page.getByLabel(/Email Address|メール/i).fill(email);
 	await page.getByPlaceholder(/Password|パスワード/i).fill(password);
-	await page.getByRole("button", { name: /Sign In|ログイン/i }).click();
+	// 「Google でログイン」 button にも /ログイン/ が match するので exact match
+	// で submit button だけに絞る。
+	const submit = page.getByRole("button", { name: "Sign In", exact: true });
+	if (await submit.isVisible().catch(() => false)) {
+		await submit.click();
+	} else {
+		await page.getByRole("button", { name: "ログイン", exact: true }).click();
+	}
 	await page.waitForURL(/\/onboarding|\/$/);
 }
 
@@ -59,12 +66,23 @@ test.describe("Phase 2 拡張 — post-reload / LeftNav / profile 導線", () =>
 
 		const marker = `tl-self-${Date.now()}`;
 		await composer.fill(marker);
-		await page.getByRole("button", { name: "投稿", exact: true }).click();
 
-		// 投稿直後に visible
+		// composer は楽観 UI で marker を即時表示するが、POST が完了する前に
+		// reload() すると request がキャンセルされて永続化されないことがある。
+		// waitForResponse で POST 201 を確認してから reload する。
+		const postResponse = page.waitForResponse(
+			(res) =>
+				res.url().includes("/api/v1/tweets/") &&
+				res.request().method() === "POST",
+		);
+		await page.getByRole("button", { name: "投稿", exact: true }).click();
+		const res = await postResponse;
+		expect(res.status(), "POST /tweets/ は 201").toBe(201);
+
+		// 投稿直後に visible (楽観 or サーバ確定後)
 		await expect(page.getByText(marker)).toBeVisible({ timeout: 10_000 });
 
-		// リロード後も依然 visible (#311 home TL に self が含まれる)
+		// リロード後も依然 visible (#311 home TL に self が含まれる + cache invalidate)
 		await page.reload();
 		await expect(page.getByText(marker)).toBeVisible({ timeout: 15_000 });
 	});
