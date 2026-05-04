@@ -245,3 +245,10 @@ conversations/
 
 # terraform plan 出力 (#281 の作業中に追加、commit しない)
 terraform/environments/*/phase*.tfplan
+
+# Playwright / browser MCP のデバッグ出力 (a11y snapshot, console log,
+# trace, video, screenshot)。ローカル / 検証時のみ生成される、commit 不要。
+.playwright-mcp/
+client/playwright-report/
+client/test-results/
+test-results/
