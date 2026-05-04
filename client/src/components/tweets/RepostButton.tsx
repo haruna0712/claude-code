@@ -136,7 +136,7 @@ export default function RepostButton({
 					<DropdownMenuItem
 						onSelect={(e) => {
 							e.preventDefault();
-							void handleUnrepost();
+							handleUnrepost();
 						}}
 					>
 						リポストを取り消す
@@ -145,7 +145,7 @@ export default function RepostButton({
 					<DropdownMenuItem
 						onSelect={(e) => {
 							e.preventDefault();
-							void handleRepost();
+							handleRepost();
 						}}
 					>
 						リポスト
