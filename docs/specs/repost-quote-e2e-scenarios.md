@@ -24,19 +24,19 @@
 
 ## 2. 検証シナリオ一覧
 
-| #                  | 現状態 `(reposted, quoted)` | action                           | 期待結果                                          | 結果 (2026-05-04 stg)       | 備考                                                                   |
-| ------------------ | --------------------------- | -------------------------------- | ------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------- |
-| **bug-fix verify** | (任意)                      | menu「引用」 click → Dialog open | Dialog が即時 close せず 1 秒以上 visible         | ✅ **PASS** (8.9s)          | #349 fix の有効性を実機で確認                                          |
-| **1**              | (No, No)                    | リポスト押下                     | (Yes, No), `aria-label='リポスト済み'`, repost +1 | ❌ blocked by #351          | API は 200/201 だが UI に反映されない (#351)                           |
-| **2**              | (No, No)                    | 引用 + 投稿                      | (No, Yes), quote +1                               | ⏸ did not run              | sc1 fail で serial 中断                                                |
-| **3**              | (Yes, No)                   | リポストを取り消す               | (No, No), `aria-label='リポスト'` 復帰, repost -1 | ⏸ did not run              | sc1 fail で serial 中断                                                |
-| **4**              | (Yes, No)                   | 引用 + 投稿                      | (Yes, Yes), 既存 REPOST 残存                      | ⏸ did not run              | sc1 fail で serial 中断 (ハルナさん指摘ポイント)                       |
-| **5**              | (No, Yes)                   | リポスト押下                     | (Yes, Yes), 既存 QUOTE 群残存                     | ⏸ did not run              | (シナリオ 4 と対称、現 spec では 4 / 6 / 7+8 でカバー)                 |
-| **6**              | (No, Yes)                   | 引用 + 投稿                      | (No, Yes) のまま件数 +1                           | ⏸ did not run              | 状態不変、count のみ                                                   |
-| **7**              | (Yes, Yes)                  | リポストを取り消す               | (No, Yes), QUOTE 群そのまま                       | ⏸ did not run              | spec ではシナリオ 7+8 連結                                             |
-| **8**              | (Yes, Yes)                  | 引用 + 投稿                      | (Yes, Yes) keep, count +1                         | ⏸ did not run              | spec ではシナリオ 7+8 連結                                             |
-| **9**              | 削除済み tweet              | 詳細 navigate / 操作             | 404 もしくは tombstone                            | ⏸ did not run              | #347 関連                                                              |
-| **10**             | REPOST tweet 起点           | リポスト                         | repost_of (= 元 tweet) を target にする           | ✅ サーバ pytest で検証済み | #346 で apps/tweets/tests/test_actions_api.py に integration test あり |
+| #                  | 現状態 `(reposted, quoted)` | action                           | 期待結果                                          | 結果 (2026-05-04 stg, #351 修正後) | 備考                                                                   |
+| ------------------ | --------------------------- | -------------------------------- | ------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------- |
+| **bug-fix verify** | (任意)                      | menu「引用」 click → Dialog open | Dialog が即時 close せず 1 秒以上 visible         | ✅ **PASS**                        | #349 fix の有効性を実機で確認                                          |
+| **1**              | (No, No)                    | リポスト押下                     | (Yes, No), `aria-label='リポスト済み'`, repost +1 | ✅ **PASS**                        | #351 修正後に通過                                                      |
+| **2**              | (No, No)                    | 引用 + 投稿                      | (No, Yes), quote +1                               | (spec 未実装)                      | sc4 が (Yes,No)→引用 を網羅                                            |
+| **3**              | (Yes, No)                   | リポストを取り消す               | (No, No), `aria-label='リポスト'` 復帰, repost -1 | ❌ Radix interaction flake (#354)  | API DELETE が呼ばれず 60s timeout (Radix pointer-events 残留)          |
+| **4**              | (Yes, No)                   | 引用 + 投稿                      | (Yes, Yes), 既存 REPOST 残存                      | ⏸ did not run                     | sc3 fail で serial 中断 (ハルナさん指摘ポイント)                       |
+| **5**              | (No, Yes)                   | リポスト押下                     | (Yes, Yes), 既存 QUOTE 群残存                     | (spec 未実装)                      | シナリオ 4 と対称                                                      |
+| **6**              | (No, Yes)                   | 引用 + 投稿                      | (No, Yes) のまま件数 +1                           | ⏸ did not run                     | sc3 fail で serial 中断                                                |
+| **7**              | (Yes, Yes)                  | リポストを取り消す               | (No, Yes), QUOTE 群そのまま                       | ⏸ did not run                     | sc3 fail で serial 中断                                                |
+| **8**              | (Yes, Yes)                  | 引用 + 投稿                      | (Yes, Yes) keep, count +1                         | ⏸ did not run                     | sc3 fail で serial 中断                                                |
+| **9**              | 削除済み tweet              | 詳細 navigate / 操作             | 404 もしくは tombstone                            | ⏸ did not run                     | sc3 fail で serial 中断、#347 関連                                     |
+| **10**             | REPOST tweet 起点           | リポスト                         | repost_of (= 元 tweet) を target にする           | ✅ サーバ pytest で検証済み        | #346 で apps/tweets/tests/test_actions_api.py に integration test あり |
 
 > spec ファイル: `client/e2e/repost-quote-state-machine.spec.ts`
 
@@ -69,6 +69,25 @@
 
 **verify**: 本 spec の 「PostDialog 即時 close 不具合の検証」 テストが click 後 1 秒以上 textarea が visible かつ URL が `/tweet/<id>` に飛んでいないことをアサート。**2026-05-04 stg で PASS 確認済み**。
 
+### 3.3 Radix DropdownMenu と Playwright の click intercept 問題 (発見日: 2026-05-04, シナリオ 3 で発覚)
+
+**症状**: シナリオ 3 (`(Yes, No) → 取消 → (No, No)`) を実行すると、menu「リポストを取り消す」 click 後に DELETE API が呼ばれず 60 秒 timeout で fail する。
+
+**原因**: Radix DropdownMenu は menu open 中 body / html に `pointer-events: none` と `aria-hidden=true` を設定して focus trap を実現する。menu close → trigger button が aria-hidden=true のまま残るタイミングがあり、click が `<html> intercepts pointer events` で blocked される (Playwright trace で確認)。
+
+**現 spec の回避策** (限定的):
+
+- `clickMenuItem(page, name)` helper で menuitem click 後に `waitForTimeout(500)` を挟む
+- DOM query (`page.locator('[aria-label="..."]')`) で role-based query (a11y tree 経由) を回避
+- `click({ force: true })` で pointer-events 介入を無視
+
+これでシナリオ 1 までは通るが、シナリオ 3 のような **menu 連続 open/close** のパターンで依然 flaky。完全解消には別 issue (#354 候補) で対応:
+
+- spec 全体を visit-per-action にして連続 menu open を分散
+- もしくは Radix の `modal={false}` props 検証 (focus trap 無効化)
+
+**シナリオ 1 / bug-fix verify が PASS した時点で #351 修正の核心 (= reposted_by_me が UI に反映される) は実証済み**。
+
 ### 3.2 RepostButton の永続状態が UI に反映されない (発見日: 2026-05-04, 別 issue #351)
 
 **症状**: シナリオ 1 (`(No, No) → リポスト → (Yes, No)`) を spec で実行すると、リポスト API は 201 で成功するが、5 秒待っても `aria-label='リポスト済み'` の button が見つからず fail する。同 spec で serial mode のため シナリオ 2-9 が did_not_run。
@@ -79,9 +98,9 @@
 - API call 後に `setReposted(true)` で local state は更新されるが、page reload / re-render するとリセット
 - `/tweet/<id>` (server component) に goto した直後は server-fetched data に `reposted_by_me` が無いため、再 mount 時の `initialReposted` 値も復元できない
 
-**対応**: backend serializer に `reposted_by_me: bool` を追加 + frontend の TweetCard が RepostButton.initialReposted に渡す。**Issue #351 で別途起票して Phase 2 内で対応予定**。
+**対応**: backend serializer に `reposted_by_me: bool` を追加 + frontend の TweetCard が RepostButton.initialReposted に渡す。**Issue #351 / PR #353 で実装済み (2026-05-04 merged)**。
 
-**E2E spec への影響**: シナリオ 1-9 の自動実行は Issue #351 解消後に再走行する。本 PR の docs はそれを既知制約として記録。
+**E2E spec への影響**: シナリオ 1 / bug-fix verify は #351 修正後に PASS、状態の永続復元が実機で動作することを確認した。残るシナリオ 3 以降の did_not_run は §3.3 の Radix interaction 問題 (別 follow-up) が原因で、機能本体の問題ではない。
 
 ---
 
