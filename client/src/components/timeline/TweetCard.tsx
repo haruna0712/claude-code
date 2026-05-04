@@ -138,8 +138,11 @@ export default function TweetCard({
 		tweet.type === "repost" && tweet.repost_of ? tweet.repost_of.id : tweet.id;
 	const navigateToDetail = useCallback(
 		(e: React.MouseEvent | React.KeyboardEvent) => {
-			const target = e.target as HTMLElement;
-			if (target.closest("a, button, [role='button'], textarea, input")) return;
+			// e.target は EventTarget 型で Text node / 純 EventTarget の場合 closest を
+			// 持たないため、Element に narrow してから判定する。
+			if (!(e.target instanceof Element)) return;
+			if (e.target.closest("a, button, [role='button'], textarea, input"))
+				return;
 			if (typeof window !== "undefined") {
 				const sel = window.getSelection?.();
 				if (sel && sel.toString().length > 0) return;
@@ -151,9 +154,9 @@ export default function TweetCard({
 	const onCardKeyDown = useCallback(
 		(e: React.KeyboardEvent) => {
 			if (e.key === "Enter" || e.key === " ") {
-				const target = e.target as HTMLElement;
+				if (!(e.target instanceof Element)) return;
 				// 内部の interactive element に focus がある場合はそちらの動作優先
-				if (target.closest("a, button, [role='button'], textarea, input"))
+				if (e.target.closest("a, button, [role='button'], textarea, input"))
 					return;
 				e.preventDefault();
 				navigateToDetail(e);

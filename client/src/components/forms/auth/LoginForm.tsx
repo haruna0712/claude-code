@@ -51,9 +51,12 @@ export default function LoginForm() {
 					dest = "/onboarding";
 				}
 			} catch {
-				// /users/me/ 取得失敗時は安全側で /onboarding に倒す (新規ユーザーの
-				// 可能性、Guard が再評価して /onboarding 不要なら / に redirect する)。
-				dest = "/onboarding";
+				// /users/me/ 取得失敗 (transient network / 503 / cookie race) は
+				// 既存ユーザーが多い前提で / にフォールバックする。useOnboardingGuard
+				// が後続でユーザーを fetch して、本当に needs_onboarding=true なら
+				// /onboarding に redirect する。新規ユーザーが flash で /onboarding に
+				// 遷移するのは Guard 側の責務とし、login の fetch fail で全員を
+				// /onboarding に倒す方が UX 退化が大きい。
 			}
 			router.push(dest);
 			reset();
