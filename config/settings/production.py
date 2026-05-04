@@ -73,3 +73,23 @@ STATIC_URL = "/static/"
 
 # Logging: stg/prod は structlog の JSONRenderer (base.py で env=stg/production
 # のとき自動切替)。CloudWatch Logs に JSON 行で出る前提。
+
+# #336: stg 限定で DRF throttle rate を緩和する。
+# 本番値 (user: 500/day) のままでは E2E spec の連続走行や開発検証で
+# rate-limit (#349 / #354 で実証) に hit するため、stg のみ 10x にする。
+# 認証系 (login: 5/min) や DM presign 等の **abuse 防止が目的の throttle**
+# は据え置き、user / anon / post_tweet_tier_* / reaction だけ緩和する。
+# 本番には影響しない (SENTRY_ENVIRONMENT=production のとき分岐を踏まない)。
+if SENTRY_ENVIRONMENT == "stg":
+    REST_FRAMEWORK = {
+        **REST_FRAMEWORK,
+        "DEFAULT_THROTTLE_RATES": {
+            **REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"],
+            "anon": "2000/day",
+            "user": "5000/day",
+            "post_tweet_tier_1": "1000/day",
+            "post_tweet_tier_2": "5000/day",
+            "post_tweet_tier_3": "10000/day",
+            "reaction": "600/min",
+        },
+    }
