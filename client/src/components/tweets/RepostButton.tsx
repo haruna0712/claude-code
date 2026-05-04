@@ -35,6 +35,10 @@ interface RepostButtonProps {
 	 * 上位 (HomeFeed 等) で TL に prepend して即時反映するために使う。
 	 */
 	onPosted?: (tweet: TweetSummary) => void;
+	/** repost 成功時に親カードの count などを即時更新する。 */
+	onReposted?: () => void;
+	/** unrepost 成功時に親カード/TL を即時更新する。 */
+	onUnreposted?: () => void;
 	/**
 	 * #342: menu「引用」 を選択したときに親に通知。親 (TweetCard) は
 	 * PostDialog mode="quote" を open する。
@@ -46,6 +50,8 @@ export default function RepostButton({
 	tweetId,
 	initialReposted = false,
 	onPosted,
+	onReposted,
+	onUnreposted,
 	onQuoteRequest,
 }: RepostButtonProps) {
 	const [reposted, setReposted] = useState(initialReposted);
@@ -61,6 +67,7 @@ export default function RepostButton({
 		try {
 			const result = await repostTweet(tweetId);
 			setStatusMsg("リポストしました");
+			onReposted?.();
 			if (onPosted) {
 				try {
 					const full = await fetchTweet(result.id);
@@ -86,6 +93,7 @@ export default function RepostButton({
 		try {
 			await unrepostTweet(tweetId);
 			setStatusMsg("リポストを取り消しました");
+			onUnreposted?.();
 		} catch {
 			setReposted(true);
 			toast.error("リポストを取り消せませんでした");

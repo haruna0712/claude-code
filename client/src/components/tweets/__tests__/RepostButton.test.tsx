@@ -77,13 +77,15 @@ describe("RepostButton (#342 menu)", () => {
 			repost_of: 1,
 			created: true,
 		});
-		render(<RepostButton tweetId={1} />);
+		const onReposted = vi.fn();
+		render(<RepostButton tweetId={1} onReposted={onReposted} />);
 		await userEvent.click(screen.getByRole("button", { name: triggerName }));
 		await userEvent.click(
 			await screen.findByRole("menuitem", { name: "リポスト" }),
 		);
 		await waitFor(() => {
 			expect(repostTweet).toHaveBeenCalledWith(1);
+			expect(onReposted).toHaveBeenCalled();
 		});
 		// reposted=true 状態では aria-label が「リポスト済み」に切り替わる (DOM 直接
 		// query を使うのは Radix が menu open 中 body を scroll-lock するため)。
@@ -96,13 +98,17 @@ describe("RepostButton (#342 menu)", () => {
 
 	it("menu「リポストを取り消す」 → DELETE unrepost", async () => {
 		vi.mocked(unrepostTweet).mockResolvedValue();
-		render(<RepostButton tweetId={5} initialReposted />);
+		const onUnreposted = vi.fn();
+		render(
+			<RepostButton tweetId={5} initialReposted onUnreposted={onUnreposted} />,
+		);
 		await userEvent.click(screen.getByRole("button", { name: triggerName }));
 		await userEvent.click(
 			await screen.findByRole("menuitem", { name: "リポストを取り消す" }),
 		);
 		await waitFor(() => {
 			expect(unrepostTweet).toHaveBeenCalledWith(5);
+			expect(onUnreposted).toHaveBeenCalled();
 		});
 	});
 

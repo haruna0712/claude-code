@@ -100,7 +100,11 @@ export default async function HomePage({
 
 	return (
 		<main className="min-h-screen max-w-2xl mx-auto">
-			<HomeFeed initialTab={initialTab} initialTweets={initialTweets} />
+			<HomeFeed
+				initialTab={initialTab}
+				initialTweets={initialTweets}
+				currentUserHandle={user.username}
+			/>
 		</main>
 	);
 }

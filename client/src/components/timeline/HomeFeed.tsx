@@ -28,6 +28,7 @@ const MAX_LIMIT = 200;
 interface HomeFeedProps {
 	initialTab: TabValue;
 	initialTweets: TweetSummary[];
+	currentUserHandle?: string;
 }
 
 /**
@@ -42,7 +43,11 @@ function dedupById(tweets: TweetSummary[]): TweetSummary[] {
 	});
 }
 
-export default function HomeFeed({ initialTab, initialTweets }: HomeFeedProps) {
+export default function HomeFeed({
+	initialTab,
+	initialTweets,
+	currentUserHandle,
+}: HomeFeedProps) {
 	const [activeTab, setActiveTab] = useState<TabValue>(initialTab);
 	const [tweets, setTweets] = useState<TweetSummary[]>(
 		dedupById(initialTweets),
@@ -119,6 +124,10 @@ export default function HomeFeed({ initialTab, initialTweets }: HomeFeedProps) {
 		);
 	}, []);
 
+	const handleTimelineItemRemoved = useCallback((tweetId: number) => {
+		setTweets((prev) => prev.filter((tweet) => tweet.id !== tweetId));
+	}, []);
+
 	return (
 		<div className="flex flex-col gap-0">
 			{/* SR-only live region for optimistic prepend announcement */}
@@ -151,6 +160,8 @@ export default function HomeFeed({ initialTab, initialTweets }: HomeFeedProps) {
 								posinset={idx + 1}
 								setsize={tweets.length}
 								onDescendantPosted={handleDescendantPosted}
+								currentUserHandle={currentUserHandle}
+								onTimelineItemRemoved={handleTimelineItemRemoved}
 							/>
 						))}
 					</div>

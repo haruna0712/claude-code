@@ -31,6 +31,10 @@ interface TweetCardProps {
 	 * 上位は受け取った tweet.type を見て prepend / append を判断する。
 	 */
 	onDescendantPosted?: (tweet: TweetSummary) => void;
+	/** Login viewer handle. Used to remove this row when it is my own repost. */
+	currentUserHandle?: string;
+	/** Called when this timeline row should disappear after unrepost. */
+	onTimelineItemRemoved?: (tweetId: number) => void;
 }
 
 /** #327: 削除済み tweet の tombstone 表示 (article 単位)。 */
@@ -135,6 +139,8 @@ export default function TweetCard({
 	posinset,
 	setsize,
 	onDescendantPosted,
+	currentUserHandle,
+	onTimelineItemRemoved,
 }: TweetCardProps) {
 	const router = useRouter();
 	const [replyOpen, setReplyOpen] = useState(false);
@@ -196,6 +202,9 @@ export default function TweetCard({
 	);
 	const [quoteCountOptimistic, setQuoteCountOptimistic] = useState(
 		displayTweet.quote_count ?? 0,
+	);
+	const [repostCountOptimistic, setRepostCountOptimistic] = useState(
+		displayTweet.repost_count ?? 0,
 	);
 
 	// #327: 全 hooks は早期 return より前に呼ぶ (React rules of hooks)。
@@ -434,10 +443,19 @@ export default function TweetCard({
 						// 渡す。リロード時に「リポスト済み」 (緑) で正しく復元される。
 						initialReposted={displayTweet.reposted_by_me ?? false}
 						onPosted={onDescendantPosted}
+						onReposted={() => {
+							setRepostCountOptimistic((n) => n + 1);
+						}}
+						onUnreposted={() => {
+							setRepostCountOptimistic((n) => Math.max(0, n - 1));
+							if (isRepost && tweet.author_handle === currentUserHandle) {
+								onTimelineItemRemoved?.(tweet.id);
+							}
+						}}
 						onQuoteRequest={() => setQuoteOpen(true)}
 					/>
 					{(() => {
-						const repostCount = displayTweet.repost_count ?? 0;
+						const repostCount = repostCountOptimistic;
 						const total = repostCount + quoteCountOptimistic;
 						if (total === 0) return null;
 						// a11y CRITICAL-2 (#343 review): aria-label と visible text の

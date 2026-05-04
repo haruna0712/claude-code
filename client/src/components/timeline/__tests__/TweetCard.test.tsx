@@ -3,9 +3,11 @@
  * TDD RED phase — DOMPurify XSS tests are CRITICAL requirements.
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import TweetCard from "@/components/timeline/TweetCard";
+import { unrepostTweet } from "@/lib/api/repost";
 import type { TweetSummary } from "@/lib/api/tweets";
 
 // Mock next/navigation for Link components
@@ -14,6 +16,21 @@ vi.mock("next/navigation", () => ({
 	usePathname: () => "/",
 	useSearchParams: () => new URLSearchParams(),
 }));
+
+vi.mock("@/lib/api/repost", () => ({
+	repostTweet: vi.fn(),
+	unrepostTweet: vi.fn(),
+	quoteTweet: vi.fn(),
+	replyToTweet: vi.fn(),
+}));
+
+vi.mock("@/lib/api/tweets", async () => {
+	const actual =
+		await vi.importActual<typeof import("@/lib/api/tweets")>(
+			"@/lib/api/tweets",
+		);
+	return { ...actual, fetchTweet: vi.fn() };
+});
 
 const BASE_TWEET: TweetSummary = {
 	id: 42,
@@ -399,6 +416,53 @@ describe("TweetCard — #327 extensions", () => {
 		).toBeInTheDocument();
 		expect(
 			screen.getByText("リポスト 3 件 (うち引用 1 件)"),
+		).toBeInTheDocument();
+	});
+
+	it("removes my own repost timeline row and decrements count after unrepost", async () => {
+		vi.mocked(unrepostTweet).mockResolvedValue();
+		const onTimelineItemRemoved = vi.fn();
+		const tweet: TweetSummary = {
+			...BASE_TWEET,
+			id: 123,
+			author_handle: "me",
+			author_display_name: "Me",
+			type: "repost",
+			body: "",
+			repost_of: {
+				id: 99,
+				author_handle: "bob",
+				author_display_name: "Bob",
+				body: "original post",
+				html: "<p>original post</p>",
+				char_count: 13,
+				created_at: "2024-01-15T09:00:00Z",
+				is_deleted: false,
+				reply_count: 2,
+				repost_count: 3,
+				quote_count: 1,
+				reposted_by_me: true,
+			},
+		};
+		render(
+			<TweetCard
+				tweet={tweet}
+				currentUserHandle="me"
+				onTimelineItemRemoved={onTimelineItemRemoved}
+			/>,
+		);
+
+		await userEvent.click(screen.getByRole("button", { name: "リポスト済み" }));
+		await userEvent.click(
+			await screen.findByRole("menuitem", { name: "リポストを取り消す" }),
+		);
+
+		await waitFor(() => {
+			expect(unrepostTweet).toHaveBeenCalledWith(99);
+			expect(onTimelineItemRemoved).toHaveBeenCalledWith(123);
+		});
+		expect(
+			screen.getByText("リポスト 2 件 (うち引用 1 件)"),
 		).toBeInTheDocument();
 	});
 
