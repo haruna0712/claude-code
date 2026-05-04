@@ -142,3 +142,62 @@ class TestQuoteAndReply:
         # body 必須 (TweetCreateSerializer のバリデーション)
         res = api_client.post(quote_url(target.pk), {"body": ""}, format="json")
         assert res.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.integration
+class TestResolveTargetRepostFallthrough:
+    """#346: REPOST tweet を target に渡されたら repost_of に解決する."""
+
+    def test_repost_of_repost_falls_through_to_original(self, api_client: APIClient) -> None:
+        """A→B→C を順に追って、C が B (REPOST tweet) を repost しても A の REPOST が作られる."""
+        author_a = make_user()
+        original = make_tweet(author=author_a, body="original")
+        actor_b = make_user()
+        repost_b = Tweet.objects.create(
+            author=actor_b, body="", type=TweetType.REPOST, repost_of=original
+        )
+        actor_c = make_user()
+        api_client.force_authenticate(user=actor_c)
+
+        # C が B の REPOST 行 (= repost_b) を target に repost を投げる
+        res = api_client.post(repost_url(repost_b.pk))
+
+        assert res.status_code == status.HTTP_201_CREATED
+        c_repost = Tweet.objects.get(author=actor_c, type=TweetType.REPOST)
+        # C の REPOST は B ではなく A の original を指す (RT のチェーンを許さない)
+        assert c_repost.repost_of_id == original.pk
+        assert c_repost.repost_of_id != repost_b.pk
+
+    def test_quote_of_repost_falls_through_to_original(self, api_client: APIClient) -> None:
+        author_a = make_user()
+        original = make_tweet(author=author_a, body="original")
+        actor_b = make_user()
+        repost_b = Tweet.objects.create(
+            author=actor_b, body="", type=TweetType.REPOST, repost_of=original
+        )
+        actor_c = make_user()
+        api_client.force_authenticate(user=actor_c)
+
+        res = api_client.post(quote_url(repost_b.pk), {"body": "コメント"}, format="json")
+
+        assert res.status_code == status.HTTP_201_CREATED
+        quote = Tweet.objects.get(pk=res.json()["id"])
+        assert quote.quote_of_id == original.pk
+
+    def test_repost_target_is_repost_with_deleted_original_404(self, api_client: APIClient) -> None:
+        """REPOST tweet を target に渡したが元 tweet が削除済みなら 404."""
+        author_a = make_user()
+        original = make_tweet(author=author_a)
+        actor_b = make_user()
+        repost_b = Tweet.objects.create(
+            author=actor_b, body="", type=TweetType.REPOST, repost_of=original
+        )
+        # 元 tweet を soft-delete (alive Manager から外す)
+        original.soft_delete()
+        actor_c = make_user()
+        api_client.force_authenticate(user=actor_c)
+
+        res = api_client.post(repost_url(repost_b.pk))
+
+        assert res.status_code == status.HTTP_404_NOT_FOUND

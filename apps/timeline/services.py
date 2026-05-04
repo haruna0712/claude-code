@@ -120,6 +120,10 @@ def _query_following(user, blocked_ids: set[int], limit: int) -> list[Tweet]:
     #334: REPLY type は home TL に出さない (X 慣習)。reply は conversation
     view (/tweet/<parent>) からのみ閲覧可能、TL は ORIGINAL / REPOST / QUOTE
     のみ。
+
+    #347: 元 tweet が削除された REPOST 行は home TL から除外する (X 慣習)。
+    QUOTE は引用者本文が残るので除外しない (docs/specs/repost-quote-state-machine.md
+    §2.5 / §5.4 参照)。
     """
     cutoff = timezone.now() - timedelta(hours=24)
     qs = (
@@ -132,6 +136,8 @@ def _query_following(user, blocked_ids: set[int], limit: int) -> list[Tweet]:
             type__in=[TweetType.ORIGINAL, TweetType.REPOST, TweetType.QUOTE],
         )
         .exclude(author_id__in=blocked_ids)
+        # #347: 元 tweet が tombstone の REPOST 行は X 互換で TL から消す
+        .exclude(type=TweetType.REPOST, repost_of__is_deleted=True)
         .order_by("-created_at")[:limit]
     )
     return list(qs)

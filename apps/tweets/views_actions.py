@@ -47,8 +47,19 @@ class _RepostResponseSerializer(drf_serializers.Serializer):
 
 
 def _resolve_target(tweet_id: int) -> Tweet:
-    """元ツイートを取得する (alive のみ、削除済み / 存在しないなら 404)."""
-    return get_object_or_404(Tweet, pk=tweet_id)
+    """元ツイートを取得する (alive のみ、削除済み / 存在しないなら 404)。
+
+    #346 (X 互換): tweet_id が REPOST tweet を指している場合、その REPOST 自身
+    ではなく **元 tweet (``repost_of``)** に解決し直す。これは X が
+    「RT の RT」のチェーンを許容しないため (docs/specs/repost-quote-state-machine.md
+    §4.3 / §2.4 参照)。元 tweet が削除済みなら ``Http404`` (alive Manager)。
+    """
+    target = get_object_or_404(Tweet, pk=tweet_id)
+    if target.type == TweetType.REPOST and target.repost_of_id is not None:
+        # alive のみを引く既定 Manager (Tweet.objects) を使うので、元が
+        # is_deleted=True なら自動的に 404 になる。
+        return get_object_or_404(Tweet, pk=target.repost_of_id)
+    return target
 
 
 def _check_block_or_403(actor: Any, target: Tweet) -> Response | None:
