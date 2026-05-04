@@ -5,6 +5,7 @@
     "args": {
       "TZ": "${localEnv:TZ:America/Los_Angeles}",
       "CLAUDE_CODE_VERSION": "latest",
+      "CODEX_VERSION": "latest",
       "GIT_DELTA_VERSION": "0.18.2",
       "ACT_VERSION": "0.2.80",
       "GH_VERSION": "2.63.2",
@@ -58,6 +59,13 @@
   "mounts": [
     "source=claude-code-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
     "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume",
+    // Codex CLI (`@openai/codex`) の auth/config 用 named volume。
+    // `claude-code-aws` / `claude-code-config-xdg` と同じく `${devcontainerId}` を
+    // 含めない固定名にしているため、devcontainer.json を編集してリビルドしても
+    // `codex login` で入れた API key / OAuth token は残る。
+    // 別 PC でこのレポジトリを開いた場合は、その PC で 1 度だけ
+    // `codex login` を打ち直す必要がある (volume はホストごとに独立)。
+    "source=claude-code-codex,target=/home/node/.codex,type=volume",
     // AWS credentials の永続化用 named volume。`${devcontainerId}` を意図的に
     // 含めず固定名にしているため、devcontainer.json を編集してリビルドしても
     // `aws configure` で入れた IAM access key / secret は保持される。
