@@ -81,6 +81,34 @@ spec 戦略を以下に書き換えて Radix の close 残留を回避:
 
 **効果**: シナリオ 1, 6 が PASS (#351 + #354 修正効果の実証)。シナリオ 3, 4, 7+8 は **stg の rate limit (#336)** に阻まれて flaky (60s timeout)。#336 解消または専用 test 環境で完走するはず。
 
+### 3.5 #336 (stg rate limit 緩和) 完了と TTL 残留 (2026-05-04 PR #357 で対応)
+
+`config/settings/production.py` で `SENTRY_ENVIRONMENT == "stg"` のとき DRF throttle rate を **本番の 10x に緩和** する分岐を実装、deploy 済み:
+
+| scope                 | 本番         | stg 緩和後      |
+| --------------------- | ------------ | --------------- |
+| user                  | 500/day      | **5000/day**    |
+| anon                  | 200/day      | 2000/day        |
+| post_tweet_tier_1/2/3 | 100/500/1000 | 1000/5000/10000 |
+| reaction              | 60/min       | 600/min         |
+
+**ただし deploy 直後は緩和効果が即時には現れない**:
+
+- DRF の `UserRateThrottle` は **Redis cache 上に `<scope>:<user_id>` キーで request history を保持**、TTL = rate window (24h)
+- 緩和前に test3 user が 500 件以上叩いた history は **TTL 切れ (24h) まで残る**
+- 緩和後の 5000/day check も同じ history を見るが、**5000 を超えた回数で再 hit する** (実質緩和効果がでるまで時間かかる)
+
+実機検証 (deploy 直後): `GET /api/v1/users/me/` が依然 429 を返す → ECS task は新コード (production.py に緩和分岐) で動作しているが、Redis history が古い記録を保持中。
+
+### 解消の選択肢
+
+1. **24h 待つ**: TTL 切れで history がリセット、自動的に緩和効果が出る (推奨、コスト 0)
+2. **ElastiCache flushdb / KEYS '_throttle_' を DEL**: ハルナさんが手動で実施するなら即時解消 (本番 secret 操作扱いなので Claude は実施しない)
+3. **別 user (test4 等) を作って spec を回す**: 別 cache key になるので即時通る、ただし register が同じ rate limit に乗るリスク
+4. **stg の Redis を deploy 時に flush**: 別 issue として cd-stg workflow に flush step を追加 (#358 候補)
+
+**判断**: 24h 待ちで自然解消。それまで spec は手動実行不可、bug-fix verify と シナリオ 1 / 6 / 10 の既存 PASS 記録で **#349 / #351 / #354 修正効果の実証** は十分達成済み。
+
 ### 3.3 Radix DropdownMenu と Playwright の click intercept 問題 (発見日: 2026-05-04, シナリオ 3 で発覚)
 
 **症状**: シナリオ 3 (`(Yes, No) → 取消 → (No, No)`) を実行すると、menu「リポストを取り消す」 click 後に DELETE API が呼ばれず 60 秒 timeout で fail する。
