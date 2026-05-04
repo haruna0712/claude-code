@@ -204,19 +204,18 @@ describe("TweetCard — action buttons (placeholder)", () => {
 		).toBeInTheDocument();
 	});
 
-	it("renders the RepostButton (P2-15 wires the action)", () => {
+	it("renders the RepostButton menu trigger (#342)", () => {
 		render(<TweetCard tweet={BASE_TWEET} />);
-		// "リポスト" exact-match (avoid catching "引用リポスト")
 		expect(
-			screen.getByRole("button", { name: "リポスト" }),
+			screen.getByRole("button", { name: /リポストメニュー/ }),
 		).toBeInTheDocument();
 	});
 
-	it("renders the quote button (P2-15)", () => {
+	it("does NOT render an independent 引用 button (#342: 引用は menu に統合)", () => {
 		render(<TweetCard tweet={BASE_TWEET} />);
 		expect(
-			screen.getByRole("button", { name: "引用リポスト" }),
-		).toBeInTheDocument();
+			screen.queryByRole("button", { name: "引用リポスト" }),
+		).not.toBeInTheDocument();
 	});
 
 	it("renders ReactionBar trigger in the footer (P2-14 wires the bar)", () => {
@@ -310,13 +309,12 @@ describe("TweetCard — accessibility (review fixes)", () => {
 		expect(img?.getAttribute("height")).toBe("600");
 	});
 
-	it("all action buttons are interactive after P2-14/P2-15 wiring", () => {
+	it("all action buttons are interactive after #342 menu rewrite", () => {
 		render(<TweetCard tweet={BASE_TWEET} />);
 		const reply = screen.getByRole("button", { name: "リプライ" });
-		const repost = screen.getByRole("button", { name: "リポスト" });
-		const quote = screen.getByRole("button", { name: "引用リポスト" });
+		const repost = screen.getByRole("button", { name: /リポストメニュー/ });
 		const reaction = screen.getByRole("button", { name: /リアクション/ });
-		[reply, repost, quote, reaction].forEach((btn) => {
+		[reply, repost, reaction].forEach((btn) => {
 			expect(btn.getAttribute("aria-disabled")).toBeNull();
 		});
 	});
@@ -401,8 +399,11 @@ describe("TweetCard — #327 extensions", () => {
 		render(<TweetCard tweet={tweet} />);
 		const replyBtn = screen.getByRole("button", { name: /リプライ 5 件/ });
 		expect(replyBtn).toHaveTextContent("5");
-		const quoteBtn = screen.getByRole("button", { name: /引用 2 件/ });
-		expect(quoteBtn).toHaveTextContent("2");
+		// #342: 引用は menu に統合され、count は repost_count + quote_count の
+		// 合算 badge で表示される。aria-label は "リポスト 3 件 (引用 2 件含む)"。
+		expect(
+			screen.getByLabelText(/リポスト 3 件 \(引用 2 件含む\)/),
+		).toHaveTextContent("5");
 	});
 
 	it("does not display count when 0", () => {

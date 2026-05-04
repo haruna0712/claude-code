@@ -1,0 +1,237 @@
+# リポスト / 引用ツイート 状態遷移仕様
+
+> Version: 0.1 (Draft)
+> 最終更新: 2026-05-03
+> ステータス: Draft (実装着手前 / X 本家挙動の実機確認込みで FIX 予定)
+> 関連: [SPEC.md §3.3 / §3.4](../SPEC.md), [ER.md §2.5](../ER.md), [ROADMAP.md](../ROADMAP.md)
+
+---
+
+## 0. このドキュメントの位置づけ
+
+本プロジェクトのリポスト (Repost) と 引用ツイート (Quote) の **UI 上の挙動** と **DB / API の状態遷移** を、X (旧 Twitter) 本家の現挙動 (2024〜2026 時点) と整合させるための仕様書。
+
+`docs/SPEC.md` §3.3 / §3.4 は機能の存在と件数カウントしか触れていないため、ボタンメニューの内容・トグル方向・引用と repost の併用可否といった細部を本書で確定させる。
+
+**ゴール**: 「X でできること / できないこと」をそのまま再現する。独自のひねりは入れない (差別化は別レイヤーで行う方針、ROADMAP 参照)。
+
+---
+
+## 1. 用語
+
+| 用語                | 定義                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------- |
+| 元 tweet            | 「リポスト」ボタンが押される対象のツイート。`Tweet`                                               |
+| REPOST tweet        | `type=repost` の Tweet 行。`body=""`、`repost_of` で元 tweet を指す                               |
+| QUOTE tweet         | `type=quote` の Tweet 行。本文 1〜180 字 + `quote_of` で元 tweet を指す                           |
+| reposted (動詞状態) | あるユーザが対象 tweet について **REPOST tweet を保有している** 状態                              |
+| quoted (動詞状態)   | あるユーザが対象 tweet を **少なくとも 1 件 quote している** 状態 (生きてる QUOTE tweet が 1+ 件) |
+
+**ユーザ視点の状態は (reposted, quoted) の 2 軸のフラグ** で表現する。両者は独立 (X 本家がそうなっている、§3 参照)。
+
+---
+
+## 2. X 本家の現挙動 (調査結果)
+
+`help.x.com` 公式ヘルプ + 解説記事 (TweetDelete / Tweet Archivist / Circleboom / Android Police 等、2024〜2026 時点) を参照した。出典は §6。
+
+### 2.1 リポスト ボタン押下時のメニュー
+
+| 状態                                                   | 開くポップアップ メニュー         |
+| ------------------------------------------------------ | --------------------------------- |
+| **未 repost** (まだ自分が REPOST tweet を作っていない) | `[ リポスト ] [ 引用 ]`           |
+| **repost 済み** (自分の REPOST tweet が存在する)       | `[ リポストを取り消す ] [ 引用 ]` |
+
+要点:
+
+- **「引用」項目はどちらの状態でも常に出る**。引用は「もう 1 件追加で Quote を作る」操作なので、既に repost 済みでも独立して使える (§2.3 参照)。
+- 「リポスト済み」アイコンは緑にハイライトされる (本プロジェクトでは lime-600/400)。
+- iOS / Android / Web で UI 細部 (BottomSheet vs Dropdown) は違うが、出る項目とラベルは同じ。
+
+### 2.2 「リポストを取り消す」の挙動
+
+- メニューから「リポストを取り消す」を選ぶと **即時** に REPOST tweet が消える。**確認ダイアログは出ない** (X はワンタップで取消)。
+- 元 tweet の `repost_count` は 1 減る。
+- 取り消した後、フォロワーの TL から該当 RT 行が消える (キャッシュの絡みで他端末では遅延あり、と公式 FAQ にも記載)。
+- 取り消し後に同じ tweet をもう一度リポストすることは可能 (制限なし)。`repost_count` は再び +1 される。
+
+### 2.3 引用ツイートの挙動
+
+- 「引用」を選ぶと作成画面が開き、本文 (X は最大 280 字、本プロジェクトは 180 字) を入力して投稿する。
+- 引用は **通常の tweet と同等** に扱われる。取り消し UI は無く、削除は自分のツイート一覧の「削除」メニューから行う (= QUOTE tweet を soft-delete)。
+- **引用は何件でも作れる**。同一の元 tweet に対して同じユーザが quote を 3 回作っても、3 件とも別の QUOTE tweet になる。`quote_count` も +3 される。
+- repost との **同時併存可** : `(reposted, quoted) = (True, True)` の状態が成立する。X はこの 2 軸を独立に管理している。
+
+### 2.4 REPOST tweet 自体に対する操作
+
+- REPOST tweet (= 自分が他人をリポストした行) は TL 上で **元 tweet 本体が表示** され、上部に「@user がリポストしました」バナーが付く。
+- このカードの下にある「リポスト」ボタンを押すと、**操作対象は元 tweet** になる (バナー部分はリポスト不可)。
+  - 例: A が B のツイートをリポスト → C が A の TL でその行を見て「リポスト」を押す → C の REPOST は B の元 tweet を指す (`repost_of=B's_tweet`)。A が間に入ることはない。
+  - 引用も同様 (`quote_of=B's_tweet`)。
+- これにより「RT の RT」のチェーンは生まれず、`repost_of` は常に深さ 1 の参照に保たれる。
+
+### 2.5 削除済み (tombstone) tweet
+
+- 元 tweet が author によって削除されると、その tweet を指す **既存の REPOST tweet も実質的に消える** (X 本家ではユーザー TL 上から消える)。本プロジェクトの実装では元 tweet が `is_deleted=True` の場合、TL レンダリング側で tombstone 扱いにする (§4 参照)。
+- 削除済み tweet の **新規 リポスト / 引用 は不可**: ボタンが disabled、または操作時に 400 エラー。
+- 鍵垢 (protected) ツイートも repost 不可 (本プロジェクトは MVP では鍵垢機能を持たないので、この分岐は将来用)。
+
+### 2.6 カウント整合性
+
+| イベント                    | `repost_count` | `quote_count` |
+| --------------------------- | -------------- | ------------- |
+| 新規 REPOST tweet 作成      | +1             | -             |
+| REPOST tweet 取り消し       | -1             | -             |
+| 同一 user による 2 回目 RT  | (拒否)         | -             |
+| 新規 QUOTE tweet 作成       | -              | +1            |
+| QUOTE tweet 削除 (soft)     | -              | -1            |
+| 同一 user による N 件 quote | -              | +N            |
+
+「同一 user による 2 回目 RT」が拒否されるのは X / 本プロジェクト共通の制約。本プロジェクトでは partial UniqueConstraint `tweet_unique_repost_per_user` (apps/tweets/models.py) で DB レイヤから保証している。
+
+---
+
+## 3. 状態遷移図 (Mermaid)
+
+ある (actor, target_tweet) ペアに対する状態と user action の関係を図示する。`reposted` と `quoted` は独立フラグなので、状態は 4 つの直積で表現する。
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    [*] --> NOT_REPOSTED_NOT_QUOTED : 初期状態
+
+    state "(reposted=No, quoted=No)" as NOT_REPOSTED_NOT_QUOTED
+    state "(reposted=Yes, quoted=No)" as REPOSTED_NOT_QUOTED
+    state "(reposted=No, quoted=Yes)" as NOT_REPOSTED_QUOTED
+    state "(reposted=Yes, quoted=Yes)" as REPOSTED_QUOTED
+
+    NOT_REPOSTED_NOT_QUOTED --> REPOSTED_NOT_QUOTED : リポスト押下
+    REPOSTED_NOT_QUOTED --> NOT_REPOSTED_NOT_QUOTED : リポストを取り消す押下
+
+    NOT_REPOSTED_NOT_QUOTED --> NOT_REPOSTED_QUOTED : 引用押下 + 投稿
+    REPOSTED_NOT_QUOTED --> REPOSTED_QUOTED : 引用押下 + 投稿
+
+    NOT_REPOSTED_QUOTED --> REPOSTED_QUOTED : リポスト押下
+    REPOSTED_QUOTED --> NOT_REPOSTED_QUOTED : リポストを取り消す押下
+
+    NOT_REPOSTED_QUOTED --> NOT_REPOSTED_QUOTED : さらに引用押下 + 投稿\n(quote 件数 +1, 状態は変わらない)
+    REPOSTED_QUOTED --> REPOSTED_QUOTED : さらに引用押下 + 投稿\n(quote 件数 +1, 状態は変わらない)
+
+    NOT_REPOSTED_QUOTED --> NOT_REPOSTED_NOT_QUOTED : 全 QUOTE tweet を削除
+    REPOSTED_QUOTED --> REPOSTED_NOT_QUOTED : 全 QUOTE tweet を削除
+```
+
+ポイント:
+
+- **`quoted=Yes` は「QUOTE tweet を 1 件以上保有」の集約フラグ** であって、何件あっても 1 つの状態として扱う。引用を 5 件作っても状態としては `quoted=Yes` のまま、ただし `quote_count` は +5。
+- リポスト軸は完全な ON/OFF トグル、引用軸は「count 操作」 + 「最後の 1 件を消したら状態が変わる」非対称構造。
+
+---
+
+## 4. 条件分岐表 (action × current state)
+
+UI 側のボタンメニュー描画と enabled/disabled、API 側の振る舞いを 1 表にまとめる。
+
+凡例:
+
+- `RT▶ rev` : 「リポストを取り消す」を表示
+- `RT▶ new` : 「リポスト」(新規) を表示
+- `Q▶` : 「引用」を表示
+
+### 4.1 リポストアイコン押下時のメニュー (元 tweet が alive のとき)
+
+| 現状態                     | メニュー項目       | アイコン色  |
+| -------------------------- | ------------------ | ----------- |
+| `(reposted=No,  quoted=*)` | `RT▶ new` + `Q▶` | 灰色        |
+| `(reposted=Yes, quoted=*)` | `RT▶ rev` + `Q▶` | 緑 (active) |
+
+`quoted` の値はこのメニューに **影響しない**。引用は別軸なので。
+
+### 4.2 各 action の遷移と副作用
+
+| 現状態                   | action                             | 結果状態                | API                                         | counts    | 備考                                  |
+| ------------------------ | ---------------------------------- | ----------------------- | ------------------------------------------- | --------- | ------------------------------------- |
+| `(No,  No)`              | リポスト押下                       | `(Yes, No)`             | `POST /tweets/<id>/repost/`                 | repost +1 | -                                     |
+| `(No,  No)`              | 引用押下 + 投稿                    | `(No,  Yes)`            | `POST /tweets/<id>/quote/`                  | quote +1  | 入力 dialog を経由                    |
+| `(Yes, No)`              | リポストを取り消す                 | `(No,  No)`             | `DELETE /tweets/<id>/repost/`               | repost -1 | 確認ダイアログなし (X 同等)           |
+| `(Yes, No)`              | 引用押下 + 投稿                    | `(Yes, Yes)`            | `POST /tweets/<id>/quote/`                  | quote +1  | 既存 REPOST tweet は **そのまま残る** |
+| `(No,  Yes)`             | リポスト押下                       | `(Yes, Yes)`            | `POST /tweets/<id>/repost/`                 | repost +1 | 既存 QUOTE tweet 群は そのまま残る    |
+| `(No,  Yes)`             | 引用押下 + 投稿                    | `(No,  Yes)`            | `POST /tweets/<id>/quote/`                  | quote +1  | 状態不変、件数のみ加算                |
+| `(Yes, Yes)`             | リポストを取り消す                 | `(No,  Yes)`            | `DELETE /tweets/<id>/repost/`               | repost -1 | QUOTE 群は無関係                      |
+| `(Yes, Yes)`             | 引用押下 + 投稿                    | `(Yes, Yes)`            | `POST /tweets/<id>/quote/`                  | quote +1  | 状態不変、件数のみ加算                |
+| 任意 + `quoted=Yes`      | QUOTE tweet を `DELETE /tweets/N/` | quote -1, 0 になれば No | `DELETE /tweets/<quote_id>/` (soft)         | quote -1  | 現状 SPEC §3.9 の soft-delete         |
+| 元 tweet が `is_deleted` | リポスト押下 / 引用押下            | (拒否)                  | 400 `tweet is deleted` または UI で disable | -         | tombstone は repost / quote 不可      |
+
+### 4.3 REPOST tweet 自身を起点に押した場合
+
+REPOST tweet (自分または他人の `type=repost` 行) のカード上の「リポスト」「引用」ボタンを押した場合、`target` は **元 tweet** (`repost_of`) に解決する。actor は元 tweet に対する `(reposted, quoted)` 状態に従って §4.1 / §4.2 のフローを実行する。
+
+REPOST tweet を直接 target にする repost / quote は仕様上禁止。サーバ側で `target.type == REPOST` なら `target = target.repost_of` に解決し直すか、UI で REPOST tweet の id を投げないようにする (現状実装の `TweetCard.tsx` は `repost_of.id` を辿って詳細遷移しているため、ボタンも同様に解決すれば整合する)。
+
+---
+
+## 5. 実装メモ — 現状 codeplace と X 互換のギャップ
+
+### 5.1 バックエンド (apps/tweets/)
+
+✅ できていること:
+
+- `Tweet.type` enum (ORIGINAL / REPLY / REPOST / QUOTE) と `repost_of` / `quote_of` FK は揃っている (`apps/tweets/models.py`)。
+- 同一 user × 同一元 tweet の重複 REPOST を partial UniqueConstraint `tweet_unique_repost_per_user` で防止済み。
+- `POST /api/v1/tweets/<id>/repost/` は idempotent (既存があれば 200 で返す)、`DELETE` で取り消し (`apps/tweets/views_actions.py: RepostView`)。
+- `POST /api/v1/tweets/<id>/quote/` は何度でも作成できる (`QuoteView`)。
+- 削除済み tweet (`is_deleted=True`) は `_resolve_target` の `get_object_or_404` で 404 になるので、そもそも操作できない (alive のみ抽出する Manager)。
+
+⚠️ 不足 / 要検討:
+
+- **REPOST tweet を target に渡されたときの解決ロジックが無い**。`POST /tweets/<repost_tweet_id>/repost/` を投げると、その REPOST tweet 自身を `repost_of` にしようとして UniqueConstraint を満たし得る (`type=repost` の repost を作る) おそれがある。サーバ側で「`target.type == REPOST` なら `target = target.repost_of`、それも tombstone なら 400」のリゾルバを `_resolve_target` に追加すべき (X 互換)。
+- **quote の重複作成** は仕様上 OK (件数 +N)。現状もこの挙動なので追加対応は不要。重複防止 unique constraint を quote に **追加してはいけない** (X 互換性が壊れる)。
+- **block 判定** は実装済みだが (`is_blocked_relationship`)、protect (鍵垢) は未実装。鍵垢を導入する Phase で `target.author.is_protected` チェックを追加する。
+
+### 5.2 フロントエンド (client/src/components/)
+
+✅ 実装済み (Issue #342 / PR で対応):
+
+1. **`RepostButton` が DropdownMenu トリガー化された** (`client/src/components/tweets/RepostButton.tsx`)。X 同等で、クリック → menu に `[リポスト | 引用]` (または `[リポストを取り消す | 引用]`) が並ぶ。`shadcn/ui` の `DropdownMenu` を使用。menu 描画は §4.1 の表どおり `initialReposted` で 2 項目を出し分け。`[引用]` を選んだら親 (TweetCard) に `onQuoteRequest` callback で通知し、TweetCard 側で既存の `PostDialog mode="quote"` を open する。
+2. **`TweetCard.tsx` footer から独立「引用」 button が撤去された**。引用は repost menu 内の項目からのみアクセス。count badge は **`repost_count + quote_count` の合算 1 つ** に統一 (X TL の慣習)。aria-label は「リポスト N 件 (引用 M 件含む)」で内訳を保持。
+3. **`(reposted=Yes, quoted=Yes)` の同時状態** は問題なくレンダリングされる。`RepostButton` の `initialReposted` と TweetCard の `quoteCountOptimistic` は独立 state で衝突しない。
+
+⚠️ 残ギャップ (本 issue では未対応、別 issue で扱う):
+
+1. **REPOST tweet カード (= type=repost) からのリポスト操作のターゲット解決**: `TweetCard.tsx` は repost article 内に `RepostButton` を **そもそも置いていない** (早期 return パスには footer が無い)。これは意図的な単純化だが、X は repost の表示でも下にアクションバーが出る。`Phase 4` で repost article にも footer を生やすときに、`tweetId={tweet.repost_of.id}` を渡すよう注意 (§4.3 と整合)。
+2. **REPOST tweet を target にした `POST /tweets/<repost_id>/repost/`** に対するサーバ側リゾルバ (§5.1 ⚠️ 1 番目)。frontend で誤って repost_id を渡しても backend が `target.repost_of` に解決し直すよう修正する別 issue を要起票。
+
+### 5.3 カウント同期
+
+`apps/tweets/signals.py` の post_save / post_delete + Celery Beat reconciliation でカウンタは整合している (既存)。本仕様で追加要件は無い。
+
+---
+
+## 6. 参考 URL
+
+調査時の出典 (2026-05 時点で最新挙動を確認)。X 本家ヘルプは IP ブロックで WebFetch 不可だったが、検索結果で要点は引けている。
+
+### 一次ソース (公式)
+
+- [help.x.com — How to Repost](https://help.x.com/en/using-x/how-to-repost)
+- [help.x.com — Repost FAQs](https://help.x.com/en/using-x/repost-faqs)
+
+### 二次ソース (解説記事 / 2024〜2026)
+
+- [TweetDelete — Undo Repost on X](https://tweetdelete.net/resources/undo-repost-on-x/)
+- [TweetDelete — How to Delete a Repost on X](https://tweetdelete.net/resources/how-to-delete-a-repost-on-x/)
+- [Tweet Archivist — How to Quote Tweet on X in 2026](https://www.tweetarchivist.com/how-to-quote-tweet-guide)
+- [Circleboom — How to Undo Repost on X (Twitter) in 2026](https://circleboom.com/blog/how-to-undo-repost-on-x-twitter/)
+- [Circleboom — Retweet button greyed out](https://circleboom.com/blog/retweet-button-greyed-out/)
+- [Android Police — How to delete a repost on X](https://www.androidpolice.com/x-delete-a-post/)
+- [TweetEraser — How To Delete a Repost on X](https://www.tweeteraser.com/resources/how-to-delete-a-repost-on-x-undo-retweets-easily/)
+
+### 内部参照
+
+- [docs/SPEC.md §3.2-§3.4](../SPEC.md)
+- [docs/ER.md §2.5 (Tweet)](../ER.md)
+- [apps/tweets/models.py](../../apps/tweets/models.py) (Tweet, TweetType)
+- [apps/tweets/views_actions.py](../../apps/tweets/views_actions.py) (RepostView, QuoteView)
+- [client/src/components/tweets/RepostButton.tsx](../../client/src/components/tweets/RepostButton.tsx)
+- [client/src/components/timeline/TweetCard.tsx](../../client/src/components/timeline/TweetCard.tsx)

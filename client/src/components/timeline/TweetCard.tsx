@@ -446,36 +446,29 @@ export default function TweetCard({
 					) : null}
 				</button>
 
+				{/* #342: 独立「引用」 button を撤去し、RepostButton の DropdownMenu に
+				    「引用」項目を吸収 (X 準拠)。count は repost / quote 合算で 1 つの
+				    badge として表示する (X TL の慣習)。 */}
 				<div className="flex items-center gap-1">
-					<RepostButton tweetId={tweet.id} onPosted={onDescendantPosted} />
-					{tweet.repost_count ? (
-						<span
-							className="text-xs text-muted-foreground"
-							aria-label={`リポスト ${tweet.repost_count} 件`}
-						>
-							{tweet.repost_count}
-						</span>
-					) : null}
+					<RepostButton
+						tweetId={tweet.id}
+						onPosted={onDescendantPosted}
+						onQuoteRequest={() => setQuoteOpen(true)}
+					/>
+					{(() => {
+						const repostCount = tweet.repost_count ?? 0;
+						const total = repostCount + quoteCountOptimistic;
+						if (total === 0) return null;
+						return (
+							<span
+								className="text-xs text-muted-foreground font-semibold"
+								aria-label={`リポスト ${repostCount} 件 (引用 ${quoteCountOptimistic} 件含む)`}
+							>
+								{total}
+							</span>
+						);
+					})()}
 				</div>
-
-				<button
-					type="button"
-					aria-label={
-						quoteCountOptimistic
-							? `引用 ${quoteCountOptimistic} 件`
-							: "引用リポスト"
-					}
-					onClick={() => setQuoteOpen(true)}
-					className="flex items-center gap-1 min-h-[32px] px-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-				>
-					<span aria-hidden="true">”</span>
-					<span>引用</span>
-					{quoteCountOptimistic ? (
-						<span aria-hidden="true" className="font-semibold">
-							{quoteCountOptimistic}
-						</span>
-					) : null}
-				</button>
 
 				<ReactionBar tweetId={tweet.id} />
 			</footer>
