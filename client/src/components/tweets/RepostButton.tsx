@@ -50,6 +50,9 @@ export default function RepostButton({
 }: RepostButtonProps) {
 	const [reposted, setReposted] = useState(initialReposted);
 	const [busy, setBusy] = useState(false);
+	// a11y CRITICAL-2 (PR #343 review): toast は visible UX のみで SR には届きにくい。
+	// state 変化を sr-only な polite live region で announce する。
+	const [statusMsg, setStatusMsg] = useState("");
 
 	const handleRepost = async () => {
 		if (busy) return;
@@ -57,6 +60,7 @@ export default function RepostButton({
 		setReposted(true);
 		try {
 			const result = await repostTweet(tweetId);
+			setStatusMsg("リポストしました");
 			if (onPosted) {
 				try {
 					const full = await fetchTweet(result.id);
@@ -81,6 +85,7 @@ export default function RepostButton({
 		setReposted(false);
 		try {
 			await unrepostTweet(tweetId);
+			setStatusMsg("リポストを取り消しました");
 		} catch {
 			setReposted(true);
 			toast.error("リポストを取り消せませんでした");
@@ -91,11 +96,17 @@ export default function RepostButton({
 
 	return (
 		<DropdownMenu>
+			{/* a11y CRITICAL-2: 状態変化を sr-only polite live region で announce */}
+			<span role="status" aria-live="polite" className="sr-only">
+				{statusMsg}
+			</span>
 			<DropdownMenuTrigger asChild>
 				<button
 					type="button"
-					aria-label="リポストメニュー"
-					aria-pressed={reposted}
+					// a11y CRITICAL-1: aria-pressed は menu trigger に不適切 (Radix が
+					// 自動付与する aria-haspopup="menu"/aria-expanded と意味衝突)。
+					// 状態は accessible name に直接含める (X 公式日本語版に準拠)。
+					aria-label={reposted ? "リポスト済み" : "リポスト"}
 					disabled={busy}
 					className={`flex items-center gap-1 min-h-[32px] px-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${
 						reposted

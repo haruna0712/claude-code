@@ -36,12 +36,21 @@ describe("RepostButton (#342 menu)", () => {
 		vi.clearAllMocks();
 	});
 
-	const triggerName = /リポストメニュー/;
+	const triggerName = /^リポスト(済み)?$/;
 
-	it("renders inactive state by default (aria-pressed=false)", () => {
+	it("renders inactive state by default (aria-label='リポスト')", () => {
 		render(<RepostButton tweetId={1} />);
-		const btn = screen.getByRole("button", { name: triggerName });
-		expect(btn.getAttribute("aria-pressed")).toBe("false");
+		const btn = screen.getByRole("button", { name: "リポスト" });
+		expect(btn).toBeInTheDocument();
+		// a11y: aria-pressed は menu trigger に付与しない (CRITICAL-1, #343)
+		expect(btn.getAttribute("aria-pressed")).toBeNull();
+	});
+
+	it("renders reposted state with aria-label='リポスト済み'", () => {
+		render(<RepostButton tweetId={1} initialReposted />);
+		expect(
+			screen.getByRole("button", { name: "リポスト済み" }),
+		).toBeInTheDocument();
 	});
 
 	it("opens menu with [リポスト, 引用] when not reposted", async () => {
@@ -76,12 +85,12 @@ describe("RepostButton (#342 menu)", () => {
 		await waitFor(() => {
 			expect(repostTweet).toHaveBeenCalledWith(1);
 		});
-		// Radix DropdownMenu は menu open 中 body に scroll-lock + pointer-events:none
-		// を付与し、jsdom 上 trigger button が role=button で取得できなくなる。
-		// aria-pressed の検証は DOM 直接 query で行う (実 brower では問題なし)。
+		// reposted=true 状態では aria-label が「リポスト済み」に切り替わる (DOM 直接
+		// query を使うのは Radix が menu open 中 body を scroll-lock するため)。
 		await waitFor(() => {
-			const trigger = document.querySelector("[aria-label='リポストメニュー']");
-			expect(trigger?.getAttribute("aria-pressed")).toBe("true");
+			expect(
+				document.querySelector("[aria-label='リポスト済み']"),
+			).not.toBeNull();
 		});
 	});
 
@@ -121,9 +130,9 @@ describe("RepostButton (#342 menu)", () => {
 				expect.stringContaining("更新できませんでした"),
 			);
 		});
+		// rollback 後は aria-label が「リポスト」(未) に戻る
 		await waitFor(() => {
-			const trigger = document.querySelector("[aria-label='リポストメニュー']");
-			expect(trigger?.getAttribute("aria-pressed")).toBe("false");
+			expect(document.querySelector("[aria-label='リポスト']")).not.toBeNull();
 		});
 	});
 });

@@ -207,7 +207,7 @@ describe("TweetCard — action buttons (placeholder)", () => {
 	it("renders the RepostButton menu trigger (#342)", () => {
 		render(<TweetCard tweet={BASE_TWEET} />);
 		expect(
-			screen.getByRole("button", { name: /リポストメニュー/ }),
+			screen.getByRole("button", { name: /^リポスト(済み)?$/ }),
 		).toBeInTheDocument();
 	});
 
@@ -312,7 +312,7 @@ describe("TweetCard — accessibility (review fixes)", () => {
 	it("all action buttons are interactive after #342 menu rewrite", () => {
 		render(<TweetCard tweet={BASE_TWEET} />);
 		const reply = screen.getByRole("button", { name: "リプライ" });
-		const repost = screen.getByRole("button", { name: /リポストメニュー/ });
+		const repost = screen.getByRole("button", { name: /^リポスト(済み)?$/ });
 		const reaction = screen.getByRole("button", { name: /リアクション/ });
 		[reply, repost, reaction].forEach((btn) => {
 			expect(btn.getAttribute("aria-disabled")).toBeNull();
@@ -400,10 +400,12 @@ describe("TweetCard — #327 extensions", () => {
 		const replyBtn = screen.getByRole("button", { name: /リプライ 5 件/ });
 		expect(replyBtn).toHaveTextContent("5");
 		// #342: 引用は menu に統合され、count は repost_count + quote_count の
-		// 合算 badge で表示される。aria-label は "リポスト 3 件 (引用 2 件含む)"。
+		// 合算 (= 5) を視覚表示。SR 用には sr-only span で内訳を読ませる
+		// (#343 a11y review CRITICAL-2: visible text と aria-label の double-
+		// announcement を回避するため visible 数字は aria-hidden、SR 用は別 span)。
 		expect(
-			screen.getByLabelText(/リポスト 3 件 \(引用 2 件含む\)/),
-		).toHaveTextContent("5");
+			screen.getByText("リポスト 3 件 (うち引用 2 件)"),
+		).toBeInTheDocument();
 	});
 
 	it("does not display count when 0", () => {

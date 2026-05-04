@@ -459,13 +459,21 @@ export default function TweetCard({
 						const repostCount = tweet.repost_count ?? 0;
 						const total = repostCount + quoteCountOptimistic;
 						if (total === 0) return null;
+						// a11y CRITICAL-2 (#343 review): aria-label と visible text の
+						// double-announcement を防ぐため、visible 数字は aria-hidden、
+						// SR 用の文言は sr-only span で別出しにする。
 						return (
-							<span
-								className="text-xs text-muted-foreground font-semibold"
-								aria-label={`リポスト ${repostCount} 件 (引用 ${quoteCountOptimistic} 件含む)`}
-							>
-								{total}
-							</span>
+							<>
+								<span
+									aria-hidden="true"
+									className="text-xs text-muted-foreground font-semibold"
+								>
+									{total}
+								</span>
+								<span className="sr-only">
+									リポスト {repostCount} 件 (うち引用 {quoteCountOptimistic} 件)
+								</span>
+							</>
 						);
 					})()}
 				</div>
