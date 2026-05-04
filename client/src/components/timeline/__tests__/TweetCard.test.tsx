@@ -367,6 +367,41 @@ describe("TweetCard — #327 extensions", () => {
 		expect(screen.getByText("original post")).toBeInTheDocument();
 	});
 
+	it("renders normal action buttons for repost timeline items", () => {
+		const tweet: TweetSummary = {
+			...BASE_TWEET,
+			type: "repost",
+			body: "",
+			repost_of: {
+				id: 99,
+				author_handle: "bob",
+				author_display_name: "Bob",
+				body: "original post",
+				html: "<p>original post</p>",
+				char_count: 13,
+				created_at: "2024-01-15T09:00:00Z",
+				is_deleted: false,
+				reply_count: 2,
+				repost_count: 3,
+				quote_count: 1,
+				reposted_by_me: true,
+			},
+		};
+		render(<TweetCard tweet={tweet} />);
+		expect(
+			screen.getByRole("button", { name: /リプライ 2 件/ }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "リポスト済み" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: /リアクション/ }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText("リポスト 3 件 (うち引用 1 件)"),
+		).toBeInTheDocument();
+	});
+
 	it("renders tombstone for repost when repost_of.is_deleted", () => {
 		const tweet: TweetSummary = {
 			...BASE_TWEET,

@@ -801,3 +801,46 @@ class TestRepostedByMeSerializerField:
         # author の original tweet が following TL に含まれ、reposted_by_me=True
         assert target.pk in flags, f"target {target.pk} not in {list(flags.keys())}"
         assert flags[target.pk] is True
+
+    def test_following_timeline_repost_embeds_full_action_subject(
+        self, api_client: APIClient
+    ) -> None:
+        """TL 上の REPOST は footer 操作に必要な元 tweet 情報を nested で返す."""
+        from apps.follows.tests._factories import make_follow
+        from apps.tweets.models import Tweet as _T
+        from apps.tweets.models import TweetType
+
+        viewer = make_user()
+        reposter = make_user()
+        original_author = make_user()
+        make_follow(viewer, reposter)
+
+        original = make_tweet(author=original_author, body="embedded original")
+        repost = _T.objects.create(
+            author=reposter,
+            body="",
+            type=TweetType.REPOST,
+            repost_of=original,
+        )
+        _T.objects.create(author=viewer, body="", type=TweetType.REPOST, repost_of=original)
+        _T.objects.filter(pk=original.pk).update(
+            reply_count=2,
+            repost_count=3,
+            quote_count=1,
+            reaction_count=4,
+        )
+        original.refresh_from_db()
+        api_client.force_authenticate(user=viewer)
+
+        res = api_client.get(reverse("timeline-following"))
+        assert res.status_code == status.HTTP_200_OK, res.content
+        rows = res.json()["results"]
+        row = next(r for r in rows if r["id"] == repost.pk)
+        subject = row["repost_of"]
+        assert subject["id"] == original.pk
+        assert subject["html"]
+        assert subject["reply_count"] == 2
+        assert subject["repost_count"] == 3
+        assert subject["quote_count"] == 1
+        assert subject["reaction_count"] == 4
+        assert subject["reposted_by_me"] is True

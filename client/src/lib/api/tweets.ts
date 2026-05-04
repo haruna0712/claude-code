@@ -18,8 +18,11 @@ export interface CreateTweetPayload {
 	images?: TweetImagePayload[];
 }
 
+/** Tweet kind 4 種 (TweetType TextChoices: lowercase value)。 */
+export type TweetKind = "original" | "reply" | "repost" | "quote";
+
 /**
- * #324: 親 tweet (reply_to / quote_of / repost_of) を nested で受け取る薄い型。
+ * #324: 親 tweet (reply_to / quote_of / repost_of) を nested で受け取る型。
  * backend `TweetMiniSerializer` と一対一。
  */
 export interface TweetMini {
@@ -28,12 +31,22 @@ export interface TweetMini {
 	author_display_name?: string;
 	author_avatar_url?: string;
 	body: string;
+	html?: string;
+	char_count?: number;
 	created_at: string;
+	edit_count?: number;
+	last_edited_at?: string | null;
+	images?: TweetImagePayload[];
+	tags?: string[];
+	type?: TweetKind;
 	is_deleted: boolean;
+	reply_count?: number;
+	repost_count?: number;
+	quote_count?: number;
+	reaction_count?: number;
+	quote_of?: TweetMini | null;
+	reposted_by_me?: boolean;
 }
-
-/** Tweet kind 4 種 (TweetType TextChoices: lowercase value)。 */
-export type TweetKind = "original" | "reply" | "repost" | "quote";
 
 export interface TweetSummary {
 	id: number;

@@ -44,6 +44,7 @@ def _viewer_repost_ids(request: Request, tweets: list[Tweet]) -> set[int]:
     if not request.user.is_authenticated or not tweets:
         return set()
     target_ids = {t.pk for t in tweets}
+    target_ids.update(t.repost_of_id for t in tweets if t.repost_of_id is not None)
     return set(
         Tweet.objects.filter(
             author=request.user,

@@ -84,16 +84,21 @@ class TweetImageSerializer(serializers.ModelSerializer):
 # -----------------------------------------------------------------------------
 
 
-class TweetMiniSerializer(serializers.ModelSerializer):
-    """#323: 親 tweet (reply_to / quote_of / repost_of) を nested で返す薄い serializer.
+class TweetBaseMiniSerializer(serializers.ModelSerializer):
+    """Nested tweet summary without further nesting.
 
-    循環参照を避けるため body / author info / id / created_at / is_deleted のみ。
-    UI 側 (QuoteEmbed / RepostBanner / Reply preview) で表示する最小限のフィールド。
+    Used as the terminal shape for quote/repost embeds so serializers cannot
+    recurse indefinitely.
     """
 
     author_handle = serializers.SerializerMethodField()
     author_display_name = serializers.SerializerMethodField()
     author_avatar_url = serializers.SerializerMethodField()
+    html = serializers.SerializerMethodField()
+    char_count = serializers.SerializerMethodField()
+    images = TweetImageSerializer(many=True, read_only=True)
+    tags = serializers.SerializerMethodField()
+    reposted_by_me = serializers.SerializerMethodField()
 
     class Meta:
         model = Tweet
@@ -103,8 +108,20 @@ class TweetMiniSerializer(serializers.ModelSerializer):
             "author_display_name",
             "author_avatar_url",
             "body",
+            "html",
+            "char_count",
             "created_at",
+            "edit_count",
+            "last_edited_at",
+            "images",
+            "tags",
+            "type",
             "is_deleted",
+            "reply_count",
+            "repost_count",
+            "quote_count",
+            "reaction_count",
+            "reposted_by_me",
         ]
         read_only_fields = fields
 
@@ -116,6 +133,54 @@ class TweetMiniSerializer(serializers.ModelSerializer):
 
     def get_author_avatar_url(self, obj: Tweet) -> str:
         return obj.author.avatar_url or ""
+
+    def get_html(self, obj: Tweet) -> str:
+        return render_markdown(obj.body)
+
+    def get_char_count(self, obj: Tweet) -> int:
+        return count_tweet_chars(obj.body) if _HAS_CHAR_COUNT else len(obj.body)
+
+    def get_tags(self, obj: Tweet) -> list[str]:
+        return [t.name for t in obj.tags.all()]
+
+    def get_reposted_by_me(self, obj: Tweet) -> bool:
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return False
+        prefetched = self.context.get("viewer_repost_ids")
+        if prefetched is not None:
+            return obj.pk in prefetched
+        return Tweet.objects.filter(
+            author=request.user,
+            type=TweetType.REPOST,
+            repost_of=obj,
+        ).exists()
+
+
+class TweetMiniSerializer(TweetBaseMiniSerializer):
+    """#323: 親 tweet (reply_to / quote_of / repost_of) を nested で返す serializer.
+
+    Repost rendering needs the original tweet to be close to a full card, not a
+    body-only preview. One extra quote_of level is included so reposting a quote
+    still shows the quoted embed, while deeper nesting is intentionally cut off.
+    """
+
+    quote_of = serializers.SerializerMethodField()
+
+    class Meta(TweetBaseMiniSerializer.Meta):
+        fields = [
+            *TweetBaseMiniSerializer.Meta.fields,
+            "quote_of",
+        ]
+        read_only_fields = fields
+
+    def get_quote_of(self, obj: Tweet) -> dict[str, Any] | None:
+        if obj.quote_of_id is None:
+            return None
+        parent = Tweet.all_objects.filter(pk=obj.quote_of_id).select_related("author").first()
+        if parent is None:
+            return None
+        return TweetBaseMiniSerializer(parent, context=self.context).data
 
 
 class TweetListSerializer(serializers.ModelSerializer):

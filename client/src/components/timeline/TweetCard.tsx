@@ -121,6 +121,15 @@ function QuoteEmbed({ tweet }: { tweet: TweetMini }) {
 	);
 }
 
+function escapeHtml(text: string): string {
+	return text
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#39;");
+}
+
 export default function TweetCard({
 	tweet,
 	posinset,
@@ -130,12 +139,14 @@ export default function TweetCard({
 	const router = useRouter();
 	const [replyOpen, setReplyOpen] = useState(false);
 	const [quoteOpen, setQuoteOpen] = useState(false);
+	const isRepost = tweet.type === "repost" && tweet.repost_of;
+	const displayTweet = isRepost ? tweet.repost_of! : tweet;
+	const reposterName = tweet.author_display_name ?? tweet.author_handle;
 
 	// #340: card 全体クリックで /tweet/<id> に遷移 (X 慣習)。
 	// 内部 link / button は伝播を止めて従来動作。テキスト drag-select も保護。
 	// repost article は repost_of の id へ飛ばす (banner 上ではなく元 tweet 詳細)。
-	const targetId =
-		tweet.type === "repost" && tweet.repost_of ? tweet.repost_of.id : tweet.id;
+	const targetId = displayTweet.id;
 	const navigateToDetail = useCallback(
 		(e: React.MouseEvent | React.KeyboardEvent) => {
 			// e.target は EventTarget 型で Text node / 純 EventTarget の場合 closest を
@@ -181,10 +192,10 @@ export default function TweetCard({
 	// PostDialog onPosted コールバック → ここで state を更新し、再レンダーで
 	// footer の count が即時反映される。リロード不要。
 	const [replyCountOptimistic, setReplyCountOptimistic] = useState(
-		tweet.reply_count ?? 0,
+		displayTweet.reply_count ?? 0,
 	);
 	const [quoteCountOptimistic, setQuoteCountOptimistic] = useState(
-		tweet.quote_count ?? 0,
+		displayTweet.quote_count ?? 0,
 	);
 
 	// #327: 全 hooks は早期 return より前に呼ぶ (React rules of hooks)。
@@ -192,29 +203,29 @@ export default function TweetCard({
 	// javascript: hrefs, <iframe>, <style>, and other XSS vectors.
 	const safeHtml = useMemo(
 		() =>
-			DOMPurify.sanitize(tweet.html, {
+			DOMPurify.sanitize(displayTweet.html ?? escapeHtml(displayTweet.body), {
 				USE_PROFILES: { html: true },
 			}),
-		[tweet.html],
+		[displayTweet.body, displayTweet.html],
 	);
 
 	const relativeTime = useMemo(
-		() => formatRelativeTime(tweet.created_at),
-		[tweet.created_at],
+		() => formatRelativeTime(displayTweet.created_at),
+		[displayTweet.created_at],
 	);
 
 	// Absolute timestamp for screen readers; the visible "2h" alone reads
 	// poorly (e.g. JP SR speaks "ニエイチ"). Always pair via aria-label.
 	const absoluteTime = useMemo(
 		() =>
-			new Date(tweet.created_at).toLocaleString("ja-JP", {
+			new Date(displayTweet.created_at).toLocaleString("ja-JP", {
 				year: "numeric",
 				month: "long",
 				day: "numeric",
 				hour: "2-digit",
 				minute: "2-digit",
 			}),
-		[tweet.created_at],
+		[displayTweet.created_at],
 	);
 
 	// #327: 削除済み tweet は tombstone で代替 (action button 一切出さない)
@@ -222,108 +233,62 @@ export default function TweetCard({
 		return <DeletedTombstone posinset={posinset} setsize={setsize} />;
 	}
 
-	// #327: type=repost は本体を repost_of に差し替えて RepostBanner を被せる。
-	// repost_of が tombstone の場合は banner + tombstone を表示。
-	if (tweet.type === "repost" && tweet.repost_of) {
-		const reposter = tweet.author_display_name ?? tweet.author_handle;
-		if (tweet.repost_of.is_deleted) {
-			return (
-				<article
-					className="flex flex-col gap-2 border-b border-border px-4 py-3"
-					aria-label={`${reposter} のリポスト (削除済み)`}
-					aria-posinset={posinset}
-					aria-setsize={setsize}
-				>
+	if (displayTweet.is_deleted) {
+		return (
+			<article
+				className="flex flex-col gap-2 border-b border-border px-4 py-3"
+				aria-label={`${reposterName} のリポスト (削除済み)`}
+				aria-posinset={posinset}
+				aria-setsize={setsize}
+			>
+				{isRepost ? (
 					<RepostBanner
 						handle={tweet.author_handle}
 						displayName={tweet.author_display_name}
 					/>
-					<p className="text-sm text-muted-foreground">
-						このツイートは削除されました。
-					</p>
-				</article>
-			);
-		}
-		// 元 tweet を TweetSummary 風に再構築して TweetCard を再帰呼び出し...
-		// ではなく、TweetMini しか無いので簡略表示にする。Phase 4 で repost_of を
-		// 完全な summary にする (#TBD)。今は author + body + created_at のみ。
-		const original = tweet.repost_of;
-		const originalName = original.author_display_name || original.author_handle;
-		return (
-			<article
-				className="flex cursor-pointer flex-col gap-2 border-b border-border px-4 py-3 hover:bg-muted/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-				aria-label={`${reposter} がリポスト: ${originalName} のツイート — クリックで詳細`}
-				aria-posinset={posinset}
-				aria-setsize={setsize}
-				tabIndex={0}
-				onClick={navigateToDetail}
-				onKeyDown={onCardKeyDown}
-			>
-				<RepostBanner
-					handle={tweet.author_handle}
-					displayName={tweet.author_display_name}
-				/>
-				<header className="flex items-center gap-3">
-					{original.author_avatar_url ? (
-						<img
-							src={original.author_avatar_url}
-							alt=""
-							aria-hidden="true"
-							className="size-10 shrink-0 rounded-full object-cover"
-						/>
-					) : (
-						<div
-							className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground"
-							aria-hidden="true"
-						>
-							{originalName.charAt(0).toUpperCase()}
-						</div>
-					)}
-					<Link
-						href={`/u/${original.author_handle}`}
-						className="flex min-w-0 flex-col rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:underline"
-						aria-label={`${originalName} (@${original.author_handle}) のプロフィール`}
-					>
-						<span className="font-semibold text-sm text-foreground truncate">
-							{originalName}
-						</span>
-						<span className="text-xs text-muted-foreground">
-							@{original.author_handle}
-						</span>
-					</Link>
-				</header>
-				<Link
-					href={`/tweet/${original.id}`}
-					className="rounded text-sm text-foreground whitespace-pre-wrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-				>
-					{original.body}
-				</Link>
+				) : null}
+				<p className="text-sm text-muted-foreground">
+					このツイートは削除されました。
+				</p>
 			</article>
 		);
 	}
 
-	const authorName = tweet.author_display_name ?? tweet.author_handle;
+	const authorName =
+		displayTweet.author_display_name ?? displayTweet.author_handle;
 
-	const hasImages = tweet.images.length > 0;
-	const hasTags = tweet.tags.length > 0;
+	const images = displayTweet.images ?? [];
+	const tags = displayTweet.tags ?? [];
+	const hasImages = images.length > 0;
+	const hasTags = tags.length > 0;
 
 	return (
 		<article
 			// scroll-mt-12 keeps focused articles visible below the sticky tab bar
 			// (WCAG 2.2 SC 2.4.11 Focus Not Obscured). Tab bar height is 3rem.
 			className="flex cursor-pointer flex-col gap-3 border-b border-border px-4 py-3 scroll-mt-12 hover:bg-muted/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-			aria-label={`${authorName} のツイート — クリックで詳細`}
+			aria-label={
+				isRepost
+					? `${reposterName} がリポスト: ${authorName} のツイート — クリックで詳細`
+					: `${authorName} のツイート — クリックで詳細`
+			}
 			aria-posinset={posinset}
 			aria-setsize={setsize}
 			tabIndex={0}
 			onClick={navigateToDetail}
 			onKeyDown={onCardKeyDown}
 		>
+			{isRepost ? (
+				<RepostBanner
+					handle={tweet.author_handle}
+					displayName={tweet.author_display_name}
+				/>
+			) : null}
 			{/* Author row */}
 			<header className="flex items-center gap-3">
-				{tweet.author_avatar_url ? (
+				{displayTweet.author_avatar_url ? (
 					<img
-						src={tweet.author_avatar_url}
+						src={displayTweet.author_avatar_url}
 						alt=""
 						aria-hidden="true"
 						className="size-10 shrink-0 rounded-full object-cover"
@@ -342,20 +307,20 @@ export default function TweetCard({
 				    click 領域 (詳細遷移) と分離するため、Link は header 内のみ。
 				    keyboard でも Tab 1 hop で focus + Enter で profile に飛べる。 */}
 				<Link
-					href={`/u/${tweet.author_handle}`}
+					href={`/u/${displayTweet.author_handle}`}
 					className="flex min-w-0 flex-col rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:underline"
-					aria-label={`${authorName} (@${tweet.author_handle}) のプロフィール`}
+					aria-label={`${authorName} (@${displayTweet.author_handle}) のプロフィール`}
 				>
 					<span className="font-semibold text-sm text-foreground truncate">
 						{authorName}
 					</span>
 					<span className="text-xs text-muted-foreground">
-						@{tweet.author_handle}
+						@{displayTweet.author_handle}
 					</span>
 				</Link>
 
 				<div className="ml-auto flex shrink-0 items-center gap-2">
-					{tweet.edit_count > 0 && (
+					{(displayTweet.edit_count ?? 0) > 0 && (
 						<span
 							aria-label="この投稿は編集されています"
 							className="text-xs text-muted-foreground border border-muted-foreground/30 rounded px-1 py-0.5"
@@ -364,7 +329,7 @@ export default function TweetCard({
 						</span>
 					)}
 					<time
-						dateTime={tweet.created_at}
+						dateTime={displayTweet.created_at}
 						aria-label={absoluteTime}
 						className="text-xs text-muted-foreground"
 					>
@@ -376,7 +341,7 @@ export default function TweetCard({
 			{/* Tweet body — DOMPurify sanitized HTML, P2-18 expandable. */}
 			<ExpandableBody
 				html={safeHtml}
-				charCount={tweet.char_count}
+				charCount={displayTweet.char_count ?? displayTweet.body.length}
 				className="prose prose-sm dark:prose-invert max-w-none text-sm text-foreground"
 			/>
 
@@ -384,9 +349,9 @@ export default function TweetCard({
 			{hasImages && (
 				<div
 					data-testid="tweet-images"
-					className={`grid gap-1 ${tweet.images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}
+					className={`grid gap-1 ${images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}
 				>
-					{tweet.images.slice(0, 4).map((img, idx) => (
+					{images.slice(0, 4).map((img, idx) => (
 						<img
 							key={img.image_url}
 							src={img.image_url}
@@ -404,7 +369,7 @@ export default function TweetCard({
 			{/* Tag chips */}
 			{hasTags && (
 				<div data-testid="tweet-tags" className="flex flex-wrap gap-1">
-					{tweet.tags.map((tag) => (
+					{tags.map((tag) => (
 						<Link
 							key={tag}
 							href={`/tag/${tag}`}
@@ -418,8 +383,8 @@ export default function TweetCard({
 			)}
 
 			{/* #327: 引用元 inline embed (type=quote のときのみ表示) */}
-			{tweet.type === "quote" && tweet.quote_of && (
-				<QuoteEmbed tweet={tweet.quote_of} />
+			{displayTweet.type === "quote" && displayTweet.quote_of && (
+				<QuoteEmbed tweet={displayTweet.quote_of} />
 			)}
 
 			{/* Action buttons. Reactions wired in P2-14, repost/quote/reply in P2-15.
@@ -464,15 +429,15 @@ export default function TweetCard({
 				    badge として表示する (X TL の慣習)。 */}
 				<div className="flex items-center gap-1">
 					<RepostButton
-						tweetId={tweet.id}
+						tweetId={displayTweet.id}
 						// #351: viewer の永続 repost 状態 (server-fetched) を初期値に
 						// 渡す。リロード時に「リポスト済み」 (緑) で正しく復元される。
-						initialReposted={tweet.reposted_by_me ?? false}
+						initialReposted={displayTweet.reposted_by_me ?? false}
 						onPosted={onDescendantPosted}
 						onQuoteRequest={() => setQuoteOpen(true)}
 					/>
 					{(() => {
-						const repostCount = tweet.repost_count ?? 0;
+						const repostCount = displayTweet.repost_count ?? 0;
 						const total = repostCount + quoteCountOptimistic;
 						if (total === 0) return null;
 						// a11y CRITICAL-2 (#343 review): aria-label と visible text の
@@ -494,11 +459,11 @@ export default function TweetCard({
 					})()}
 				</div>
 
-				<ReactionBar tweetId={tweet.id} />
+				<ReactionBar tweetId={displayTweet.id} />
 			</footer>
 
 			<PostDialog
-				tweetId={tweet.id}
+				tweetId={displayTweet.id}
 				mode="reply"
 				open={replyOpen}
 				onOpenChange={setReplyOpen}
@@ -507,17 +472,17 @@ export default function TweetCard({
 					onDescendantPosted?.(posted);
 				}}
 				parentTweet={{
-					id: tweet.id,
-					author_handle: tweet.author_handle,
-					author_display_name: tweet.author_display_name,
-					author_avatar_url: tweet.author_avatar_url,
-					body: tweet.body,
-					created_at: tweet.created_at,
-					is_deleted: tweet.is_deleted ?? false,
+					id: displayTweet.id,
+					author_handle: displayTweet.author_handle,
+					author_display_name: displayTweet.author_display_name,
+					author_avatar_url: displayTweet.author_avatar_url,
+					body: displayTweet.body,
+					created_at: displayTweet.created_at,
+					is_deleted: displayTweet.is_deleted ?? false,
 				}}
 			/>
 			<PostDialog
-				tweetId={tweet.id}
+				tweetId={displayTweet.id}
 				mode="quote"
 				open={quoteOpen}
 				onOpenChange={setQuoteOpen}
@@ -526,13 +491,13 @@ export default function TweetCard({
 					onDescendantPosted?.(posted);
 				}}
 				parentTweet={{
-					id: tweet.id,
-					author_handle: tweet.author_handle,
-					author_display_name: tweet.author_display_name,
-					author_avatar_url: tweet.author_avatar_url,
-					body: tweet.body,
-					created_at: tweet.created_at,
-					is_deleted: tweet.is_deleted ?? false,
+					id: displayTweet.id,
+					author_handle: displayTweet.author_handle,
+					author_display_name: displayTweet.author_display_name,
+					author_avatar_url: displayTweet.author_avatar_url,
+					body: displayTweet.body,
+					created_at: displayTweet.created_at,
+					is_deleted: displayTweet.is_deleted ?? false,
 				}}
 			/>
 		</article>
