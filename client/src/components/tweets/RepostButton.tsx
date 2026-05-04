@@ -56,6 +56,7 @@ export default function RepostButton({
 }: RepostButtonProps) {
 	const [reposted, setReposted] = useState(initialReposted);
 	const [busy, setBusy] = useState(false);
+	const [open, setOpen] = useState(false);
 	// a11y CRITICAL-2 (PR #343 review): toast は visible UX のみで SR には届きにくい。
 	// state 変化を sr-only な polite live region で announce する。
 	const [statusMsg, setStatusMsg] = useState("");
@@ -103,7 +104,7 @@ export default function RepostButton({
 	};
 
 	return (
-		<DropdownMenu>
+		<DropdownMenu open={open} onOpenChange={setOpen}>
 			{/* a11y CRITICAL-2: 状態変化を sr-only polite live region で announce */}
 			<span role="status" aria-live="polite" className="sr-only">
 				{statusMsg}
@@ -160,13 +161,11 @@ export default function RepostButton({
 					</DropdownMenuItem>
 				)}
 				<DropdownMenuItem
-					onSelect={(e) => {
-						e.preventDefault();
-						// #349: Dialog open を menu close 完了後の次フレームに逃がす。
-						// 同フレームで両方走らせると Radix DropdownMenu の click event が
-						// PostDialog の onPointerDownOutside に届き Dialog が即時 close
-						// される race condition があるため (二重防御: TweetCard 側でも
-						// menuitem を closest 除外している)。
+					onSelect={() => {
+						// Quote opens a separate dialog, so the repost menu must close
+						// first. The next frame avoids the Radix menu click from being
+						// interpreted as an outside click on the newly opened dialog.
+						setOpen(false);
 						setTimeout(() => onQuoteRequest?.(), 0);
 					}}
 				>

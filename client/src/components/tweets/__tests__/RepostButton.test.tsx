@@ -119,7 +119,12 @@ describe("RepostButton (#342 menu)", () => {
 		await userEvent.click(
 			await screen.findByRole("menuitem", { name: "引用" }),
 		);
-		expect(onQuoteRequest).toHaveBeenCalled();
+		await waitFor(() => {
+			expect(onQuoteRequest).toHaveBeenCalled();
+		});
+		await waitFor(() => {
+			expect(screen.queryByRole("menuitem", { name: "引用" })).toBeNull();
+		});
 		expect(repostTweet).not.toHaveBeenCalled();
 	});
 

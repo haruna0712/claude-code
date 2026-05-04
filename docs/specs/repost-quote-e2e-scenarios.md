@@ -148,14 +148,232 @@ spec 戦略を以下に書き換えて Radix の close 残留を回避:
 
 ```bash
 PLAYWRIGHT_BASE_URL=https://stg.codeplace.me \
-PLAYWRIGHT_USER1_EMAIL=test3@gmail.com PLAYWRIGHT_USER1_PASSWORD=Sirius01 \
+PLAYWRIGHT_USER1_EMAIL=test3@gmail.com PLAYWRIGHT_USER1_PASSWORD='<USER1_PASSWORD>' \
 PLAYWRIGHT_USER1_HANDLE=test3 \
-PLAYWRIGHT_USER2_EMAIL=test2@gmail.com PLAYWRIGHT_USER2_PASSWORD=Sirius01 \
+PLAYWRIGHT_USER2_EMAIL=test2@gmail.com PLAYWRIGHT_USER2_PASSWORD='<USER2_PASSWORD>' \
 PLAYWRIGHT_USER2_HANDLE=test2 \
 cd client && npx playwright test e2e/repost-quote-state-machine.spec.ts
 ```
 
 ローカル (`docker compose -f local.yml up`) でも `PLAYWRIGHT_BASE_URL=http://localhost:8080` に変えれば動作する。stg では rate limit (#336) を踏むため、複数回連続実行はやめて、1 回ずつ実行 + 24h おきが安全。
+
+### 4.1 stg 手動 smoke スクリプト
+
+自動 spec とは別に、Claude / Codex が stg のブラウザを直接操作して確認した軽量 smoke。いずれも `client/` 配下で実行する。認証情報は shell history に残さないため、JSON を標準入力で渡す。
+
+#### A. 引用選択時に repost menu が閉じ、quote dialog だけが残る
+
+目的:
+
+- `リポスト` menu を開く
+- `引用` を選ぶ
+- repost menu (`role=menu`) が消える
+- quote dialog (`role=dialog`) と本文 textarea が表示される
+- menu と dialog の二重ポップアップ状態にならない
+
+```bash
+cd client
+stty -echo
+node -e "
+const { chromium } = require('@playwright/test');
+async function main(s) {
+  const creds = JSON.parse(s);
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  await page.goto('https://stg.codeplace.me/login', { waitUntil: 'networkidle' });
+  await page.locator('input[name=email], input[placeholder*=Email]').first().fill(creds.email);
+  await page.locator('input[type=password], input[name=password]').first().fill(creds.password);
+  await page.getByRole('button', { name: 'Sign In' }).click();
+  await page.waitForLoadState('networkidle').catch(() => {});
+  await page.waitForTimeout(2500);
+
+  const card = page.locator('article').filter({ has: page.getByRole('button', { name: /^リポスト(済み)?$/ }) }).first();
+  await card.getByRole('button', { name: /^リポスト(済み)?$/ }).click();
+  await page.getByRole('menuitem', { name: '引用' }).click();
+  await page.waitForTimeout(1000);
+
+  const menuCount = await page.locator('[role=menu]').count();
+  const dialogCount = await page.locator('[role=dialog]').count();
+  const textareaVisible = await page.locator('textarea[aria-label*=引用], textarea').first().isVisible().catch(() => false);
+  console.log(JSON.stringify({ menuCount, dialogCount, textareaVisible, url: page.url() }, null, 2));
+  await browser.close();
+}
+let s = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', c => s += c);
+process.stdin.on('end', () => main(s).catch(e => { console.error(e); process.exit(1); }));
+process.stdin.resume();
+"
+# stdin:
+# {"email":"test2@gmail.com","password":"<PASSWORD>"}
+```
+
+期待結果:
+
+```json
+{
+	"menuCount": 0,
+	"dialogCount": 1,
+	"textareaVisible": true
+}
+```
+
+#### B. 自分の repost 行を unrepost すると TL から消える
+
+目的:
+
+- `test2 がリポストしました` のような自分の REPOST 行を探す
+- `リポスト済み` → `リポストを取り消す`
+- `DELETE /api/v1/tweets/<original_id>/repost/` が 204
+- 対象 REPOST 行が画面から消える
+
+```bash
+cd client
+stty -echo
+node -e "
+const { chromium } = require('@playwright/test');
+async function articleSummaries(page) {
+  return page.locator('article').evaluateAll(articles =>
+    articles.slice(0, 6).map((article, i) => ({
+      i,
+      label: article.getAttribute('aria-label'),
+      text: article.textContent?.replace(/\\s+/g, ' ').trim().slice(0, 520),
+      buttons: Array.from(article.querySelectorAll('button')).map(button =>
+        button.getAttribute('aria-label') || button.textContent?.trim()
+      ),
+    }))
+  );
+}
+async function main(s) {
+  const creds = JSON.parse(s);
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  const api = [];
+  page.on('response', response => {
+    if (response.url().includes('/api/')) {
+      api.push({ status: response.status(), method: response.request().method(), url: response.url() });
+    }
+  });
+  await page.goto('https://stg.codeplace.me/login', { waitUntil: 'networkidle' });
+  await page.locator('input[name=email], input[placeholder*=Email]').first().fill(creds.email);
+  await page.locator('input[type=password], input[name=password]').first().fill(creds.password);
+  await page.getByRole('button', { name: 'Sign In' }).click();
+  await page.waitForLoadState('networkidle').catch(() => {});
+  await page.waitForTimeout(2500);
+
+  const before = await articleSummaries(page);
+  const target = page.locator('article')
+    .filter({ hasText: 'test2がリポストしました' })
+    .filter({ has: page.getByRole('button', { name: 'リポスト済み' }) })
+    .first();
+  const beforeLabel = await target.evaluate(article => article.getAttribute('aria-label'));
+  await target.getByRole('button', { name: 'リポスト済み' }).click({ force: true });
+  await page.getByRole('menuitem', { name: 'リポストを取り消す' }).click({ force: true });
+  await page.waitForTimeout(2500);
+
+  const after = await articleSummaries(page);
+  const stillVisible = after.some(article => article.label === beforeLabel && article.text?.includes('test2がリポストしました'));
+  console.log(JSON.stringify({
+    before: before.slice(0, 2),
+    after: after.slice(0, 2),
+    stillVisible,
+    repostApi: api.filter(entry => entry.url.includes('/repost/')).slice(-5),
+  }, null, 2));
+  await browser.close();
+}
+let s = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', c => s += c);
+process.stdin.on('end', () => main(s).catch(e => { console.error(e); process.exit(1); }));
+process.stdin.resume();
+"
+# stdin:
+# {"email":"test2@gmail.com","password":"<PASSWORD>"}
+```
+
+期待結果:
+
+```json
+{
+	"stillVisible": false,
+	"repostApi": [{ "status": 204, "method": "DELETE" }]
+}
+```
+
+#### C. timeline API の repost_of が action footer 用の情報を返す
+
+目的:
+
+- `/api/v1/timeline/home/` と `/api/v1/timeline/following/` をログイン済み cookie で取得
+- `type=repost` の `repost_of` に `html`, `reply_count`, `repost_count`, `quote_count`, `reaction_count`, `reposted_by_me`, `quote_of` が含まれることを確認
+- repost された quote でも、引用元 embed 用の `repost_of.quote_of` が含まれることを確認
+
+```bash
+cd client
+stty -echo
+node -e "
+const { chromium } = require('@playwright/test');
+async function main(s) {
+  const creds = JSON.parse(s);
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.goto('https://stg.codeplace.me/login', { waitUntil: 'networkidle' });
+  await page.locator('input[name=email], input[placeholder*=Email]').first().fill(creds.email);
+  await page.locator('input[type=password], input[name=password]').first().fill(creds.password);
+  await page.getByRole('button', { name: 'Sign In' }).click();
+  await page.waitForLoadState('networkidle').catch(() => {});
+  await page.waitForTimeout(2500);
+
+  const data = await page.evaluate(async () => {
+    const endpoints = ['/api/v1/timeline/home/?limit=20', '/api/v1/timeline/following/?limit=20'];
+    const out = {};
+    for (const endpoint of endpoints) {
+      const response = await fetch(endpoint, { credentials: 'include' });
+      const body = await response.json();
+      out[endpoint] = {
+        status: response.status,
+        rows: body.results.slice(0, 8).map(tweet => ({
+          id: tweet.id,
+          type: tweet.type,
+          author: tweet.author_handle,
+          repost_of: tweet.repost_of && {
+            id: tweet.repost_of.id,
+            type: tweet.repost_of.type,
+            hasHtml: Boolean(tweet.repost_of.html),
+            reply_count: tweet.repost_of.reply_count,
+            repost_count: tweet.repost_of.repost_count,
+            quote_count: tweet.repost_of.quote_count,
+            reaction_count: tweet.repost_of.reaction_count,
+            reposted_by_me: tweet.repost_of.reposted_by_me,
+            quote_of: tweet.repost_of.quote_of && {
+              id: tweet.repost_of.quote_of.id,
+              hasHtml: Boolean(tweet.repost_of.quote_of.html),
+            },
+          },
+        })),
+      };
+    }
+    return out;
+  });
+  console.log(JSON.stringify(data, null, 2));
+  await browser.close();
+}
+let s = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', c => s += c);
+process.stdin.on('end', () => main(s).catch(e => { console.error(e); process.exit(1); }));
+process.stdin.resume();
+"
+# stdin:
+# {"email":"test2@gmail.com","password":"<PASSWORD>"}
+```
+
+期待結果:
+
+- `status` は 200
+- `type: "repost"` の行で `repost_of.hasHtml === true`
+- `repost_of.reposted_by_me` が viewer 視点で true/false になる
+- repost された quote では `repost_of.type === "quote"` かつ `repost_of.quote_of.hasHtml === true`
 
 ---
 
