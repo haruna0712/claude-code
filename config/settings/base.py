@@ -437,6 +437,27 @@ if SENTRY_ENVIRONMENT in ("stg", "production") and not CORS_ALLOWED_ORIGINS:
     )
 
 
+# #336: stg では throttle rate を緩和する (DRF の SimpleRateThrottle は
+# クラス import 時に api_settings.DEFAULT_THROTTLE_RATES を class attribute に
+# copy するので、production.py で後付け上書きしても効かない既知の特性。
+# REST_FRAMEWORK 初期定義時にここで分岐させる必要がある).
+_IS_STG = SENTRY_ENVIRONMENT == "stg"
+_THROTTLE_RATES_BASE = {
+    "anon": "200/day" if not _IS_STG else "2000/day",
+    "user": "500/day" if not _IS_STG else "5000/day",
+    "post_tweet": "500/day" if not _IS_STG else "5000/day",
+    "post_tweet_tier_1": "100/day" if not _IS_STG else "1000/day",
+    "post_tweet_tier_2": "500/day" if not _IS_STG else "5000/day",
+    "post_tweet_tier_3": "1000/day" if not _IS_STG else "10000/day",
+    "reaction": "60/min" if not _IS_STG else "600/min",
+    # 以下は abuse 防止が目的なので stg でも本番と同値に据え置く:
+    "login": "5/minute",
+    "avatar_upload": "10/minute",
+    "tag_propose": "20/hour",
+    "dm_attachment_presign": "30/hour",
+    "dm_attachment_confirm": "30/hour",
+}
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -459,44 +480,11 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ),
-    # P1-11 (#97) + SPEC §14.5: 階層 throttle の rate 定義。
+    # P1-11 (#97) + SPEC §14.5 + #336: 階層 throttle の rate 定義。
+    # 値は上の `_THROTTLE_RATES_BASE` で stg 環境分岐済み。
     # 実際に階層を切り替える責務は ``apps.common.throttling.PostTweetThrottle``。
     # このマップは DRF が scope 名から rate を引くだけのテーブルに徹する。
-    "DEFAULT_THROTTLE_RATES": {
-        "anon": "200/day",
-        "user": "500/day",
-        # legacy: P1-08 以前に scope="post_tweet" で指定されていた互換用。
-        # P1-11 時点で ``throttle_scope = "post_tweet"`` を直接指定している view は
-        # 存在せず、実質 dead entry。削除は破壊的変更になり得るため据え置き。
-        # TODO(Phase2): post_tweet_tier_* へ全面移行済みの確認後、削除する。
-        "post_tweet": "500/day",
-        "post_tweet_tier_1": "100/day",  # 通常ユーザー
-        "post_tweet_tier_2": "500/day",  # アクティブユーザー (Phase 2 で自動昇格)
-        "post_tweet_tier_3": "1000/day",  # プレミアム (User.is_premium)
-        # code-reviewer (PR #131 HIGH #2) 指摘: login ブルートフォース対策。
-        # apps.users.views.LoginRateThrottle が scope="login" で参照する。
-        "login": "5/minute",
-        # code-reviewer (PR #139 HIGH #1) 指摘: avatar / header の presigned URL 発行も
-        # 低頻度用の dedicated throttle を持たせ、既定の "user" rate (500/day) から分離する。
-        # apps.users.views.AvatarUploadRateThrottle が scope="avatar_upload" で参照する。
-        "avatar_upload": "10/minute",
-        # code-reviewer (PR #135 HIGH #2) 指摘: タグ新規提案は find_similar_tags で
-        # 全 approved タグを Python 側で走査するため、既定 user レート (500/day) より
-        # 厳しい scope="tag_propose" を用意し DoS 的な連投を抑制する。
-        # apps.tags.views.TagProposeThrottle が参照する。
-        "tag_propose": "20/hour",
-        # P2-04 (sec MEDIUM): リアクション spam 対策。
-        # toggle (post → delete → post) を高速で繰り返すと signals 連打 + DB 書き込みが
-        # 集中するため、user 単位で 60/min に制限する。
-        # apps.reactions.views.ReactionThrottle が参照する。
-        "reaction": "60/min",
-        # P3-06 (security-reviewer HIGH H-3): DM 添付の presign / confirm。
-        # 1 回 25MB 上限なので 500/day では 12GB/user/day の DoS が成立する。
-        # PresignAttachmentView / ConfirmAttachmentView が `dm_attachment_presign` を参照。
-        "dm_attachment_presign": "30/hour",
-        # confirm は head_object を毎回叩くので separate scope で更に絞る。
-        "dm_attachment_confirm": "30/hour",
-    },
+    "DEFAULT_THROTTLE_RATES": _THROTTLE_RATES_BASE,
 }
 
 # P2-07 (sec CRITICAL #1): OGP fetch の User-Agent. 環境変数で override 可能。
