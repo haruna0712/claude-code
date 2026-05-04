@@ -34,6 +34,7 @@ from apps.tweets.models import (
     Tweet,
     TweetImage,
     TweetTag,
+    TweetType,
 )
 from apps.tweets.rendering import render_markdown
 
@@ -140,6 +141,10 @@ class TweetListSerializer(serializers.ModelSerializer):
     reply_to = serializers.SerializerMethodField()
     quote_of = serializers.SerializerMethodField()
     repost_of = serializers.SerializerMethodField()
+    # #351: viewer (request.user) 視点で「自分がこの tweet を repost 済みか」。
+    # frontend の RepostButton.initialReposted に流して、リロード後も
+    # 「リポスト済み」状態が UI に反映されるようにする。
+    reposted_by_me = serializers.SerializerMethodField()
 
     class Meta:
         model = Tweet
@@ -163,6 +168,8 @@ class TweetListSerializer(serializers.ModelSerializer):
             "reply_to",
             "quote_of",
             "repost_of",
+            # #351
+            "reposted_by_me",
         ]
         read_only_fields = fields
 
@@ -199,6 +206,26 @@ class TweetListSerializer(serializers.ModelSerializer):
 
     def get_repost_of(self, obj: Tweet) -> dict[str, Any] | None:
         return self._resolve_parent(obj.repost_of_id)
+
+    def get_reposted_by_me(self, obj: Tweet) -> bool:
+        """#351: viewer 視点での repost 状態.
+
+        N+1 を避けるため context["viewer_repost_ids"] に **既に prefetch 済の
+        id 集合** が入っていれば優先して使う。view 側 (TimelineView 等) が
+        list 描画時に 1 query でまとめ取得できる。fallback は per-row EXISTS
+        クエリ (詳細 view など 1 件取得時のみ許容).
+        """
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return False
+        prefetched = self.context.get("viewer_repost_ids")
+        if prefetched is not None:
+            return obj.pk in prefetched
+        return Tweet.objects.filter(
+            author=request.user,
+            type=TweetType.REPOST,
+            repost_of=obj,
+        ).exists()
 
 
 class TweetDetailSerializer(TweetListSerializer):

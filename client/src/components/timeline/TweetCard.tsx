@@ -465,6 +465,9 @@ export default function TweetCard({
 				<div className="flex items-center gap-1">
 					<RepostButton
 						tweetId={tweet.id}
+						// #351: viewer の永続 repost 状態 (server-fetched) を初期値に
+						// 渡す。リロード時に「リポスト済み」 (緑) で正しく復元される。
+						initialReposted={tweet.reposted_by_me ?? false}
 						onPosted={onDescendantPosted}
 						onQuoteRequest={() => setQuoteOpen(true)}
 					/>
