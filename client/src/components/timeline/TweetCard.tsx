@@ -141,7 +141,16 @@ export default function TweetCard({
 			// e.target は EventTarget 型で Text node / 純 EventTarget の場合 closest を
 			// 持たないため、Element に narrow してから判定する。
 			if (!(e.target instanceof Element)) return;
-			if (e.target.closest("a, button, [role='button'], textarea, input"))
+			// #349: Radix DropdownMenu の menuitem は role="menuitem" (button では
+			// ない) で Portal 経由で render されても click が article に bubble して
+			// くる (実機で /tweet/<id> へ誤遷移する事象を確認)。menuitem 系 + Radix
+			// Portal 内 (data-radix-popper-content-wrapper) + Dialog 内の event を
+			// 包括的に除外する。
+			if (
+				e.target.closest(
+					"a, button, [role='button'], [role='menuitem'], [role='menuitemradio'], [role='menuitemcheckbox'], [role='dialog'], textarea, input, [data-radix-popper-content-wrapper]",
+				)
+			)
 				return;
 			if (typeof window !== "undefined") {
 				const sel = window.getSelection?.();
@@ -156,7 +165,11 @@ export default function TweetCard({
 			if (e.key === "Enter" || e.key === " ") {
 				if (!(e.target instanceof Element)) return;
 				// 内部の interactive element に focus がある場合はそちらの動作優先
-				if (e.target.closest("a, button, [role='button'], textarea, input"))
+				if (
+					e.target.closest(
+						"a, button, [role='button'], [role='menuitem'], [role='menuitemradio'], [role='menuitemcheckbox'], [role='dialog'], textarea, input, [data-radix-popper-content-wrapper]",
+					)
+				)
 					return;
 				e.preventDefault();
 				navigateToDetail(e);

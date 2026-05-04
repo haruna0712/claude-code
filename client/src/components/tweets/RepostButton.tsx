@@ -154,7 +154,12 @@ export default function RepostButton({
 				<DropdownMenuItem
 					onSelect={(e) => {
 						e.preventDefault();
-						onQuoteRequest?.();
+						// #349: Dialog open を menu close 完了後の次フレームに逃がす。
+						// 同フレームで両方走らせると Radix DropdownMenu の click event が
+						// PostDialog の onPointerDownOutside に届き Dialog が即時 close
+						// される race condition があるため (二重防御: TweetCard 側でも
+						// menuitem を closest 除外している)。
+						setTimeout(() => onQuoteRequest?.(), 0);
 					}}
 				>
 					引用
