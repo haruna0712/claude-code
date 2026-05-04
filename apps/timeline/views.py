@@ -18,7 +18,7 @@ from apps.timeline.services import (
     build_explore_tl,
     get_or_build_home_tl,
 )
-from apps.tweets.models import Tweet
+from apps.tweets.models import Tweet, TweetType
 from apps.tweets.serializers import TweetListSerializer
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,28 @@ def _parse_limit(request: Request, default: int = 20, cap: int = 100) -> int:
         return max(1, min(int(request.query_params.get("limit", default)), cap))
     except (TypeError, ValueError):
         return default
+
+
+def _viewer_repost_ids(request: Request, tweets: list[Tweet]) -> set[int]:
+    """#351: viewer が REPOST 済みの target id 集合を 1 query で取得.
+
+    TweetListSerializer.get_reposted_by_me が context["viewer_repost_ids"] を
+    優先して使うので、N+1 を避けるために list 描画前に prefetch する。
+    未認証なら空 set。
+    """
+    if isinstance(request.user, AnonymousUser) or not tweets:
+        return set()
+    target_ids = {t.pk for t in tweets}
+    # repost_of がある (= REPOST tweet) 行は repost_of_id を target にした
+    # 直接対応も含める (UI の REPOST article 上で reposted 表示する将来用)。
+    target_ids.update(t.repost_of_id for t in tweets if t.repost_of_id is not None)
+    return set(
+        Tweet.objects.filter(
+            author=request.user,
+            type=TweetType.REPOST,
+            repost_of_id__in=target_ids,
+        ).values_list("repost_of_id", flat=True)
+    )
 
 
 def _slice_with_cursor(
@@ -77,7 +99,14 @@ class HomeTimelineView(APIView):
             },
         )
 
-        data = TweetListSerializer(page, many=True, context={"request": request}).data
+        data = TweetListSerializer(
+            page,
+            many=True,
+            context={
+                "request": request,
+                "viewer_repost_ids": _viewer_repost_ids(request, page),
+            },
+        ).data
         return Response(
             {
                 "results": data,
@@ -119,7 +148,14 @@ class FollowingTimelineView(APIView):
         page = rows[:limit]
         next_cursor = encode_cursor(page[-1].pk) if has_more and page else None
 
-        data = TweetListSerializer(page, many=True, context={"request": request}).data
+        data = TweetListSerializer(
+            page,
+            many=True,
+            context={
+                "request": request,
+                "viewer_repost_ids": _viewer_repost_ids(request, page),
+            },
+        ).data
         return Response({"results": data, "next_cursor": next_cursor, "has_more": has_more})
 
 
@@ -139,5 +175,12 @@ class ExploreTimelineView(APIView):
         full = build_explore_tl(viewer=viewer, limit=limit * 5)
         page, next_cursor, has_more = _slice_with_cursor(full, cursor.id if cursor else None, limit)
 
-        data = TweetListSerializer(page, many=True, context={"request": request}).data
+        data = TweetListSerializer(
+            page,
+            many=True,
+            context={
+                "request": request,
+                "viewer_repost_ids": _viewer_repost_ids(request, page),
+            },
+        ).data
         return Response({"results": data, "next_cursor": next_cursor, "has_more": has_more})

@@ -60,6 +60,12 @@ export interface TweetSummary {
 	reply_to?: TweetMini | null;
 	quote_of?: TweetMini | null;
 	repost_of?: TweetMini | null;
+	/**
+	 * #351: viewer (request.user) 視点で「この tweet を自分が repost 済みか」。
+	 * RepostButton.initialReposted に渡してリロード後の状態復元に使う。
+	 * 未認証 / フィールド未付与時は undefined → false 扱い。
+	 */
+	reposted_by_me?: boolean;
 }
 
 export async function createTweet(

@@ -715,3 +715,60 @@ class TestSerializerExtension323:
         assert body["reply_to"] is not None
         assert body["reply_to"]["id"] == parent.pk
         assert body["reply_to"]["body"] == "parent"
+
+
+# =============================================================================
+# #351: reposted_by_me — viewer 視点の永続 repost 状態を serializer に出す
+# =============================================================================
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+class TestRepostedByMeSerializerField:
+    """#351: TweetListSerializer / TweetDetailSerializer の reposted_by_me 動作."""
+
+    def _detail(self, api_client: APIClient, pk: int) -> dict[str, Any]:
+        res = api_client.get(reverse("tweets-detail", kwargs={"pk": pk}))
+        assert res.status_code == status.HTTP_200_OK, res.content
+        return res.json()
+
+    def test_unauthenticated_viewer_sees_false(self, api_client: APIClient) -> None:
+        author = make_user()
+        tweet = make_tweet(author=author, body="t")
+        body = self._detail(api_client, tweet.pk)
+        assert body["reposted_by_me"] is False
+
+    def test_authenticated_not_reposted_returns_false(self, api_client: APIClient) -> None:
+        author = make_user()
+        tweet = make_tweet(author=author, body="t")
+        viewer = make_user()
+        api_client.force_authenticate(user=viewer)
+        body = self._detail(api_client, tweet.pk)
+        assert body["reposted_by_me"] is False
+
+    def test_authenticated_already_reposted_returns_true(self, api_client: APIClient) -> None:
+        from apps.tweets.models import Tweet as _T
+        from apps.tweets.models import TweetType
+
+        author = make_user()
+        tweet = make_tweet(author=author, body="t")
+        viewer = make_user()
+        # viewer は既にこの tweet を repost 済み
+        _T.objects.create(author=viewer, body="", type=TweetType.REPOST, repost_of=tweet)
+        api_client.force_authenticate(user=viewer)
+        body = self._detail(api_client, tweet.pk)
+        assert body["reposted_by_me"] is True
+
+    def test_other_user_repost_does_not_affect_viewer(self, api_client: APIClient) -> None:
+        """別ユーザーの REPOST は viewer の reposted_by_me に影響しない."""
+        from apps.tweets.models import Tweet as _T
+        from apps.tweets.models import TweetType
+
+        author = make_user()
+        tweet = make_tweet(author=author, body="t")
+        other = make_user()
+        viewer = make_user()
+        _T.objects.create(author=other, body="", type=TweetType.REPOST, repost_of=tweet)
+        api_client.force_authenticate(user=viewer)
+        body = self._detail(api_client, tweet.pk)
+        assert body["reposted_by_me"] is False

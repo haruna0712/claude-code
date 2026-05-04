@@ -218,6 +218,21 @@ describe("TweetCard — action buttons (placeholder)", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("#351: tweet.reposted_by_me=true で RepostButton が「リポスト済み」 で初期化される", () => {
+		const reposted = { ...BASE_TWEET, reposted_by_me: true };
+		render(<TweetCard tweet={reposted} />);
+		expect(
+			screen.getByRole("button", { name: "リポスト済み" }),
+		).toBeInTheDocument();
+	});
+
+	it("#351: tweet.reposted_by_me=undefined のとき false 扱い (「リポスト」)", () => {
+		render(<TweetCard tweet={BASE_TWEET} />);
+		expect(
+			screen.getByRole("button", { name: "リポスト" }),
+		).toBeInTheDocument();
+	});
+
 	it("renders ReactionBar trigger in the footer (P2-14 wires the bar)", () => {
 		render(<TweetCard tweet={BASE_TWEET} />);
 		// ReactionBar exposes the trigger via aria-label="リアクション"
