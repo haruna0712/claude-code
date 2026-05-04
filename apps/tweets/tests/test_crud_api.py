@@ -772,3 +772,26 @@ class TestRepostedByMeSerializerField:
         api_client.force_authenticate(user=viewer)
         body = self._detail(api_client, tweet.pk)
         assert body["reposted_by_me"] is False
+
+    def test_home_timeline_uses_viewer_repost_ids_prefetch(self, api_client: APIClient) -> None:
+        """#351 review HIGH-1/MEDIUM-2: timeline view の prefetch path で
+        reposted_by_me=True が反映される (1 query で全件解決される) ことを確認.
+        """
+        from apps.follows.tests._factories import make_follow
+        from apps.tweets.models import Tweet as _T
+        from apps.tweets.models import TweetType
+
+        viewer = make_user()
+        author = make_user()
+        make_follow(viewer, author)
+        target = make_tweet(author=author, body="prefetch target")
+        _T.objects.create(author=viewer, body="", type=TweetType.REPOST, repost_of=target)
+        api_client.force_authenticate(user=viewer)
+
+        res = api_client.get(reverse("timeline-home"))
+        assert res.status_code == status.HTTP_200_OK, res.content
+        results = res.json()["results"]
+        flags = {r["id"]: r["reposted_by_me"] for r in results}
+        # 元 tweet (target) が TL に含まれ、reposted_by_me=True
+        assert target.pk in flags
+        assert flags[target.pk] is True

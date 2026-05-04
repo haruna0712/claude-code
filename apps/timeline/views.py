@@ -37,13 +37,13 @@ def _viewer_repost_ids(request: Request, tweets: list[Tweet]) -> set[int]:
     TweetListSerializer.get_reposted_by_me が context["viewer_repost_ids"] を
     優先して使うので、N+1 を避けるために list 描画前に prefetch する。
     未認証なら空 set。
+
+    ``request.user.is_authenticated`` で判定する (AnonymousUser instance check
+    より backend-agnostic)。
     """
-    if isinstance(request.user, AnonymousUser) or not tweets:
+    if not request.user.is_authenticated or not tweets:
         return set()
     target_ids = {t.pk for t in tweets}
-    # repost_of がある (= REPOST tweet) 行は repost_of_id を target にした
-    # 直接対応も含める (UI の REPOST article 上で reposted 表示する将来用)。
-    target_ids.update(t.repost_of_id for t in tweets if t.repost_of_id is not None)
     return set(
         Tweet.objects.filter(
             author=request.user,
