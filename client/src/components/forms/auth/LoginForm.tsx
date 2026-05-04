@@ -2,13 +2,14 @@
 import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useLoginUserMutation } from "@/lib/redux/features/auth/authApiSlice";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAppDispatch } from "@/lib/redux/hooks/typedHooks";
 import { useForm } from "react-hook-form";
 import { loginUserSchema, TLoginUserSchema } from "@/lib/validationSchemas";
 import { extractErrorMessage } from "@/utils";
 import { toast } from "react-toastify";
 import { setAuth } from "@/lib/redux/features/auth/authSlice";
+import { fetchCurrentUser } from "@/lib/api/users";
 import { FormFieldComponent } from "@/components/forms/FormFieldComponent";
 import { MailIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import Spinner from "@/components/shared/Spinner";
 export default function LoginForm() {
 	const [loginUser, { isLoading }] = useLoginUserMutation();
 	const router = useRouter();
+	const searchParams = useSearchParams();
 	const dispatch = useAppDispatch();
 
 	const {
@@ -38,9 +40,22 @@ export default function LoginForm() {
 			await loginUser(values).unwrap();
 			dispatch(setAuth());
 			toast.success("Login Successful");
-			// SPEC §69: 初回ログイン直後はオンボーディングウィザードへ誘導。
-			// onboarding 完了済みユーザは /onboarding 内で / にリダイレクトされる。
-			router.push("/onboarding");
+			// #339: needs_onboarding=true (初回) のみ /onboarding に誘導する。
+			// 設定済みユーザーで /onboarding を flash させる UX を回避。?next= があれば
+			// そちらを優先 (private route から飛ばされてきた場合)。
+			const next = searchParams?.get("next");
+			let dest = next || "/";
+			try {
+				const me = await fetchCurrentUser();
+				if (me.needs_onboarding) {
+					dest = "/onboarding";
+				}
+			} catch {
+				// /users/me/ 取得失敗時は安全側で /onboarding に倒す (新規ユーザーの
+				// 可能性、Guard が再評価して /onboarding 不要なら / に redirect する)。
+				dest = "/onboarding";
+			}
+			router.push(dest);
 			reset();
 		} catch (error) {
 			const errorMessage = extractErrorMessage(error);

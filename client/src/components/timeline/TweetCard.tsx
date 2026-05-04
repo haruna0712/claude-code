@@ -9,7 +9,8 @@
  */
 
 import Link from "next/link";
-import React, { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import React, { useCallback, useMemo, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import ReactionBar from "@/components/reactions/ReactionBar";
 import ExpandableBody from "@/components/timeline/ExpandableBody";
@@ -126,8 +127,40 @@ export default function TweetCard({
 	setsize,
 	onDescendantPosted,
 }: TweetCardProps) {
+	const router = useRouter();
 	const [replyOpen, setReplyOpen] = useState(false);
 	const [quoteOpen, setQuoteOpen] = useState(false);
+
+	// #340: card 全体クリックで /tweet/<id> に遷移 (X 慣習)。
+	// 内部 link / button は伝播を止めて従来動作。テキスト drag-select も保護。
+	// repost article は repost_of の id へ飛ばす (banner 上ではなく元 tweet 詳細)。
+	const targetId =
+		tweet.type === "repost" && tweet.repost_of ? tweet.repost_of.id : tweet.id;
+	const navigateToDetail = useCallback(
+		(e: React.MouseEvent | React.KeyboardEvent) => {
+			const target = e.target as HTMLElement;
+			if (target.closest("a, button, [role='button'], textarea, input")) return;
+			if (typeof window !== "undefined") {
+				const sel = window.getSelection?.();
+				if (sel && sel.toString().length > 0) return;
+			}
+			router.push(`/tweet/${targetId}`);
+		},
+		[router, targetId],
+	);
+	const onCardKeyDown = useCallback(
+		(e: React.KeyboardEvent) => {
+			if (e.key === "Enter" || e.key === " ") {
+				const target = e.target as HTMLElement;
+				// 内部の interactive element に focus がある場合はそちらの動作優先
+				if (target.closest("a, button, [role='button'], textarea, input"))
+					return;
+				e.preventDefault();
+				navigateToDetail(e);
+			}
+		},
+		[navigateToDetail],
+	);
 	// #334: reply / quote 投稿成功時に楽観的に親 count badge を +1 する。
 	// PostDialog onPosted コールバック → ここで state を更新し、再レンダーで
 	// footer の count が即時反映される。リロード不要。
@@ -202,10 +235,13 @@ export default function TweetCard({
 		const originalName = original.author_display_name || original.author_handle;
 		return (
 			<article
-				className="flex flex-col gap-2 border-b border-border px-4 py-3 hover:bg-muted/40 transition-colors"
-				aria-label={`${reposter} がリポスト: ${originalName} のツイート`}
+				className="flex cursor-pointer flex-col gap-2 border-b border-border px-4 py-3 hover:bg-muted/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				aria-label={`${reposter} がリポスト: ${originalName} のツイート — クリックで詳細`}
 				aria-posinset={posinset}
 				aria-setsize={setsize}
+				tabIndex={0}
+				onClick={navigateToDetail}
+				onKeyDown={onCardKeyDown}
 			>
 				<RepostBanner
 					handle={tweet.author_handle}
@@ -259,10 +295,13 @@ export default function TweetCard({
 		<article
 			// scroll-mt-12 keeps focused articles visible below the sticky tab bar
 			// (WCAG 2.2 SC 2.4.11 Focus Not Obscured). Tab bar height is 3rem.
-			className="flex flex-col gap-3 border-b border-border px-4 py-3 scroll-mt-12 hover:bg-muted/40 transition-colors"
-			aria-label={`${authorName} のツイート`}
+			className="flex cursor-pointer flex-col gap-3 border-b border-border px-4 py-3 scroll-mt-12 hover:bg-muted/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+			aria-label={`${authorName} のツイート — クリックで詳細`}
 			aria-posinset={posinset}
 			aria-setsize={setsize}
+			tabIndex={0}
+			onClick={navigateToDetail}
+			onKeyDown={onCardKeyDown}
 		>
 			{/* Author row */}
 			<header className="flex items-center gap-3">
