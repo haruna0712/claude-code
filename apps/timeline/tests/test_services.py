@@ -182,3 +182,83 @@ def test_build_home_tl_excludes_self_reply_type() -> None:
     pks = {t.pk for t in result}
     assert parent.pk in pks
     assert own_reply.pk not in pks  # ← REPLY は除外
+
+
+@pytest.mark.django_db(transaction=True)
+def test_build_home_tl_excludes_repost_with_deleted_original() -> None:
+    """#347: 元 tweet が削除された REPOST 行は home TL から消す (X 慣習).
+
+    docs/specs/repost-quote-state-machine.md §2.5 / §5.4 と整合.
+    """
+    from apps.tweets.models import Tweet, TweetType
+
+    actor = make_user()
+    target = make_user()
+    make_follow(actor, target)
+
+    # フォロイーが他人 tweet をリポスト → その後元 tweet が削除される
+    original_author = make_user()
+    original = make_tweet(author=original_author, body="will be deleted")
+    repost = Tweet.objects.create(
+        author=target,
+        body="",
+        type=TweetType.REPOST,
+        repost_of=original,
+    )
+    original.soft_delete()  # tombstone 化
+
+    # 同一フォロイーの alive original も用意 (TL は空にならない)
+    alive_tweet = make_tweet(author=target, body="alive original")
+
+    result = build_home_tl(actor, limit=20)
+    pks = {t.pk for t in result}
+    # alive original は出る、tombstone repost は出ない
+    assert alive_tweet.pk in pks
+    assert repost.pk not in pks
+
+
+@pytest.mark.django_db(transaction=True)
+def test_build_home_tl_excludes_repost_with_null_repost_of() -> None:
+    """#347 (review HIGH-2): broken data — type=REPOST だが repost_of=NULL の
+    行も TL から除外する。repost_of__is_deleted=True の JOIN 比較は NULL を
+    False で評価するため、別 exclude で明示的に弾く必要がある.
+    """
+    from apps.tweets.models import Tweet, TweetType
+
+    actor = make_user()
+    target = make_user()
+    make_follow(actor, target)
+    # broken row: type=REPOST かつ repost_of=NULL
+    broken = Tweet.objects.create(author=target, body="", type=TweetType.REPOST, repost_of=None)
+    # alive original も 1 件用意 (TL が空にならない)
+    alive = make_tweet(author=target, body="alive")
+
+    result = build_home_tl(actor, limit=20)
+    pks = {t.pk for t in result}
+    assert broken.pk not in pks
+    assert alive.pk in pks
+
+
+@pytest.mark.django_db(transaction=True)
+def test_build_home_tl_keeps_quote_with_deleted_original() -> None:
+    """#347: QUOTE は元 tweet が削除されても本文が残るので TL に残る (§2.5)."""
+    from apps.tweets.models import Tweet, TweetType
+
+    actor = make_user()
+    target = make_user()
+    make_follow(actor, target)
+
+    original_author = make_user()
+    original = make_tweet(author=original_author, body="quoted source")
+    quote = Tweet.objects.create(
+        author=target,
+        body="my comment",
+        type=TweetType.QUOTE,
+        quote_of=original,
+    )
+    original.soft_delete()
+
+    result = build_home_tl(actor, limit=20)
+    pks = {t.pk for t in result}
+    # QUOTE は引用者の本文があるので残す (placeholder embed は frontend 描画責務)
+    assert quote.pk in pks
