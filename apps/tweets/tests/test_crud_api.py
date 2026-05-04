@@ -773,9 +773,15 @@ class TestRepostedByMeSerializerField:
         body = self._detail(api_client, tweet.pk)
         assert body["reposted_by_me"] is False
 
-    def test_home_timeline_uses_viewer_repost_ids_prefetch(self, api_client: APIClient) -> None:
+    def test_following_timeline_uses_viewer_repost_ids_prefetch(
+        self, api_client: APIClient
+    ) -> None:
         """#351 review HIGH-1/MEDIUM-2: timeline view の prefetch path で
-        reposted_by_me=True が反映される (1 query で全件解決される) ことを確認.
+        reposted_by_me=True が反映されることを確認.
+
+        home TL は ``_dedup_repost_originals`` で repost と original のうち
+        repost 側を残すため、自分の REPOST が dedup で残って元 tweet が消え、
+        テストが prefetch path を通せない。following TL は dedup しない。
         """
         from apps.follows.tests._factories import make_follow
         from apps.tweets.models import Tweet as _T
@@ -788,10 +794,10 @@ class TestRepostedByMeSerializerField:
         _T.objects.create(author=viewer, body="", type=TweetType.REPOST, repost_of=target)
         api_client.force_authenticate(user=viewer)
 
-        res = api_client.get(reverse("timeline-home"))
+        res = api_client.get(reverse("timeline-following"))
         assert res.status_code == status.HTTP_200_OK, res.content
         results = res.json()["results"]
         flags = {r["id"]: r["reposted_by_me"] for r in results}
-        # 元 tweet (target) が TL に含まれ、reposted_by_me=True
-        assert target.pk in flags
+        # author の original tweet が following TL に含まれ、reposted_by_me=True
+        assert target.pk in flags, f"target {target.pk} not in {list(flags.keys())}"
         assert flags[target.pk] is True
