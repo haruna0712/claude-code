@@ -4,6 +4,7 @@ ARG TZ
 ENV TZ="$TZ"
 
 ARG CLAUDE_CODE_VERSION=latest
+ARG CODEX_VERSION=latest
 
 # Install basic development tools, Python, and iptables/ipset
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -122,11 +123,13 @@ ENV DEVCONTAINER=true
 RUN mkdir -p \
   /workspace \
   /home/node/.claude \
+  /home/node/.codex \
   /home/node/.aws \
   /home/node/.config && \
   chown -R node:node \
   /workspace \
   /home/node/.claude \
+  /home/node/.codex \
   /home/node/.aws \
   /home/node/.config
 
@@ -222,6 +225,12 @@ RUN sed -i "/^export LANG='en_US.UTF-8'$/d; /^export LANGUAGE='en_US:en'$/d; /^e
 
 # Install Claude
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+
+# Install Codex CLI (OpenAI). 認証情報 (~/.codex/auth.json) は named volume
+# (claude-code-codex) に永続化されるので、リビルドしても `codex login` 済みの
+# 状態は保持される。CODEX_VERSION を devcontainer.json で固定すれば
+# contributor 間でバージョン揃えも可能 (現状 latest)。
+RUN npm install -g @openai/codex@${CODEX_VERSION}
 
 # Preinstall Playwright's Chromium browser into /home/node/.cache/ms-playwright
 # so the playwright MCP server (registered below with --browser chromium) can
