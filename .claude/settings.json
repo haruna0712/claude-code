@@ -11,6 +11,10 @@
       "Bash(rm --force --recursive *)",
       "Bash(sudo rm *)",
 
+      "Bash(rm -r *)",
+      "Bash(rm -R *)",
+      "Bash(rm --recursive *)",
+
       "Read(.env)",
       "Read(.env.*)",
       "Read(**/.env)",
