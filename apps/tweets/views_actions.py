@@ -22,6 +22,7 @@ import logging
 from typing import Any
 
 from django.db import IntegrityError, transaction
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers as drf_serializers
 from rest_framework import status
@@ -53,12 +54,29 @@ def _resolve_target(tweet_id: int) -> Tweet:
     ではなく **元 tweet (``repost_of``)** に解決し直す。これは X が
     「RT の RT」のチェーンを許容しないため (docs/specs/repost-quote-state-machine.md
     §4.3 / §2.4 参照)。元 tweet が削除済みなら ``Http404`` (alive Manager)。
+
+    防御的不変条件: §2.4 で「``repost_of`` は常に深さ 1」と保証されているため、
+    解決後の target は ORIGINAL / QUOTE / REPLY のいずれかになる。万一壊れた
+    データでチェーン (REPOST→REPOST) が残っていた場合は wrong-result を返す
+    リスクがあるため、解決後の type を再チェックして 404 にする。
     """
     target = get_object_or_404(Tweet, pk=tweet_id)
-    if target.type == TweetType.REPOST and target.repost_of_id is not None:
-        # alive のみを引く既定 Manager (Tweet.objects) を使うので、元が
-        # is_deleted=True なら自動的に 404 になる。
-        return get_object_or_404(Tweet, pk=target.repost_of_id)
+    if target.type == TweetType.REPOST:
+        if target.repost_of_id is None:
+            # broken data: type=REPOST なのに repost_of=NULL
+            logger.error(
+                "repost_with_null_repost_of",
+                extra={"tweet_id": tweet_id},
+            )
+            raise Http404("REPOST tweet に元 tweet がありません")
+        target = get_object_or_404(Tweet, pk=target.repost_of_id)
+        if target.type == TweetType.REPOST:
+            # data invariant §2.4 違反: チェーン深さ > 1
+            logger.error(
+                "repost_chain_violation",
+                extra={"original_id": tweet_id, "resolved_id": target.pk},
+            )
+            raise Http404("リポストのチェーンは許容されません")
     return target
 
 

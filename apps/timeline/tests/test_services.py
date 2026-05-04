@@ -218,6 +218,28 @@ def test_build_home_tl_excludes_repost_with_deleted_original() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
+def test_build_home_tl_excludes_repost_with_null_repost_of() -> None:
+    """#347 (review HIGH-2): broken data — type=REPOST だが repost_of=NULL の
+    行も TL から除外する。repost_of__is_deleted=True の JOIN 比較は NULL を
+    False で評価するため、別 exclude で明示的に弾く必要がある.
+    """
+    from apps.tweets.models import Tweet, TweetType
+
+    actor = make_user()
+    target = make_user()
+    make_follow(actor, target)
+    # broken row: type=REPOST かつ repost_of=NULL
+    broken = Tweet.objects.create(author=target, body="", type=TweetType.REPOST, repost_of=None)
+    # alive original も 1 件用意 (TL が空にならない)
+    alive = make_tweet(author=target, body="alive")
+
+    result = build_home_tl(actor, limit=20)
+    pks = {t.pk for t in result}
+    assert broken.pk not in pks
+    assert alive.pk in pks
+
+
+@pytest.mark.django_db(transaction=True)
 def test_build_home_tl_keeps_quote_with_deleted_original() -> None:
     """#347: QUOTE は元 tweet が削除されても本文が残るので TL に残る (§2.5)."""
     from apps.tweets.models import Tweet, TweetType

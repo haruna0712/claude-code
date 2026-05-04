@@ -136,8 +136,12 @@ def _query_following(user, blocked_ids: set[int], limit: int) -> list[Tweet]:
             type__in=[TweetType.ORIGINAL, TweetType.REPOST, TweetType.QUOTE],
         )
         .exclude(author_id__in=blocked_ids)
-        # #347: 元 tweet が tombstone の REPOST 行は X 互換で TL から消す
+        # #347: 元 tweet が tombstone の REPOST 行は X 互換で TL から消す。
+        # repost_of__isnull は repost_of=NULL の broken data 対策 (JOIN 結果が
+        # NULL のとき is_deleted=True 比較は False を返すため、別 exclude で
+        # 明示的に弾く)。
         .exclude(type=TweetType.REPOST, repost_of__is_deleted=True)
+        .exclude(type=TweetType.REPOST, repost_of__isnull=True)
         .order_by("-created_at")[:limit]
     )
     return list(qs)

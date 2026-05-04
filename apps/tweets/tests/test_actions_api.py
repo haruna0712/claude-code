@@ -185,6 +185,29 @@ class TestResolveTargetRepostFallthrough:
         quote = Tweet.objects.get(pk=res.json()["id"])
         assert quote.quote_of_id == original.pk
 
+    def test_repost_chain_violation_returns_404(self, api_client: APIClient) -> None:
+        """broken data: REPOST → REPOST のチェーンが残っていた場合、404 で拒否。
+
+        §2.4 で深さ 1 が保証されているが、過去データに chain が混入していたら
+        wrong-result を返す代わりに 404 + structlog で気づけるようにする。
+        """
+        author_a = make_user()
+        original = make_tweet(author=author_a, body="original")
+        # 通常は _resolve_target で防がれるが、テスト用に DB 直書きで chain を作る
+        repost_b = Tweet.objects.create(
+            author=make_user(), body="", type=TweetType.REPOST, repost_of=original
+        )
+        # broken: type=REPOST だが repost_of が REPOST を指す (深さ 2)
+        chain = Tweet.objects.create(
+            author=make_user(), body="", type=TweetType.REPOST, repost_of=repost_b
+        )
+        actor_c = make_user()
+        api_client.force_authenticate(user=actor_c)
+
+        res = api_client.post(repost_url(chain.pk))
+
+        assert res.status_code == status.HTTP_404_NOT_FOUND
+
     def test_repost_target_is_repost_with_deleted_original_404(self, api_client: APIClient) -> None:
         """REPOST tweet を target に渡したが元 tweet が削除済みなら 404."""
         author_a = make_user()
