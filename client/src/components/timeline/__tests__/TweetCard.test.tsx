@@ -264,7 +264,7 @@ describe("TweetCard — action buttons (placeholder)", () => {
 		expect(replyBtn.tagName).toBe("BUTTON");
 	});
 
-	it("shows delete menu only for my own non-repost tweet", async () => {
+	it("shows delete menu for my own tweet", async () => {
 		render(<TweetCard tweet={BASE_TWEET} currentUserHandle="alice" />);
 		await userEvent.click(
 			screen.getByRole("button", { name: "ツイートのその他メニュー" }),
@@ -303,6 +303,80 @@ describe("TweetCard — action buttons (placeholder)", () => {
 			expect(deleteTweet).toHaveBeenCalledWith(42);
 			expect(onTimelineItemRemoved).toHaveBeenCalledWith(42);
 		});
+	});
+
+	it("deletes the source tweet and removes the repost row for a repost of my own tweet", async () => {
+		vi.mocked(deleteTweet).mockResolvedValue();
+		const onTimelineItemRemoved = vi.fn();
+		const tweet: TweetSummary = {
+			...BASE_TWEET,
+			id: 123,
+			author_handle: "alice",
+			author_display_name: "Alice Smith",
+			type: "repost",
+			body: "",
+			repost_of: {
+				id: 99,
+				author_handle: "alice",
+				author_display_name: "Alice Smith",
+				body: "my original post",
+				html: "<p>my original post</p>",
+				char_count: 16,
+				created_at: "2024-01-15T09:00:00Z",
+				is_deleted: false,
+				reply_count: 0,
+				repost_count: 1,
+				quote_count: 0,
+				reposted_by_me: true,
+			},
+		};
+		render(
+			<TweetCard
+				tweet={tweet}
+				currentUserHandle="alice"
+				onTimelineItemRemoved={onTimelineItemRemoved}
+			/>,
+		);
+
+		await userEvent.click(
+			screen.getByRole("button", { name: "ツイートのその他メニュー" }),
+		);
+		await userEvent.click(
+			await screen.findByRole("menuitem", { name: "削除" }),
+		);
+
+		await waitFor(() => {
+			expect(deleteTweet).toHaveBeenCalledWith(99);
+			expect(onTimelineItemRemoved).toHaveBeenCalledWith(123);
+			expect(onTimelineItemRemoved).toHaveBeenCalledWith(99);
+		});
+	});
+
+	it("does not show delete menu for my repost of another user's tweet", () => {
+		const tweet: TweetSummary = {
+			...BASE_TWEET,
+			id: 123,
+			author_handle: "alice",
+			author_display_name: "Alice Smith",
+			type: "repost",
+			body: "",
+			repost_of: {
+				id: 99,
+				author_handle: "bob",
+				author_display_name: "Bob",
+				body: "bob original post",
+				html: "<p>bob original post</p>",
+				char_count: 17,
+				created_at: "2024-01-15T09:00:00Z",
+				is_deleted: false,
+				reposted_by_me: true,
+			},
+		};
+		render(<TweetCard tweet={tweet} currentUserHandle="alice" />);
+
+		expect(
+			screen.queryByRole("button", { name: "ツイートのその他メニュー" }),
+		).not.toBeInTheDocument();
 	});
 });
 

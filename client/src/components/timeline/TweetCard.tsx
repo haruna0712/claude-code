@@ -43,7 +43,7 @@ interface TweetCardProps {
 	 * 上位は受け取った tweet.type を見て prepend / append を判断する。
 	 */
 	onDescendantPosted?: (tweet: TweetSummary) => void;
-	/** Login viewer handle. Used to remove this row when it is my own repost. */
+	/** Login viewer handle. Used to decide source-tweet delete permissions. */
 	currentUserHandle?: string;
 	/** Called when this timeline row should disappear after unrepost. */
 	onTimelineItemRemoved?: (tweetId: number) => void;
@@ -163,9 +163,8 @@ export default function TweetCard({
 	const displayTweet = isRepost ? tweet.repost_of! : tweet;
 	const reposterName = tweet.author_display_name ?? tweet.author_handle;
 	const canDelete =
-		!isRepost &&
-		!!currentUserHandle &&
-		displayTweet.author_handle === currentUserHandle;
+		!!currentUserHandle && displayTweet.author_handle === currentUserHandle;
+	const deleteTargetId = displayTweet.id;
 
 	// #340: card 全体クリックで /tweet/<id> に遷移 (X 慣習)。
 	// 内部 link / button は伝播を止めて従来動作。テキスト drag-select も保護。
@@ -216,15 +215,18 @@ export default function TweetCard({
 		if (deleteBusy) return;
 		setDeleteBusy(true);
 		try {
-			await deleteTweet(tweet.id);
+			await deleteTweet(deleteTargetId);
 			setLocallyDeleted(true);
 			onTimelineItemRemoved?.(tweet.id);
+			if (deleteTargetId !== tweet.id) {
+				onTimelineItemRemoved?.(deleteTargetId);
+			}
 			toast.success("ツイートを削除しました");
 		} catch {
 			toast.error("ツイートを削除できませんでした");
 			setDeleteBusy(false);
 		}
-	}, [deleteBusy, onTimelineItemRemoved, tweet.id]);
+	}, [deleteBusy, deleteTargetId, onTimelineItemRemoved, tweet.id]);
 
 	// #334: reply / quote 投稿成功時に楽観的に親 count badge を +1 する。
 	// PostDialog onPosted コールバック → ここで state を更新し、再レンダーで
