@@ -241,6 +241,15 @@ export default function TweetCard({
 	const [repostCountOptimistic, setRepostCountOptimistic] = useState(
 		displayTweet.repost_count ?? 0,
 	);
+	// #385: ReactionSummary をリアルタイム反映するため、ReactionBar の内部
+	// state と同期する shared state を持つ。ReactionBar の onChange callback
+	// で更新する。displayTweet.reaction_summary が prop で変わった場合は再同期。
+	const [reactionAggregate, setReactionAggregate] = useState(
+		displayTweet.reaction_summary,
+	);
+	useEffect(() => {
+		setReactionAggregate(displayTweet.reaction_summary);
+	}, [displayTweet.reaction_summary]);
 
 	// #327: 全 hooks は早期 return より前に呼ぶ (React rules of hooks)。
 	// CRITICAL: sanitize HTML before rendering — strips <script>, event handlers,
@@ -473,10 +482,10 @@ export default function TweetCard({
 			)}
 
 			{/* #383: reaction の kind 別ブレイクダウン (FB / Threads 風)。
-			    総数 0 のときは ReactionSummary 内部で null を返す。 */}
-			{displayTweet.reaction_summary && (
-				<ReactionSummary summary={displayTweet.reaction_summary} />
-			)}
+			    総数 0 のときは ReactionSummary 内部で null を返す。
+			    #385: ReactionBar の onChange で更新される共有 state を渡し、
+			    リロードせずに即時反映する。 */}
+			{reactionAggregate && <ReactionSummary summary={reactionAggregate} />}
 
 			{/* Action buttons. Reactions wired in P2-14, repost/quote/reply in P2-15.
 			    #327: count badge を 0 以上で表示。tweet.is_deleted のとき disable
@@ -562,6 +571,7 @@ export default function TweetCard({
 				<ReactionBar
 					tweetId={displayTweet.id}
 					initial={displayTweet.reaction_summary}
+					onChange={setReactionAggregate}
 				/>
 			</footer>
 

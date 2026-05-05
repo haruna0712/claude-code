@@ -615,7 +615,7 @@
 - footer (action button 列) は通常通り表示される。
 - 「0 件のリアクション」のような empty placeholder は出さない (FB / Threads と同じ)。
 
-### RCT-35: ReactionSummary は count 降順で sort し、上位 N 種だけ表示する (#383)
+### RCT-35: ReactionSummary は count 降順で sort し、上位 N 種だけ表示する (#383, #385)
 
 前提:
 
@@ -628,9 +628,10 @@
 
 期待結果:
 
-- UI: ReactionSummary に **上位 3 種** が表示される: `❤️ 4 📚 3 👍 2 · 10 件`。
+- UI: ReactionSummary に **上位 3 種** が表示される: `❤️ 4 📚 3 👍 2`。
   - 順序は count 降順、tie の場合は `REACTION_KINDS` の宣言順 (`like → interesting → ... → code`)。
-- UI: 4 番目以降 (`helpful=1`) は **表示されない** が、末尾の総計 `10 件` には含まれる。
+- UI: 4 番目以降 (`helpful=1`) は **表示されない**。
+- UI: 末尾の総計件数 (`· 10 件` 等) は **表示しない** (#385 で撤去、FB / カロッター 慣習に合わせる)。
 - a11y: 各 chip は `aria-hidden="true"` の emoji + `sr-only` の kind label (`いいね 4` のように SR が読み上げる)。
 
 ### RCT-36: ReactionSummary は viewer 別の my_kind を区別しない (集計は全 viewer 共通) (#383)
@@ -647,9 +648,28 @@
 
 期待結果:
 
-- UI: ReactionSummary の表示は A と B で **同一** (`❤️ 3 · 3 件`)。
+- UI: ReactionSummary の表示は A と B で **同一** (`❤️ 3`)。
 - UI: trigger は viewer 別 (RCT-33): A は `❤️`, B は `👍`。
 - = ReactionSummary は集計表示のみ、viewer 状態は trigger (ReactionBar) が担当という分業。
+
+### RCT-37: ReactionSummary はリロードせず即時反映する (#385)
+
+前提:
+
+- target tweet T に reaction が付いていない (`reaction_count=0`)。
+- viewer A が T を表示している (ReactionSummary は非表示、trigger は `👍 0`)。
+
+操作:
+
+- A が ReactionBar trigger を short-click して like を付ける。
+
+期待結果:
+
+- API: `POST /api/v1/tweets/<T.id>/reactions/` `{kind:"like"}` が発火 → 201。
+- UI (リロード無し): trigger 表示が `❤️ 1` (lime 強調、`aria-pressed=true`)、ReactionSummary が **即座に表示** されて `❤️ 1` が出る。
+- もう一度 trigger を click すると like が取消される → ReactionSummary が **即座に消える** (count=0 で非表示)。
+- 別 kind に変えた場合 (例: 長押し picker → learned を選択) は ReactionSummary も即時 `📚 1` に変わる。
+- 実装: ReactionBar の `onChange` callback で TweetCard の `reactionAggregate` state を更新し、ReactionSummary に渡す。
 
 ## 4. E2E化メモ
 

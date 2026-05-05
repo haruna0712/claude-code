@@ -49,6 +49,12 @@ import {
 interface ReactionBarProps {
 	tweetId: number;
 	initial?: ReactionAggregate;
+	/**
+	 * #385: 内部 state が変化するたびに呼び出される callback。
+	 * TweetCard が ReactionSummary をリアルタイムに更新するために使う。
+	 * optimistic update / API 反映 / rollback いずれの遷移でも発火する。
+	 */
+	onChange?: (next: ReactionAggregate) => void;
 }
 
 const EMPTY: ReactionAggregate = { counts: {}, my_kind: null };
@@ -56,13 +62,25 @@ const LONG_PRESS_MS = 500;
 const QUICK_KIND: ReactionKind = "like";
 const DEFAULT_TRIGGER_EMOJI = "👍";
 
-export default function ReactionBar({ tweetId, initial }: ReactionBarProps) {
+export default function ReactionBar({
+	tweetId,
+	initial,
+	onChange,
+}: ReactionBarProps) {
 	const [state, setState] = useState<ReactionAggregate>(initial ?? EMPTY);
 	const [open, setOpen] = useState(false);
 	const [busyKind, setBusyKind] = useState<ReactionKind | null>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const longPressFiredRef = useRef(false);
+	// #385: state 変化時に onChange を発火させる。useState の updater 内で
+	// 直接呼ぶと React の strict-mode / concurrent rendering で副作用扱いに
+	// なるため、useEffect で state に紐付けて呼ぶ。
+	const onChangeRef = useRef(onChange);
+	onChangeRef.current = onChange;
+	useEffect(() => {
+		onChangeRef.current?.(state);
+	}, [state]);
 
 	const total = useMemo(
 		() => Object.values(state.counts).reduce((a, b) => a + (b ?? 0), 0),
