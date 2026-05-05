@@ -68,12 +68,13 @@ qs = (
 
 ### 2.2 除外条件
 
-すべての Step で以下を除外する (`exclude_ids`):
+すべての Step で以下を除外する (`exclude_ids` または queryset filter で):
 
 - viewer 自身 (`user.pk`)
 - viewer が既フォローしているユーザ (`Follow.objects.filter(follower=user).values_list("followee_id")`)
 - viewer と双方向 Block 関係のユーザ (`apps.moderation.Block`、Phase 4B 実装後に有効化)
 - Bot ユーザ (現状 Bot 機能が無いため no-op、Phase 7 で対応)
+- **`is_active=False` のユーザ (#394)**: `apps/users/views.py::PublicProfileView` が `is_active=True` だけを公開する方針なので、推奨にも同じ filter を掛けないと「click すると 404」 (壊れた link) になる。`_candidates_from_followers_count` で `User.objects.filter(is_active=True)` を掛け、`_serialize_users` でも二段防御として `pk__in + is_active=True` で再 filter する。`get_popular_users` も同様。
 
 ### 2.3 Service: `get_who_to_follow(user, limit)` キャッシュ
 
