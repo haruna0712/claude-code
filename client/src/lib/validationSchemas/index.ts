@@ -15,3 +15,6 @@ export type {
 
 export { onboardingSchema } from "./OnboardingSchema";
 export type { TOnboardingSchema } from "./OnboardingSchema";
+
+export { profileEditSchema } from "./ProfileEditSchema";
+export type { TProfileEditSchema } from "./ProfileEditSchema";

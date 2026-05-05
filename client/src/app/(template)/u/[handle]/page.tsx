@@ -108,6 +108,7 @@ export default async function ProfilePage({ params }: PageProps) {
 		loadTweets(profile.username),
 		loadCurrentUser(),
 	]);
+	const isOwnProfile = currentUser?.username === profile.username;
 
 	const jsonLd = {
 		"@context": "https://schema.org",
@@ -152,7 +153,7 @@ export default async function ProfilePage({ params }: PageProps) {
 						aria-hidden
 					/>
 				)}
-				<div className="pb-2 flex-1">
+				<div className="flex-1 pb-2">
 					<h1 className="text-xl font-bold sm:text-2xl">
 						{profile.display_name || profile.username}
 					</h1>
@@ -163,11 +164,22 @@ export default async function ProfilePage({ params }: PageProps) {
 				{/* #296 + #299: profile header の右端に Follow / DM 入口を並べる。
 				    self / 未ログイン判定は各 component 内で行うので親は条件分岐不要。 */}
 				<div className="flex items-center gap-2 pb-2">
-					<FollowButton
-						targetHandle={profile.username}
-						initialIsFollowing={profile.is_following}
-					/>
-					<StartDMButton targetHandle={profile.username} />
+					{isOwnProfile ? (
+						<a
+							href="/settings/profile"
+							className="rounded-full border border-border px-4 py-2 text-sm font-semibold transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						>
+							プロフィールを編集
+						</a>
+					) : (
+						<>
+							<FollowButton
+								targetHandle={profile.username}
+								initialIsFollowing={profile.is_following}
+							/>
+							<StartDMButton targetHandle={profile.username} />
+						</>
+					)}
 				</div>
 			</header>
 

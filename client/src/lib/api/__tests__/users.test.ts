@@ -5,7 +5,11 @@
 import MockAdapter from "axios-mock-adapter";
 import { describe, expect, it } from "vitest";
 import { createApiClient } from "@/lib/api/client";
-import { completeOnboarding, fetchCurrentUser } from "@/lib/api/users";
+import {
+	completeOnboarding,
+	fetchCurrentUser,
+	updateCurrentUser,
+} from "@/lib/api/users";
 
 function stub() {
 	const client = createApiClient();
@@ -69,5 +73,39 @@ describe("users API", () => {
 			];
 		});
 		await completeOnboarding({ display_name: "Alice" }, client);
+	});
+
+	it("updateCurrentUser PATCHes profile fields and bootstraps CSRF", async () => {
+		const { client, mock } = stub();
+		mock.onPatch("/users/me/").reply((config) => {
+			expect(JSON.parse(config.data)).toEqual({
+				display_name: "Alice",
+				bio: "updated",
+				github_url: "https://github.com/alice",
+			});
+			return [
+				200,
+				{
+					id: "u1",
+					email: "a@b.com",
+					username: "alice",
+					display_name: "Alice",
+					bio: "updated",
+					github_url: "https://github.com/alice",
+				},
+			];
+		});
+
+		const user = await updateCurrentUser(
+			{
+				display_name: "Alice",
+				bio: "updated",
+				github_url: "https://github.com/alice",
+			},
+			client,
+		);
+
+		expect(user.bio).toBe("updated");
+		expect(mock.history.get.some((r) => r.url === "/auth/csrf/")).toBe(true);
 	});
 });

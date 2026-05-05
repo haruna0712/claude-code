@@ -35,6 +35,17 @@ export interface CompleteOnboardingPayload {
 	bio?: string;
 }
 
+export interface UpdateProfilePayload {
+	display_name?: string;
+	bio?: string;
+	github_url?: string;
+	x_url?: string;
+	zenn_url?: string;
+	qiita_url?: string;
+	note_url?: string;
+	linkedin_url?: string;
+}
+
 export async function fetchCurrentUser(
 	client: AxiosInstance = api,
 ): Promise<CurrentUser> {
@@ -51,5 +62,14 @@ export async function completeOnboarding(
 		"/users/me/complete_onboarding/",
 		payload,
 	);
+	return res.data;
+}
+
+export async function updateCurrentUser(
+	payload: UpdateProfilePayload,
+	client: AxiosInstance = api,
+): Promise<CurrentUser> {
+	await ensureCsrfToken(client);
+	const res = await client.patch<CurrentUser>("/users/me/", payload);
 	return res.data;
 }
