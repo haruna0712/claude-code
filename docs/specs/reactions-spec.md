@@ -178,6 +178,44 @@ drift が発生する経路:
 - `transaction.on_commit` で signal を発行する間に DB rollback / replica lag。
 - `Reaction.objects.bulk_create / bulk_delete` (signals が発火しない) → **MVP では bulk 操作禁止**。
 
+### 2.10 Tweet serializer に埋め込む `reaction_summary` (#383)
+
+各 Tweet を返す API レスポンス (`/api/v1/timeline/*`, `/api/v1/tweets/<id>/`, `/api/v1/search/` 等) は、Tweet ごとに **`reaction_summary` フィールド** を含む。
+
+形:
+
+```json
+{
+  "id": 17,
+  ...,
+  "reaction_count": 9,
+  "reaction_summary": {
+    "counts": {
+      "like": 4,
+      "interesting": 3,
+      "learned": 0,
+      "helpful": 0,
+      "agree": 2,
+      "surprised": 0,
+      "congrats": 0,
+      "respect": 0,
+      "funny": 0,
+      "code": 0
+    },
+    "my_kind": "like"
+  }
+}
+```
+
+要点:
+
+- `counts` は **必ず 10 kind 全部** を含む (0 埋め)。`/api/v1/tweets/<id>/reactions/` GET と同形。
+- `my_kind` は **viewer (request.user) 別**。匿名なら `null`、未 reaction も `null`、reaction 済みなら kind 値。
+- `sum(counts.values())` と `reaction_count` は signals + reconcile Beat で整合する (§2.9)。
+- 個別の `/reactions/` GET は **不要になる** (= フロントは tweet 取得 1 回で集計 + viewer 状態を取れる)。
+- 実装は `apps/tweets/serializers.py::_build_reaction_summary(tweet, request)`。`TweetBaseMiniSerializer` / `TweetMiniSerializer` / `TweetListSerializer` / `TweetDetailSerializer` 全てから返る。
+- 性能: MVP は `SerializerMethodField` で 1〜2 query/tweet。timeline 20 件で 〜40 query。問題化したら view 側で `prefetch_related("reactions")` または raw SQL に最適化する (TODO)。
+
 ---
 
 ## 3. 状態遷移図
@@ -219,6 +257,8 @@ stateDiagram-v2
 ### 4.1 ReactionBar UI 描画
 
 `#381` で **Facebook 風 UX** に変更。trigger は単一の "👍 (Good)" ボタンとして表示し、click は **常に like トグル**、長押しで picker を開く。別 kind に変えたい場合は長押しから選ぶ。
+
+**重要 (#383): trigger 表示は viewer 視点**。`my_kind` は API レスポンス内で **request.user 別** に計算されるので、自分が like 済みの tweet を自分が見れば ❤️、同じ tweet を他人が見れば (その人が未 reaction なら) 👍。匿名閲覧時は常に 👍 (`my_kind=null`)。tweet API 取得時に `reaction_summary` を一緒に返している (§2.10) ので、初期表示も viewer 別の値で正しく出る。
 
 | 状態           | trigger 表示                     | aria-pressed | aria-label                                    |
 | -------------- | -------------------------------- | ------------ | --------------------------------------------- |
@@ -286,6 +326,39 @@ picker 内の grid (`role="group"`) は #379 で確定済の挙動を維持:
 | Rate limit 超過     | POST                          | -                    | -                                           | -                        | 429 + `Retry-After`. UI は toast 表示                    |
 | 認証なし            | POST or DELETE                | -                    | -                                           | -                        | 401. UI は LoginCTA を表示                               |
 | 未ログイン          | GET                           | -                    | `GET /tweets/<id>/reactions/`               | counts のみ              | `my_kind=null`                                           |
+
+### 4.3 ReactionSummary (kind 別ブレイクダウン表示, #383)
+
+ツイート本文と footer (action button 列) の **間** に、Facebook / Threads / カロッター 慣習の reaction breakdown を表示する。
+
+`client/src/components/reactions/ReactionSummary.tsx` が正本。受け取る props は `summary: ReactionAggregate` (`{counts, my_kind}`)。
+
+#### 表示ルール
+
+| 条件          | 表示                                                                                                                                |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `total === 0` | **何も表示しない** (FB と同じ。0 件の tweet でゴチャつかせない)                                                                     |
+| `total > 0`   | `<role="group" aria-label="リアクションの内訳">` 内に上位 N 種の絵文字 + count を chip 状に並べ、末尾に総計 `· {total} 件` を付ける |
+
+- N の default は **3**。`maxVisibleKinds` props で上書き可。
+- sort 順は **count 降順** (tie は `REACTION_KINDS` の宣言順 `like → interesting → learned → ...`)。
+- 0 件の kind は表示対象から除外 (= 上位 N 種は **必ず count > 0**)。
+- 例: `❤️ 4  📚 3  👍 2 · 9 件`
+
+#### viewer との関係
+
+- ReactionSummary は **集計 (count) のみ** を表示し、viewer 別の `my_kind` は **使わない**。
+- 「自分が like 済みかどうか」は trigger 側 (ReactionBar) が `aria-pressed` と emoji 切り替えで担当する。役割分業を明確化することで、ReactionSummary は server data をそのまま投影する pure rendering になる。
+
+#### 配置
+
+`client/src/components/timeline/TweetCard.tsx` で本文 (ExpandableBody) → 引用元 embed → **ReactionSummary** → footer (action button 列) の順で並べる。Facebook の post カードと同じ位置関係。
+
+#### a11y
+
+- `role="group"` + `aria-label="リアクションの内訳"` で SR にグループ化を伝える。
+- 各 chip は emoji を `aria-hidden="true"` で隠し、`<span class="sr-only">` で kind label を読ませる (`いいね 4` のように発音)。
+- 純粋な情報表示で interactive ではない (= focusable な要素無し)。kind 別の操作は ReactionBar の picker で行う。
 
 ---
 

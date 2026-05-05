@@ -137,6 +137,15 @@ npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line 
 
 # RCT-32: Alt+Enter キーで picker 開閉 (#381 / #187)
 npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-32"
+
+# RCT-33: trigger emoji は viewer 視点 (#383)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-33"
+
+# RCT-34: ReactionSummary は total=0 で非表示 (#383)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-34"
+
+# RCT-35: ReactionSummary は count 降順で上位 N 種を表示 (#383)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-35"
 ```
 
 ## 5. Phase 2 既存 golden path との関係

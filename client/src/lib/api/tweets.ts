@@ -4,6 +4,7 @@
 
 import type { AxiosInstance } from "axios";
 import { api, ensureCsrfToken } from "@/lib/api/client";
+import type { ReactionAggregate } from "@/lib/api/reactions";
 
 export interface TweetImagePayload {
 	image_url: string;
@@ -44,6 +45,8 @@ export interface TweetMini {
 	repost_count?: number;
 	quote_count?: number;
 	reaction_count?: number;
+	/** #383: reaction kind 別集計 + viewer 別 my_kind. */
+	reaction_summary?: ReactionAggregate;
 	quote_of?: TweetMini | null;
 	reposted_by_me?: boolean;
 }
@@ -70,6 +73,8 @@ export interface TweetSummary {
 	repost_count?: number;
 	quote_count?: number;
 	reaction_count?: number;
+	/** #383: reaction kind 別集計 + viewer 別 my_kind. */
+	reaction_summary?: ReactionAggregate;
 	reply_to?: TweetMini | null;
 	quote_of?: TweetMini | null;
 	repost_of?: TweetMini | null;
