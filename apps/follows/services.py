@@ -80,9 +80,15 @@ def _candidates_from_reactions(user, exclude_ids: set[int], limit: int) -> list[
 
 
 def _candidates_from_followers_count(exclude_ids: set[int], limit: int) -> list[dict]:
-    """Step 3: フォロワー数上位の fallback."""
+    """Step 3: フォロワー数上位の fallback.
+
+    #394: is_active=False (= 未アクティベ / 凍結等) のユーザーは
+    `PublicProfileView` で 404 になるため、推奨に出すと「存在しない人」へ
+    の壊れた link になる。ここで除外する。
+    """
     qs = (
-        User.objects.exclude(pk__in=exclude_ids)
+        User.objects.filter(is_active=True)
+        .exclude(pk__in=exclude_ids)
         .order_by("-followers_count")
         .values("pk", "followers_count")[:limit]
     )
@@ -90,9 +96,14 @@ def _candidates_from_followers_count(exclude_ids: set[int], limit: int) -> list[
 
 
 def _serialize_users(rows: list[dict]) -> list[dict[str, Any]]:
-    """user_id を実 User に解決し API レスポンス形式に整形."""
+    """user_id を実 User に解決し API レスポンス形式に整形.
+
+    #394: 二段防御で is_active=True のみを返す。Step 2 (reaction) で
+    取得した user_id は is_active 未チェックなので、最終 serialize 時に
+    弾く必要がある。
+    """
     user_ids = [r["user_id"] for r in rows]
-    users = {u.pk: u for u in User.objects.filter(pk__in=user_ids)}
+    users = {u.pk: u for u in User.objects.filter(pk__in=user_ids, is_active=True)}
     out: list[dict[str, Any]] = []
     for r in rows:
         u = users.get(r["user_id"])
@@ -147,10 +158,15 @@ def get_who_to_follow(user, limit: int = DEFAULT_LIMIT) -> list[dict[str, Any]]:
 
 
 def get_popular_users(limit: int = DEFAULT_LIMIT) -> list[dict[str, Any]]:
-    """未ログイン用 popular: フォロワー数上位 (reason は付けない)."""
-    qs = User.objects.order_by("-followers_count").values(
-        "id", "username", "display_name", "avatar_url", "bio", "followers_count"
-    )[:limit]
+    """未ログイン用 popular: フォロワー数上位 (reason は付けない).
+
+    #394: is_active=True のみ。`PublicProfileView` の隠蔽方針に揃える。
+    """
+    qs = (
+        User.objects.filter(is_active=True)
+        .order_by("-followers_count")
+        .values("id", "username", "display_name", "avatar_url", "bio", "followers_count")[:limit]
+    )
     return [
         {
             "user": {
