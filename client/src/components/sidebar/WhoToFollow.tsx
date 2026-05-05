@@ -100,50 +100,70 @@ export default function WhoToFollow({ isAuthenticated }: WhoToFollowProps) {
 
 			{state === "ready" && users.length > 0 && (
 				<ul className="flex flex-col gap-3">
-					{users.map((user) => (
-						<li key={user.handle} className="flex items-center gap-3">
-							{user.avatar_url ? (
-								<img
-									src={user.avatar_url}
-									alt=""
-									aria-hidden="true"
-									className="size-10 shrink-0 rounded-full object-cover"
-								/>
-							) : (
-								<div
-									aria-hidden="true"
-									className="size-10 shrink-0 rounded-full bg-muted"
-								/>
-							)}
-							<div className="min-w-0 flex-1">
+					{users.map((user) => {
+						// #392: display_name 空のときは @handle を太字 fallback に
+						const visibleName = user.display_name || user.handle;
+						const profileLabel = `${visibleName} (@${user.handle}) のプロフィール`;
+						return (
+							<li key={user.handle} className="flex items-start gap-3">
+								{/* #392: avatar を Link 化 (X 慣習)。
+								    profile-navigation-spec.md §3.2 参照。 */}
 								<Link
 									href={`/u/${user.handle}`}
-									className="block truncate text-sm font-semibold text-foreground hover:underline"
+									aria-label={profileLabel}
+									className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 								>
-									{user.display_name}
+									{user.avatar_url ? (
+										<img
+											src={user.avatar_url}
+											alt=""
+											aria-hidden="true"
+											className="size-10 rounded-full object-cover"
+										/>
+									) : (
+										<div
+											aria-hidden="true"
+											className="size-10 rounded-full bg-muted"
+										/>
+									)}
 								</Link>
-								<span className="block truncate text-xs text-muted-foreground">
-									@{user.handle}
-								</span>
-								{isAuthenticated && localizeReason(user.reason) && (
-									<span className="mt-1 inline-block rounded-full bg-lime-500/10 px-2 py-0.5 text-xs text-lime-700 dark:text-lime-400">
-										{localizeReason(user.reason)}
+								{/* #392: display_name + @handle + bio を 1 つの Link で
+								    まとめて wrap (Tab 移動の冗長を回避)。FollowButton は
+								    別 interactive で wrap の外に置く。 */}
+								<Link
+									href={`/u/${user.handle}`}
+									aria-label={profileLabel}
+									className="group min-w-0 flex-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+								>
+									<span className="block truncate text-sm font-semibold text-foreground group-hover:underline">
+										{visibleName}
 									</span>
-								)}
-							</div>
-							{/* #296: 旧 placeholder (aria-disabled=true) を本配線に置換。
-							    認証済の時のみ button を表示 (未ログインで follow API 401 を
-							    起こさない)。recommended / popular は基本フォロー外なので
-							    initialIsFollowing=false 既定で十分。 */}
-							{isAuthenticated ? (
-								<FollowButton
-									targetHandle={user.handle}
-									initialIsFollowing={Boolean(user.is_following)}
-									size="sm"
-								/>
-							) : null}
-						</li>
-					))}
+									<span className="block truncate text-xs text-muted-foreground group-hover:underline">
+										@{user.handle}
+									</span>
+									{user.bio ? (
+										<span className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+											{user.bio}
+										</span>
+									) : null}
+									{isAuthenticated && localizeReason(user.reason) ? (
+										<span className="mt-1 inline-block rounded-full bg-lime-500/10 px-2 py-0.5 text-xs text-lime-700 dark:text-lime-400">
+											{localizeReason(user.reason)}
+										</span>
+									) : null}
+								</Link>
+								{/* #296: 認証済の時のみ button を表示 (未ログインで follow
+								    API 401 を起こさない)。Link の外に置いて独立 click 領域に。 */}
+								{isAuthenticated ? (
+									<FollowButton
+										targetHandle={user.handle}
+										initialIsFollowing={Boolean(user.is_following)}
+										size="sm"
+									/>
+								) : null}
+							</li>
+						);
+					})}
 				</ul>
 			)}
 		</section>

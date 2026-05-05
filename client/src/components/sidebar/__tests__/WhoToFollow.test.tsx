@@ -43,6 +43,17 @@ const SAMPLE = [
 	},
 ];
 
+const SAMPLE_NO_DISPLAY_NAME = [
+	{
+		handle: "stg007",
+		display_name: "",
+		avatar_url: "",
+		bio: "",
+		is_following: false,
+		reason: undefined,
+	},
+];
+
 describe("WhoToFollow", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -123,5 +134,37 @@ describe("WhoToFollow", () => {
 		await waitFor(() => {
 			expect(screen.getByText(/取得に失敗/)).toBeInTheDocument();
 		});
+	});
+
+	// #392: avatar / 名前ブロック の Link 化 + bio 表示
+	it("renders avatar as a Link to /u/<handle> (#392)", async () => {
+		vi.mocked(fetchPopularUsers).mockResolvedValue(SAMPLE);
+		render(<WhoToFollow isAuthenticated={false} />);
+		await screen.findByText("Alice");
+		const links = screen.getAllByRole("link", {
+			name: /Alice.*@alice.*プロフィール/,
+		});
+		// avatar Link + 名前ブロック Link で 2 個以上
+		expect(links.length).toBeGreaterThanOrEqual(2);
+		for (const link of links) {
+			expect(link).toHaveAttribute("href", "/u/alice");
+		}
+	});
+
+	it("displays user bio when present (#392)", async () => {
+		vi.mocked(fetchPopularUsers).mockResolvedValue(SAMPLE);
+		render(<WhoToFollow isAuthenticated={false} />);
+		await screen.findByText("Engineer");
+	});
+
+	it("falls back to @handle as visible name when display_name is empty (#392)", async () => {
+		vi.mocked(fetchPopularUsers).mockResolvedValue(SAMPLE_NO_DISPLAY_NAME);
+		render(<WhoToFollow isAuthenticated={false} />);
+		// display_name 空 → handle (stg007) が visible name として表示
+		await screen.findAllByText("stg007");
+		const links = screen.getAllByRole("link", {
+			name: /stg007.*@stg007.*プロフィール/,
+		});
+		expect(links.length).toBeGreaterThanOrEqual(2);
 	});
 });
