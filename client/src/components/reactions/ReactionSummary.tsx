@@ -1,20 +1,20 @@
 "use client";
 
 /**
- * ReactionSummary — tweet 本文の下に表示するリアクションのブレイクダウン (#383).
+ * ReactionSummary — tweet 本文の下に表示するリアクションのブレイクダウン (#383, #385).
  *
  * Facebook / Threads / カロッター 等の慣習に倣い、ツイートに付いた reaction を
- * 「kind ごとの内訳 + 総計」で要約表示する:
- *   ❤️ 4  💡 3  👍 2  · 9 件
+ * 「kind ごとの内訳」で要約表示する:
+ *   ❤️ 4  💡 3  👍 2
  *
  * 仕様: docs/specs/reactions-spec.md §4.3
  *
  * - `summary.counts` を **count desc** (tie は kind の宣言順) で sort し
  *   上位 `MAX_VISIBLE_KINDS` (default 3) を表示する。
  * - `total === 0` のときは何も render しない (= 0 件のときに目立たないように)。
- * - 末尾に総計件数 (kind を問わない sum) を表示する。
  * - viewer 別の `my_kind` は本 component では区別しない (集計は全 viewer 共通)。
  *   trigger 側 (ReactionBar) が viewer 別の表示を担当する分業。
+ * - #385: 末尾の `· N 件` 総計表示は撤去 (FB 慣習に合わせて kind 内訳のみ)。
  */
 
 import {
@@ -78,7 +78,6 @@ export default function ReactionSummary({
 					<span>{count}</span>
 				</span>
 			))}
-			<span className="ml-1 text-muted-foreground">· {total} 件</span>
 		</div>
 	);
 }

@@ -75,6 +75,47 @@ describe("ReactionBar — collapsed state", () => {
 	});
 });
 
+describe("ReactionBar — onChange callback (#385)", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("invokes onChange with initial state on mount", () => {
+		const onChange = vi.fn();
+		render(
+			<ReactionBar
+				tweetId={1}
+				initial={{ counts: { like: 3 }, my_kind: null }}
+				onChange={onChange}
+			/>,
+		);
+		expect(onChange).toHaveBeenCalled();
+		expect(onChange).toHaveBeenLastCalledWith({
+			counts: { like: 3 },
+			my_kind: null,
+		});
+	});
+
+	it("invokes onChange on optimistic update (click → like)", async () => {
+		vi.mocked(toggleReaction).mockResolvedValue({
+			kind: "like",
+			created: true,
+			changed: false,
+			removed: false,
+		});
+		const onChange = vi.fn();
+		render(<ReactionBar tweetId={1} onChange={onChange} />);
+		const trigger = screen.getByRole("button", { name: /いいね \(長押し/ });
+		await userEvent.click(trigger);
+		// 最後の onChange call には my_kind=like かつ counts.like=1 が入っている
+		await waitFor(() => {
+			const last = onChange.mock.calls.at(-1)?.[0];
+			expect(last?.my_kind).toBe("like");
+			expect(last?.counts?.like).toBe(1);
+		});
+	});
+});
+
 describe("ReactionBar — quick toggle (click) #381", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();

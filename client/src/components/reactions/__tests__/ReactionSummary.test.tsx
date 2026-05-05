@@ -90,7 +90,7 @@ describe("ReactionSummary", () => {
 		expect(group.textContent).not.toContain("📚");
 	});
 
-	it("shows total count at the end", () => {
+	it("does NOT show a total count suffix (#385)", () => {
 		render(
 			<ReactionSummary
 				summary={{
@@ -99,9 +99,12 @@ describe("ReactionSummary", () => {
 				}}
 			/>,
 		);
-		expect(
-			screen.getByRole("group", { name: "リアクションの内訳" }).textContent,
-		).toContain("9 件");
+		// #385: 「· 9 件」のような総計表示は撤去 (FB 慣習に合わせる)
+		const text =
+			screen.getByRole("group", { name: "リアクションの内訳" }).textContent ??
+			"";
+		expect(text).not.toMatch(/\d+ 件/);
+		expect(text).not.toContain("·");
 	});
 
 	it("breaks ties by REACTION_KINDS declaration order", () => {

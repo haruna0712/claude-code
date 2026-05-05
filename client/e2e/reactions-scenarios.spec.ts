@@ -808,7 +808,7 @@ test.describe("Reactions UI (ReactionBar)", () => {
 		}
 	});
 
-	test("RCT-35 UI: ReactionSummary が count > 0 で表示される (#383)", async ({
+	test("RCT-35 UI: ReactionSummary が count > 0 で表示される (総計件数は出さない #385)", async ({
 		page,
 	}) => {
 		const tweetId = await postTweetAs(USER2, `RCT-35 ${Date.now()}`);
@@ -833,7 +833,40 @@ test.describe("Reactions UI (ReactionBar)", () => {
 			});
 			await expect(summary).toBeVisible({ timeout: 10_000 });
 			await expect(summary).toContainText("❤️");
-			await expect(summary).toContainText("1 件");
+			// #385: 「· N 件」総計表示は撤去
+			const text = (await summary.textContent()) ?? "";
+			expect(text).not.toMatch(/\d+ 件/);
+			expect(text).not.toContain("·");
+		} finally {
+			await clearReactionAs(USER1, tweetId);
+			await deleteTweetAs(USER2, tweetId);
+		}
+	});
+
+	test("RCT-37 UI: ReactionSummary はリロードせず即時反映する (#385)", async ({
+		page,
+	}) => {
+		const tweetId = await postTweetAs(USER2, `RCT-37 ${Date.now()}`);
+		try {
+			await loginUI(page, USER1.email, USER1.password);
+			await openTweet(page, tweetId);
+			// 初期: 0 件 → ReactionSummary は非表示
+			await expect(
+				page.getByRole("group", { name: "リアクションの内訳" }),
+			).toHaveCount(0);
+			// trigger を short-click → quick toggle で like
+			await quickToggleUI(page, tweetId);
+			// リロードせずに ReactionSummary が出現する
+			const summary = page.getByRole("group", {
+				name: "リアクションの内訳",
+			});
+			await expect(summary).toBeVisible({ timeout: 5_000 });
+			await expect(summary).toContainText("❤️");
+			// もう一度 click → 取消、ReactionSummary が即座に消える
+			await quickToggleUI(page, tweetId);
+			await expect(
+				page.getByRole("group", { name: "リアクションの内訳" }),
+			).toHaveCount(0);
 		} finally {
 			await clearReactionAs(USER1, tweetId);
 			await deleteTweetAs(USER2, tweetId);

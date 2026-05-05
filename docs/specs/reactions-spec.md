@@ -335,20 +335,30 @@ picker 内の grid (`role="group"`) は #379 で確定済の挙動を維持:
 
 #### 表示ルール
 
-| 条件          | 表示                                                                                                                                |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `total === 0` | **何も表示しない** (FB と同じ。0 件の tweet でゴチャつかせない)                                                                     |
-| `total > 0`   | `<role="group" aria-label="リアクションの内訳">` 内に上位 N 種の絵文字 + count を chip 状に並べ、末尾に総計 `· {total} 件` を付ける |
+| 条件          | 表示                                                                                                                   |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `total === 0` | **何も表示しない** (FB と同じ。0 件の tweet でゴチャつかせない)                                                        |
+| `total > 0`   | `<role="group" aria-label="リアクションの内訳">` 内に上位 N 種の絵文字 + count を chip 状に並べる (総計件数は出さない) |
 
 - N の default は **3**。`maxVisibleKinds` props で上書き可。
 - sort 順は **count 降順** (tie は `REACTION_KINDS` の宣言順 `like → interesting → learned → ...`)。
 - 0 件の kind は表示対象から除外 (= 上位 N 種は **必ず count > 0**)。
-- 例: `❤️ 4  📚 3  👍 2 · 9 件`
+- 例: `❤️ 4  📚 3  👍 2`
+- **#385**: 当初 (#383) は末尾に `· {total} 件` を表示していたが、FB / カロッター の慣習に合わせて撤去。kind 内訳のみ。
+
+#### リアルタイム反映 (#385)
+
+ReactionBar からの `onChange(aggregate)` callback を介して `ReactionSummary` をリアルタイム更新する。
+
+- ReactionBar は内部 state が変化するたびに `useEffect([state])` で `onChange?.(state)` を呼ぶ (mount 時の初回 + optimistic update + API 反映 + rollback いずれの遷移でも発火)。
+- TweetCard は `reactionAggregate` shared state を持ち、`<ReactionSummary summary={reactionAggregate} />` と `<ReactionBar onChange={setReactionAggregate} />` で同期する。
+- 結果として、reaction 0 件の tweet に like を付けると **リロード無しで** ReactionSummary に `❤️ 1` が即座に表示される。取消すと即座に消える (count=0 で非表示に戻る)。
+- TweetCard は `displayTweet.reaction_summary` が prop で更新された場合 (= 親コンポーネントが新しい server data を渡してきた場合) も `useEffect` で再同期する。
 
 #### viewer との関係
 
 - ReactionSummary は **集計 (count) のみ** を表示し、viewer 別の `my_kind` は **使わない**。
-- 「自分が like 済みかどうか」は trigger 側 (ReactionBar) が `aria-pressed` と emoji 切り替えで担当する。役割分業を明確化することで、ReactionSummary は server data をそのまま投影する pure rendering になる。
+- 「自分が like 済みかどうか」は trigger 側 (ReactionBar) が `aria-pressed` と emoji 切り替えで担当する。役割分業を明確化することで、ReactionSummary は state をそのまま投影する pure rendering になる。
 
 #### 配置
 
