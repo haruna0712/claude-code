@@ -11,12 +11,24 @@
  *     - If different kind → swap (decrement old, increment new)
  *   - Alt+Enter on the trigger opens the picker (kbd shortcut SPEC §6.2).
  *
+ * Dismiss (#379):
+ *   - Picking any kind closes the popup (X / Slack / Discord 慣習)
+ *   - Outside click closes the popup
+ *   - Escape key closes the popup
+ *
  * Initial counts come from the GET reactions endpoint via props; Tweet objects
  * don't yet carry reaction counts inline (follow-up: include them in
  * TweetListSerializer to avoid an N+1 fetch on the timeline).
  */
 
-import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type KeyboardEvent,
+} from "react";
 import { toast } from "react-toastify";
 
 import {
@@ -38,6 +50,7 @@ export default function ReactionBar({ tweetId, initial }: ReactionBarProps) {
 	const [state, setState] = useState<ReactionAggregate>(initial ?? EMPTY);
 	const [open, setOpen] = useState(false);
 	const [busyKind, setBusyKind] = useState<ReactionKind | null>(null);
+	const containerRef = useRef<HTMLDivElement>(null);
 
 	const total = useMemo(
 		() => Object.values(state.counts).reduce((a, b) => a + (b ?? 0), 0),
@@ -56,9 +69,37 @@ export default function ReactionBar({ tweetId, initial }: ReactionBarProps) {
 		}
 	};
 
+	// #379: outside click / Escape で popup を閉じる。open のときだけ listener を
+	// 登録し、cleanup で解除する。capture で document に渡す必要はなく、
+	// bubble phase の mousedown / keydown で十分。
+	useEffect(() => {
+		if (!open) return;
+		const onPointerDown = (event: MouseEvent) => {
+			const target = event.target as Node | null;
+			if (!target) return;
+			if (containerRef.current?.contains(target)) return;
+			setOpen(false);
+		};
+		const onKeyDown = (event: globalThis.KeyboardEvent) => {
+			if (event.key === "Escape") setOpen(false);
+		};
+		document.addEventListener("mousedown", onPointerDown);
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("mousedown", onPointerDown);
+			document.removeEventListener("keydown", onKeyDown);
+		};
+	}, [open]);
+
 	const handlePick = useCallback(
 		async (kind: ReactionKind) => {
 			if (busyKind) return;
+
+			// #379: 選択した瞬間に popup を閉じる (X / Slack / Discord 慣習)。
+			// API 結果を待たずに閉じるのは、optimistic update と組で UX を即時化
+			// するため。失敗時は state がロールバックされるので popup を閉じても
+			// 結果整合性は保たれる。
+			setOpen(false);
 
 			// Optimistic update
 			const previous = state;
@@ -98,7 +139,7 @@ export default function ReactionBar({ tweetId, initial }: ReactionBarProps) {
 	);
 
 	return (
-		<div className="flex flex-col gap-1">
+		<div ref={containerRef} className="flex flex-col gap-1">
 			<button
 				type="button"
 				aria-label="リアクション"
@@ -106,7 +147,7 @@ export default function ReactionBar({ tweetId, initial }: ReactionBarProps) {
 				aria-haspopup="true"
 				onClick={() => setOpen((v) => !v)}
 				onKeyDown={onTriggerKeyDown}
-				className="flex items-center gap-1 min-h-[32px] px-1 text-xs text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+				className="flex min-h-[32px] items-center gap-1 rounded px-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 			>
 				<span aria-hidden="true">{triggerLabel}</span>
 				<span className="sr-only">

@@ -545,4 +545,64 @@ test.describe("Reactions UI (ReactionBar)", () => {
 			await deleteTweetAs(USER2, tweetId);
 		}
 	});
+
+	test("RCT-21 UI: kind 選択で popup が即時 close する (#379)", async ({
+		page,
+	}) => {
+		const tweetId = await postTweetAs(USER2, `RCT-21 ${Date.now()}`);
+		try {
+			await loginUI(page, USER1.email, USER1.password);
+			await openTweet(page, tweetId);
+			const trigger = await reactionTrigger(page);
+			await trigger.click();
+			await expect(trigger).toHaveAttribute("aria-expanded", "true");
+			await page.locator('button[aria-label^="いいね ("]').first().click();
+			// popup が close する
+			await expect(trigger).toHaveAttribute("aria-expanded", "false");
+			await expect(
+				page.getByRole("group", { name: "リアクションを選択" }),
+			).toHaveCount(0);
+		} finally {
+			await clearReactionAs(USER1, tweetId);
+			await deleteTweetAs(USER2, tweetId);
+		}
+	});
+
+	test("RCT-22 UI: popup 外を click すると popup が close する (#379)", async ({
+		page,
+	}) => {
+		const tweetId = await postTweetAs(USER2, `RCT-22 ${Date.now()}`);
+		try {
+			await loginUI(page, USER1.email, USER1.password);
+			await openTweet(page, tweetId);
+			const trigger = await reactionTrigger(page);
+			await trigger.click();
+			await expect(trigger).toHaveAttribute("aria-expanded", "true");
+			// Navbar / 別領域を click
+			await page
+				.locator("nav")
+				.first()
+				.click({ position: { x: 5, y: 5 } });
+			await expect(trigger).toHaveAttribute("aria-expanded", "false");
+		} finally {
+			await deleteTweetAs(USER2, tweetId);
+		}
+	});
+
+	test("RCT-23 UI: Escape キーで popup が close する (#379)", async ({
+		page,
+	}) => {
+		const tweetId = await postTweetAs(USER2, `RCT-23 ${Date.now()}`);
+		try {
+			await loginUI(page, USER1.email, USER1.password);
+			await openTweet(page, tweetId);
+			const trigger = await reactionTrigger(page);
+			await trigger.click();
+			await expect(trigger).toHaveAttribute("aria-expanded", "true");
+			await page.keyboard.press("Escape");
+			await expect(trigger).toHaveAttribute("aria-expanded", "false");
+		} finally {
+			await deleteTweetAs(USER2, tweetId);
+		}
+	});
 });

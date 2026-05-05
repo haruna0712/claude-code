@@ -100,7 +100,7 @@ describe("ReactionBar — toggle", () => {
 		vi.clearAllMocks();
 	});
 
-	it("optimistically increments count and POSTs", async () => {
+	it("optimistically increments count and POSTs (popup closes #379)", async () => {
 		vi.mocked(toggleReaction).mockResolvedValue({
 			kind: "like",
 			created: true,
@@ -109,18 +109,28 @@ describe("ReactionBar — toggle", () => {
 		});
 
 		render(<ReactionBar tweetId={42} />);
-		await userEvent.click(screen.getByRole("button", { name: /リアクション/ }));
-		const likeBtn = screen.getByRole("button", { name: /いいね/ });
-		await userEvent.click(likeBtn);
+		const trigger = screen.getByRole("button", { name: /リアクション/ });
+		await userEvent.click(trigger);
+		await userEvent.click(screen.getByRole("button", { name: /いいね/ }));
 
-		// Optimistic count is reflected before the API resolves.
+		// #379: pick 後は popup が閉じる → trigger の aria-expanded=false に。
 		await waitFor(() => {
-			expect(likeBtn.getAttribute("aria-pressed")).toBe("true");
+			expect(trigger.getAttribute("aria-expanded")).toBe("false");
 		});
+		// Trigger label が my_kind 反映 (❤️ 1) になる。
+		expect(trigger.textContent).toContain("❤️");
 		expect(toggleReaction).toHaveBeenCalledWith(42, "like");
+
+		// 再 open して aria-pressed が反映されていることを確認。
+		await userEvent.click(trigger);
+		expect(
+			screen
+				.getByRole("button", { name: /いいね/ })
+				.getAttribute("aria-pressed"),
+		).toBe("true");
 	});
 
-	it("toggles off when clicking the same kind twice", async () => {
+	it("toggles off when clicking the same kind twice (popup closes after each pick)", async () => {
 		vi.mocked(toggleReaction).mockResolvedValue({
 			kind: null,
 			created: false,
@@ -134,24 +144,33 @@ describe("ReactionBar — toggle", () => {
 				initial={{ counts: { like: 1 }, my_kind: "like" }}
 			/>,
 		);
-		await userEvent.click(screen.getByRole("button", { name: /リアクション/ }));
+		const trigger = screen.getByRole("button", { name: /リアクション/ });
+		await userEvent.click(trigger);
 		await userEvent.click(screen.getByRole("button", { name: /いいね/ }));
 
+		// popup が閉じる
 		await waitFor(() => {
-			expect(
-				screen
-					.getByRole("button", { name: /いいね/ })
-					.getAttribute("aria-pressed"),
-			).toBe("false");
+			expect(trigger.getAttribute("aria-expanded")).toBe("false");
 		});
+		// trigger label は my_kind=null に戻る
+		expect(trigger.textContent).not.toContain("❤️");
+
+		// 再 open → like の aria-pressed=false
+		await userEvent.click(trigger);
+		expect(
+			screen
+				.getByRole("button", { name: /いいね/ })
+				.getAttribute("aria-pressed"),
+		).toBe("false");
 	});
 
-	it("rolls back optimistic state and toasts on error", async () => {
+	it("rolls back optimistic state and toasts on error (popup still closes)", async () => {
 		const { toast } = await import("react-toastify");
 		vi.mocked(toggleReaction).mockRejectedValue(new Error("500"));
 
 		render(<ReactionBar tweetId={1} />);
-		await userEvent.click(screen.getByRole("button", { name: /リアクション/ }));
+		const trigger = screen.getByRole("button", { name: /リアクション/ });
+		await userEvent.click(trigger);
 		await userEvent.click(screen.getByRole("button", { name: /いいね/ }));
 
 		await waitFor(() => {
@@ -159,10 +178,92 @@ describe("ReactionBar — toggle", () => {
 				expect.stringContaining("更新できませんでした"),
 			);
 		});
+		// popup は close したまま (失敗してもユーザの click 意思は popup を閉じる)
+		expect(trigger.getAttribute("aria-expanded")).toBe("false");
+		// rollback で my_kind は null
+		expect(trigger.textContent).not.toContain("❤️");
+	});
+});
+
+describe("ReactionBar — popup dismiss (#379)", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("closes popup immediately on kind pick", async () => {
+		vi.mocked(toggleReaction).mockResolvedValue({
+			kind: "like",
+			created: true,
+			changed: false,
+			removed: false,
+		});
+
+		render(<ReactionBar tweetId={1} />);
+		const trigger = screen.getByRole("button", { name: /リアクション/ });
+		await userEvent.click(trigger);
 		expect(
-			screen
-				.getByRole("button", { name: /いいね/ })
-				.getAttribute("aria-pressed"),
-		).toBe("false");
+			screen.getByRole("group", { name: "リアクションを選択" }),
+		).toBeInTheDocument();
+
+		await userEvent.click(screen.getByRole("button", { name: /いいね/ }));
+		expect(
+			screen.queryByRole("group", { name: "リアクションを選択" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("closes popup on outside click", async () => {
+		render(
+			<div>
+				<ReactionBar tweetId={1} />
+				<button type="button" data-testid="outside">
+					outside
+				</button>
+			</div>,
+		);
+		const trigger = screen.getByRole("button", { name: /リアクション/ });
+		await userEvent.click(trigger);
+		expect(
+			screen.getByRole("group", { name: "リアクションを選択" }),
+		).toBeInTheDocument();
+
+		// useEffect 内で listen している mousedown を発火
+		fireEvent.mouseDown(screen.getByTestId("outside"));
+		expect(
+			screen.queryByRole("group", { name: "リアクションを選択" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("does not close on mousedown inside the popup container", async () => {
+		render(<ReactionBar tweetId={1} />);
+		const trigger = screen.getByRole("button", { name: /リアクション/ });
+		await userEvent.click(trigger);
+		const group = screen.getByRole("group", { name: "リアクションを選択" });
+		fireEvent.mouseDown(group);
+		expect(
+			screen.queryByRole("group", { name: "リアクションを選択" }),
+		).toBeInTheDocument();
+	});
+
+	it("closes popup on Escape key", async () => {
+		render(<ReactionBar tweetId={1} />);
+		const trigger = screen.getByRole("button", { name: /リアクション/ });
+		await userEvent.click(trigger);
+		expect(
+			screen.getByRole("group", { name: "リアクションを選択" }),
+		).toBeInTheDocument();
+
+		fireEvent.keyDown(document, { key: "Escape" });
+		expect(
+			screen.queryByRole("group", { name: "リアクションを選択" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("trigger re-click still toggles the popup (existing behaviour)", async () => {
+		render(<ReactionBar tweetId={1} />);
+		const trigger = screen.getByRole("button", { name: /リアクション/ });
+		await userEvent.click(trigger);
+		expect(trigger.getAttribute("aria-expanded")).toBe("true");
+		await userEvent.click(trigger);
+		expect(trigger.getAttribute("aria-expanded")).toBe("false");
 	});
 });
