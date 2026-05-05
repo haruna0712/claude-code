@@ -378,6 +378,71 @@
 - 集計 GET: `counts` の各 kind が `1`、合計 10。
 - 任意の閲覧ユーザの `my_kind` はそのユーザ自身の kind (未付与なら null)。
 
+### RCT-21: kind 選択で popup が即時 close する (#379)
+
+前提:
+
+- actor A、target tweet T。
+- A は trigger を click して grid popup が開いている (`aria-expanded=true`)。
+
+操作:
+
+- grid 内の任意の kind (例: `like`) を click する。
+
+期待結果:
+
+- UI: popup が **即時 close** (grid `role="group"` の DOM が消える)。
+- UI: trigger の `aria-expanded=false`。
+- UI: trigger label が `❤️ {total}` 形式に更新 (optimistic)。
+- API: `POST /tweets/<T.id>/reactions/` `{kind: "like"}` が並行で発火。
+- API 失敗時も popup は close したまま (state はロールバック、trigger label は元に戻る)。
+
+### RCT-22: popup 外を click すると popup が close する (#379)
+
+前提:
+
+- actor A は ReactionBar の grid popup を開いている。
+
+操作:
+
+- popup の外側の領域 (TweetCard の他のボタン、別 tweet、Navbar 等) を click する。
+
+期待結果:
+
+- UI: popup が close (`aria-expanded=false`)。
+- UI: kind state は変化しない (= 単に閉じるだけ)。
+- a11y: `useEffect` 内で `document.mousedown` listener が popup open 中のみ登録される。container 内 mousedown は `containerRef.current.contains(target)` で除外。
+
+### RCT-23: Escape キーで popup が close する (#379)
+
+前提:
+
+- actor A は ReactionBar の grid popup を開いている。
+
+操作:
+
+- `Escape` キーを押す。
+
+期待結果:
+
+- UI: popup が close (`aria-expanded=false`)。
+- a11y: WAI-ARIA Authoring Practices の `aria-haspopup` パターン準拠。
+
+### RCT-24: popup 内 (空き領域) の click では close しない (#379)
+
+前提:
+
+- actor A は ReactionBar の grid popup を開いている。
+
+操作:
+
+- popup の枠内、ただし kind ボタン以外の領域 (border / padding) を mousedown する。
+
+期待結果:
+
+- UI: popup は close せず、開いたまま。
+- ユーザが kind を選ぶ前に意図せず popup が閉じてしまう事故を防ぐ。
+
 ## 4. E2E化メモ
 
 各 E2E は上記の `RCT-XX` をテスト名に含める。

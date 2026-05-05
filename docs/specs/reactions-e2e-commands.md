@@ -107,6 +107,15 @@ npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line 
 
 # RCT-19: 削除済み tweet の集計 GET は 404
 npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-19"
+
+# RCT-21: kind 選択で popup が即時 close する (#379)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-21"
+
+# RCT-22: popup 外を click すると popup が close する (#379)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-22"
+
+# RCT-23: Escape キーで popup が close する (#379)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-23"
 ```
 
 ## 5. Phase 2 既存 golden path との関係

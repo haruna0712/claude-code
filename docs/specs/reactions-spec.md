@@ -229,6 +229,22 @@ stateDiagram-v2
 - trigger ボタンは **常に 1 つ**。grid を開閉する。Alt+Enter キーで開閉できる (SPEC §6.2 アクセシビリティ)。
 - `busyKind !== null` の間は grid 内全ボタンが `disabled`、optimistic update 中の二重押下を防止。
 
+#### 4.1.1 popup の開閉 (#379)
+
+| トリガ                               | 振る舞い                                           |
+| ------------------------------------ | -------------------------------------------------- |
+| trigger ボタン click / Enter         | popup を toggle (open ↔ close)                    |
+| trigger ボタン Alt+Enter             | popup を toggle (キーボード代替)                   |
+| grid 内 kind 押下                    | popup を **即時 close** + Optimistic update + POST |
+| popup 外領域 (document) を mousedown | popup を **close**                                 |
+| `Escape` キー                        | popup を **close**                                 |
+
+要点:
+
+- 「kind 押下 → 即時 close」は X / Slack / Discord 等の絵文字 picker 慣習。API 結果を待たずに閉じる (optimistic update と組で UX 即時化、失敗時は state ロールバック)。
+- outside click / Escape は WAI-ARIA Authoring Practices の `aria-haspopup` パターン準拠。
+- 実装は `useEffect` 内で `open === true` のときだけ `document.mousedown` / `document.keydown` listener を登録、cleanup で解除。container 内 mousedown は `containerRef.current.contains(target)` で判定して除外する。
+
 ### 4.2 各 action の遷移と副作用
 
 | 現状態 (`my_kind`)  | action                        | 結果状態 (`my_kind`) | API                                         | counts                   | 備考                                                     |
