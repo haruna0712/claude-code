@@ -148,6 +148,8 @@ resource "aws_cloudfront_origin_access_control" "s3" {
 # Behaviors:
 #   /_next/static/*  -> S3 static (long TTL)
 #   /media/*         -> S3 media (long TTL、GET のみ)
+#   /users/*         -> S3 media (profile avatar/header public objects)
+#   /dm/*            -> S3 media (DM attachment objects)
 #   /api/*           -> ALB  (no cache)
 #   /ws/*            -> ALB  (no cache、WebSocket 透過)
 #   / (default)      -> ALB  (Next.js SSR、short TTL)
@@ -273,6 +275,32 @@ resource "aws_cloudfront_distribution" "this" {
   # -------- /media/* → S3 media --------
   ordered_cache_behavior {
     path_pattern           = "/media/*"
+    target_origin_id       = "media"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_optimized.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.cors_s3.id
+  }
+
+  # -------- /users/* → S3 media --------
+  ordered_cache_behavior {
+    path_pattern           = "/users/*"
+    target_origin_id       = "media"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_optimized.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.cors_s3.id
+  }
+
+  # -------- /dm/* → S3 media --------
+  ordered_cache_behavior {
+    path_pattern           = "/dm/*"
     target_origin_id       = "media"
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD"]

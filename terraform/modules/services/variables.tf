@@ -105,6 +105,16 @@ variable "domain" {
   type        = string
 }
 
+variable "media_bucket_name" {
+  description = "S3 media bucket name used by Django presigned uploads."
+  type        = string
+}
+
+variable "media_public_domain" {
+  description = "Public CloudFront host for media URLs. Usually the app domain; CloudFront routes media prefixes to S3."
+  type        = string
+}
+
 variable "alb_dns_name" {
   description = "ALB DNS name (e.g., 'sns-stg-alb-xxx.ap-northeast-1.elb.amazonaws.com'). Used as the SSR fetch base URL injected into Next.js task definition (`API_BASE_URL`). Public domain (`var.domain`) was avoided because DNS delegation to Route53 is incomplete during stg bring-up; ALB DNS resolves to private IPs from inside the VPC."
   type        = string

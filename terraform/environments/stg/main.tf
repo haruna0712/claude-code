@@ -251,6 +251,8 @@ module "services" {
   # アプリ config
   domain               = "${var.app_subdomain}.${var.domain_name}"
   cors_allowed_origins = "https://${var.app_subdomain}.${var.domain_name}"
+  media_bucket_name    = module.storage.media_bucket_id
+  media_public_domain  = "${var.app_subdomain}.${var.domain_name}"
 
   # SSR fetch base URL (Next → Django via ALB internal lookup)
   alb_dns_name = module.compute.alb_dns_name
@@ -328,18 +330,18 @@ module "observability" {
 # ---------------------------------------------------------------------------
 # storage <-> compute の循環参照を避けるため、両モジュール作成後に
 # stg レイヤで直接 IAM role policy を attach する:
-#   - PutObject  : presigned URL 経由のアップロード確定後に metadata 確認
+#   - PutObject  : presigned URL 経由のアップロード
 #   - GetObject  : 添付ダウンロード (ヘッド確認 + ファイルサイズ確認、SPEC §7)
 #   - DeleteObject : メッセージ削除時のオブジェクト削除 (SPEC §7.3、24h 削除キュー)
-# 全部 dm/* prefix 限定なので avatar / tweet 画像 / article などには影響しない。
+# avatar/header は users/*、DM添付は dm/* prefix に限定する。
 # ---------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "ecs_dm_attachment_access" {
-  # オブジェクトレベル: PutObject / GetObject / DeleteObject を dm/ prefix 限定で許可。
+  # オブジェクトレベル: presigned upload/download に必要な権限を prefix 限定で許可。
   # GetObjectVersion は versioning ON のバケットで HEAD/GET が誤って 404 になる事象を
   # 避けるため (security-reviewer HIGH-1: AWS は ListBucket なしの場合 NoSuchKey 扱い)。
   statement {
-    sid    = "AllowDMAttachmentObjectAccessStg"
+    sid    = "AllowPresignedMediaObjectAccessStg"
     effect = "Allow"
     actions = [
       "s3:PutObject",
@@ -347,13 +349,16 @@ data "aws_iam_policy_document" "ecs_dm_attachment_access" {
       "s3:GetObjectVersion",
       "s3:DeleteObject",
     ]
-    resources = ["${module.storage.media_bucket_arn}/dm/*"]
+    resources = [
+      "${module.storage.media_bucket_arn}/dm/*",
+      "${module.storage.media_bucket_arn}/users/*",
+    ]
   }
 
-  # バケットレベル ListBucket: `dm/` prefix 限定で許可
+  # バケットレベル ListBucket: media upload prefix 限定で許可
   # (security-reviewer HIGH-1: ListBucket がないと Glacier IR 復元時等に 404 誤判定)。
   statement {
-    sid       = "AllowDMAttachmentListStg"
+    sid       = "AllowPresignedMediaListStg"
     effect    = "Allow"
     actions   = ["s3:ListBucket"]
     resources = [module.storage.media_bucket_arn]
@@ -361,7 +366,7 @@ data "aws_iam_policy_document" "ecs_dm_attachment_access" {
     condition {
       test     = "StringLike"
       variable = "s3:prefix"
-      values   = ["dm/*", "dm/", "dm"]
+      values   = ["dm/*", "dm/", "dm", "users/*", "users/", "users"]
     }
   }
 
@@ -376,7 +381,7 @@ data "aws_iam_policy_document" "ecs_dm_attachment_access" {
 }
 
 resource "aws_iam_role_policy" "ecs_dm_attachment" {
-  name   = "${var.project}-stg-ecs-dm-attachment"
+  name   = "${var.project}-stg-ecs-presigned-media"
   role   = module.compute.ecs_task_role_name
   policy = data.aws_iam_policy_document.ecs_dm_attachment_access.json
 }
