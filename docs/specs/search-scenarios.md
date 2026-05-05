@@ -429,6 +429,70 @@
 - `Retry-After` header 付与。
 - UI は generic な error 表示 (現状)。
 
+### SRC-26: Navbar の HeaderSearchBox から submit すると `/search?q=` に遷移する (#377)
+
+前提:
+
+- ユーザが任意のページ (`/`, `/explore`, `/tweet/<id>`, `/u/<handle>` 等) を開いている。
+- グローバル `Navbar` が render されている。
+
+操作:
+
+- Navbar 内の検索 input に `python` を入力して Enter (もしくは「検索」ボタンを click)。
+
+期待結果:
+
+- URL が `/search?q=python` に遷移する。
+- `/search` ページの SearchBox に `python` が初期値として表示される。
+- 結果セクションが描画される (キーワードが marker に含まれる場合)。
+- a11y: form は `role="search"` + `aria-label="ツイート検索"`、input は `aria-label="検索クエリ"`。
+
+### SRC-27: Navbar HeaderSearchBox の空文字 submit は navigate しない
+
+前提:
+
+- 任意のページで Navbar が表示されている。
+
+操作:
+
+- 検索 input が空 (もしくは空白のみ) の状態で Enter または「検索」ボタン click。
+
+期待結果:
+
+- URL は変わらない (元のページに留まる)。
+- /search?q= には遷移しない。
+
+### SRC-28: Navbar HeaderSearchBox は URL の `q` を初期値として受け取らない
+
+前提:
+
+- ユーザが `/search?q=python` を開いている (= `/search` 内 SearchBox には `python` が表示済み)。
+
+操作:
+
+- Navbar の HeaderSearchBox を見る。
+
+期待結果:
+
+- Navbar input の value は **空文字**。
+- `/search` ページ内の SearchBox とは別の入力フィールドとして独立している。
+- 別ページに遷移すると Navbar の状態は再初期化される (= 値リセット)。
+
+### SRC-29: Navbar HeaderSearchBox は未ログインでも表示・動作する
+
+前提:
+
+- ユーザは未ログイン状態で `/explore` を開いている。
+
+操作:
+
+- Navbar の検索 input に `python` を入力して submit。
+
+期待結果:
+
+- `/search?q=python` に遷移し、200 で render される (検索 API は AllowAny)。
+- 結果セクションが描画される。
+
 ## 4. E2E 化メモ
 
 各 E2E は上記の `SRC-XX` をテスト名に含める。

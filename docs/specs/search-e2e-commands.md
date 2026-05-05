@@ -136,6 +136,18 @@ npx playwright test e2e/search-scenarios.spec.ts --workers=1 --reporter=line --g
 
 # SRC-22: SearchBox は URL 経由で初期値を受け取る
 npx playwright test e2e/search-scenarios.spec.ts --workers=1 --reporter=line --grep "SRC-22"
+
+# SRC-26: Navbar HeaderSearchBox から submit すると /search?q= に遷移する
+npx playwright test e2e/search-scenarios.spec.ts --workers=1 --reporter=line --grep "SRC-26"
+
+# SRC-27: Navbar HeaderSearchBox の空文字 submit は navigate しない
+npx playwright test e2e/search-scenarios.spec.ts --workers=1 --reporter=line --grep "SRC-27"
+
+# SRC-28: Navbar HeaderSearchBox は URL の q を初期値として受け取らない
+npx playwright test e2e/search-scenarios.spec.ts --workers=1 --reporter=line --grep "SRC-28"
+
+# SRC-29: Navbar HeaderSearchBox は未ログインでも表示・動作する
+npx playwright test e2e/search-scenarios.spec.ts --workers=1 --reporter=line --grep "SRC-29"
 ```
 
 ## 5. Phase 2 既存 golden path との関係

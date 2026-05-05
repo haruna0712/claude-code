@@ -171,16 +171,32 @@
 
 - Server Component で `searchParams.q` を読み、サーバサイドで `fetchSearch` を呼ぶ。
 - 認証情報は `cookies()` 経由で SSR fetch に乗る (= ログインユーザのレコメンド調整は今後 / 現状 anon と同じ結果)。
-- レスポンスを `TweetListSerializer` 形式で受けて、`html` を `sanitizeTweetHtml` で消毒したうえで `dangerouslySetInnerHTML`。
-- 結果カードは現状 `TweetCard` を使わず軽量描画 (author + body + tags のみ)。フォロー / リアクション / repost 等のアクションは出ない (= 詳細遷移してから操作する設計)。
+- レスポンスは `TweetCardList` (Client Component) に渡して render する (`/explore` `/tag/<name>` `/u/<handle>` と同じ pipeline)。`#372` 修正後は本ページ専用の inline rendering を持たない。
+- 結果カードは `TweetCard` 経由なので、reaction / repost / quote / reply の action button が動作する。
 
-### 4.2 `SearchBox`
+### 4.2 検索 UI の入口 (2 系統)
+
+検索 UI の SubmitForm は **2 つ** ある。両方とも `router.push('/search?q=' + encodeURIComponent(value))` を呼んで `/search` に navigate する点で共通。
+
+#### 4.2.1 グローバル `HeaderSearchBox` (Navbar、全ページから常時アクセス可)
+
+`client/src/components/shared/navbar/HeaderSearchBox.tsx` が正本 (`#377`)。
+
+- グローバル `Navbar` 内に常時表示。X (Twitter) 同様、ホーム画面を開いた直後でもすぐに検索できる。
+- ログイン / 未ログイン共通で表示される (検索 API は AllowAny)。
+- `<form role="search">` + controlled input + submit button (`sm` 以上で button 表示、`sm` 未満は input + Enter キー submit)。
+- 空 / 空白のみは submit しない (`trimmed === '' なら return`)。
+- URL の `q` 初期値は受け取らない。Navbar の値はページ遷移ごとにリセット。クエリの編集は `/search` ページの SearchBox に任せる。
+- 演算子ヘルプは表示しない (footprint 優先)。
+
+#### 4.2.2 `/search` ページ内 `SearchBox`
 
 `client/src/components/search/SearchBox.tsx` が正本。
 
-- `<form role="search">` + controlled input。
+- `<form role="search">` + controlled input + submit button。
 - submit で `router.push('/search?q=' + encodeURIComponent(value))`。
-- 空 / 空白のみは submit しない (`trimmed === '' なら return`)。
+- 空 / 空白のみは submit しない。
+- `initialValue` で URL の `q` を受け取り、現在の検索クエリを編集 / 拡張できるようにする。
 - 演算子ヘルプは `<details>` で折りたたみ表示。autosuggest popup は未実装 (TODO)。
 
 ### 4.3 SEO
