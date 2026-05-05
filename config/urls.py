@@ -50,14 +50,18 @@ urlpatterns = [
     path("api/v1/auth/csrf/", csrf_token_view, name="api-csrf"),
     path("api/v1/auth/", include("djoser.urls")),
     path("api/v1/auth/", include("apps.users.urls")),
+    # P2-03: フォロー関連 API は handle ベースで /api/v1/users/<handle>/follow/ などに
+    # マウントする (SPEC §16.2 の RESTful URL 設計)。
+    # #370: follows.urls の static path (popular/, recommended/) は urls_profile の
+    # <str:username>/ (1 セグメント greedy) に飲み込まれて 404 になっていた。
+    # follows.urls を **先** に登録して static match を優先させる。
+    # urls_profile 側の me/ 系も static path だが follows.urls には me/ パターン
+    # が無いので衝突しない。
+    path("api/v1/users/", include("apps.follows.urls")),
     # P1-03 #89: プロフィール API (SPEC §2)。
     # /api/v1/users/me/ (GET/PATCH) と /api/v1/users/<handle>/ (GET) を提供。
     # 認証系 (/api/v1/auth/) と分離するため apps.users.urls_profile として別登録。
     path("api/v1/users/", include("apps.users.urls_profile")),
-    # P2-03: フォロー関連 API は handle ベースで /api/v1/users/<handle>/follow/ などに
-    # マウントする (SPEC §16.2 の RESTful URL 設計)。``urls_profile`` の <str:username>/
-    # (1 セグメント) と本 include の <handle>/follow/ (2 セグメント) は衝突しない。
-    path("api/v1/users/", include("apps.follows.urls")),
     # Phase 0 scaffold (P0-04). Each app ships empty urlpatterns until
     # the owning phase adds real endpoints (see docs/ROADMAP.md).
     path("api/v1/tweets/", include("apps.tweets.urls")),
