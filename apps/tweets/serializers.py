@@ -39,6 +39,41 @@ from apps.tweets.models import (
 from apps.tweets.rendering import render_markdown
 
 # -----------------------------------------------------------------------------
+# #383 reaction_summary helper
+# -----------------------------------------------------------------------------
+
+
+def _build_reaction_summary(tweet: Tweet, request: Any | None) -> dict[str, Any]:
+    """Tweet に紐づく Reaction の集計と viewer 別 my_kind を返す.
+
+    形は ``GET /api/v1/tweets/<id>/reactions/`` と同じ:
+        {"counts": {kind: count for 10 kinds (0-fill)}, "my_kind": kind | None}
+
+    各 tweet ごとに 1〜2 query を発行する (counts と my_kind)。timeline 等で
+    N+1 が問題になるなら view 側で ``prefetch_related("reactions")`` するか、
+    本 helper の caller が context に集計済 dict を入れて optimize する。
+    MVP は単純に直接 query する (#383)。
+    """
+    from collections import Counter
+
+    from apps.reactions.models import Reaction, ReactionKind
+
+    rows = Reaction.objects.filter(tweet=tweet).values_list("kind", flat=True)
+    counts = Counter(rows)
+    full_counts = {k.value: counts.get(k.value, 0) for k in ReactionKind}
+
+    my_kind: str | None = None
+    if request is not None and request.user.is_authenticated:
+        my_kind = (
+            Reaction.objects.filter(user=request.user, tweet=tweet)
+            .values_list("kind", flat=True)
+            .first()
+        )
+
+    return {"counts": full_counts, "my_kind": my_kind}
+
+
+# -----------------------------------------------------------------------------
 # P1-10 (char_count) lazy import
 # -----------------------------------------------------------------------------
 # P1-10 は並列実装中なので import が失敗するケースを許容する。
@@ -99,6 +134,9 @@ class TweetBaseMiniSerializer(serializers.ModelSerializer):
     images = TweetImageSerializer(many=True, read_only=True)
     tags = serializers.SerializerMethodField()
     reposted_by_me = serializers.SerializerMethodField()
+    # #383: reaction の kind 別集計 + viewer 別 my_kind。
+    # 形は GET /reactions/ endpoint と同一。
+    reaction_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = Tweet
@@ -122,6 +160,7 @@ class TweetBaseMiniSerializer(serializers.ModelSerializer):
             "quote_count",
             "reaction_count",
             "reposted_by_me",
+            "reaction_summary",
         ]
         read_only_fields = fields
 
@@ -155,6 +194,9 @@ class TweetBaseMiniSerializer(serializers.ModelSerializer):
             type=TweetType.REPOST,
             repost_of=obj,
         ).exists()
+
+    def get_reaction_summary(self, obj: Tweet) -> dict[str, Any]:
+        return _build_reaction_summary(obj, self.context.get("request"))
 
 
 class TweetMiniSerializer(TweetBaseMiniSerializer):
@@ -210,6 +252,8 @@ class TweetListSerializer(serializers.ModelSerializer):
     # frontend の RepostButton.initialReposted に流して、リロード後も
     # 「リポスト済み」状態が UI に反映されるようにする。
     reposted_by_me = serializers.SerializerMethodField()
+    # #383: reaction の kind 別集計 + viewer 別 my_kind (GET /reactions/ と同形)。
+    reaction_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = Tweet
@@ -235,6 +279,8 @@ class TweetListSerializer(serializers.ModelSerializer):
             "repost_of",
             # #351
             "reposted_by_me",
+            # #383
+            "reaction_summary",
         ]
         read_only_fields = fields
 
@@ -291,6 +337,9 @@ class TweetListSerializer(serializers.ModelSerializer):
             type=TweetType.REPOST,
             repost_of=obj,
         ).exists()
+
+    def get_reaction_summary(self, obj: Tweet) -> dict[str, Any]:
+        return _build_reaction_summary(obj, self.context.get("request"))
 
 
 class TweetDetailSerializer(TweetListSerializer):

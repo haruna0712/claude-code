@@ -15,6 +15,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 import ReactionBar from "@/components/reactions/ReactionBar";
+import ReactionSummary from "@/components/reactions/ReactionSummary";
 import ExpandableBody from "@/components/timeline/ExpandableBody";
 import PostDialog from "@/components/tweets/PostDialog";
 import RepostButton from "@/components/tweets/RepostButton";
@@ -471,6 +472,12 @@ export default function TweetCard({
 				<QuoteEmbed tweet={displayTweet.quote_of} />
 			)}
 
+			{/* #383: reaction の kind 別ブレイクダウン (FB / Threads 風)。
+			    総数 0 のときは ReactionSummary 内部で null を返す。 */}
+			{displayTweet.reaction_summary && (
+				<ReactionSummary summary={displayTweet.reaction_summary} />
+			)}
+
 			{/* Action buttons. Reactions wired in P2-14, repost/quote/reply in P2-15.
 			    #327: count badge を 0 以上で表示。tweet.is_deleted のとき disable
 			    (実際には is_deleted は早期 return で tombstone なので、ここでは
@@ -552,7 +559,10 @@ export default function TweetCard({
 					})()}
 				</div>
 
-				<ReactionBar tweetId={displayTweet.id} />
+				<ReactionBar
+					tweetId={displayTweet.id}
+					initial={displayTweet.reaction_summary}
+				/>
 			</footer>
 
 			<PostDialog

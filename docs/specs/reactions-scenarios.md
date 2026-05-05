@@ -574,6 +574,83 @@
 - 続けて `Alt+Enter` で close (toggle)。
 - a11y: 長押しが使えないキーボードユーザ向けの代替 (SPEC §6.2)。
 
+### RCT-33: trigger emoji は viewer 視点で決まる (#383)
+
+前提:
+
+- target tweet T (作者: B)。
+- 過去に actor A が T に like を付けている (`A.my_kind="like"`)。
+- viewer C は T に reaction していない (`C.my_kind=null`)。
+
+操作:
+
+- A が T を表示する (例: `/tweet/<T.id>`)。
+- 同時刻に C が同じ T を表示する。
+- 同時刻に匿名ユーザが同じ T を表示する。
+
+期待結果:
+
+- API レスポンス: 同じ tweet でも `reaction_summary.my_kind` は **viewer 別** に変わる。
+  - A 視点: `my_kind="like"` (200)
+  - C 視点: `my_kind=null`
+  - 匿名: `my_kind=null`
+- UI: A の trigger は `❤️ {total}` (lime 強調、aria-pressed=true)。
+- UI: C の trigger は `👍 {total}` (default、aria-pressed=false)。
+- UI: 匿名の trigger も `👍 {total}` (login 後に reaction 可能、未認証で trigger 押下すると 401 → toast)。
+- `reaction_summary.counts` は **全 viewer 共通** で同じ値 (集計は viewer に依存しない)。
+
+### RCT-34: ReactionSummary は total === 0 のときに何も表示しない (#383)
+
+前提:
+
+- target tweet T に reaction が一切付いていない (`reaction_count=0`)。
+
+操作:
+
+- 任意の viewer が T を表示する。
+
+期待結果:
+
+- UI: tweet カード内に `role="group" aria-label="リアクションの内訳"` 要素は **存在しない**。
+- footer (action button 列) は通常通り表示される。
+- 「0 件のリアクション」のような empty placeholder は出さない (FB / Threads と同じ)。
+
+### RCT-35: ReactionSummary は count 降順で sort し、上位 N 種だけ表示する (#383)
+
+前提:
+
+- target tweet T に以下の reaction が付いている: like=4, learned=3, agree=2, helpful=1。
+- `maxVisibleKinds` の default = 3。
+
+操作:
+
+- viewer が T を表示する。
+
+期待結果:
+
+- UI: ReactionSummary に **上位 3 種** が表示される: `❤️ 4 📚 3 👍 2 · 10 件`。
+  - 順序は count 降順、tie の場合は `REACTION_KINDS` の宣言順 (`like → interesting → ... → code`)。
+- UI: 4 番目以降 (`helpful=1`) は **表示されない** が、末尾の総計 `10 件` には含まれる。
+- a11y: 各 chip は `aria-hidden="true"` の emoji + `sr-only` の kind label (`いいね 4` のように SR が読み上げる)。
+
+### RCT-36: ReactionSummary は viewer 別の my_kind を区別しない (集計は全 viewer 共通) (#383)
+
+前提:
+
+- target tweet T に reaction `like=3` が付いている。
+- viewer A は T に like 済み (`my_kind="like"`)。
+- viewer B は T に reaction していない (`my_kind=null`)。
+
+操作:
+
+- A と B がそれぞれ T を表示する。
+
+期待結果:
+
+- UI: ReactionSummary の表示は A と B で **同一** (`❤️ 3 · 3 件`)。
+- UI: trigger は viewer 別 (RCT-33): A は `❤️`, B は `👍`。
+- = ReactionSummary は集計表示のみ、viewer 状態は trigger (ReactionBar) が担当という分業。
+
 ## 4. E2E化メモ
 
 各 E2E は上記の `RCT-XX` をテスト名に含める。

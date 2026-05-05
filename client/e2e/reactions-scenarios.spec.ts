@@ -742,4 +742,101 @@ test.describe("Reactions UI (ReactionBar)", () => {
 			await deleteTweetAs(USER2, tweetId);
 		}
 	});
+
+	// =====================================================================
+	// reaction_summary + ReactionSummary breakdown (#383)
+	// =====================================================================
+
+	test("RCT-33 UI: trigger emoji が viewer 視点で異なる (#383)", async ({
+		browser,
+	}) => {
+		const tweetId = await postTweetAs(USER2, `RCT-33 ${Date.now()}`);
+		// USER1 が API 経由で like を付ける
+		const api = await apiAuthed(USER1.email, USER1.password);
+		try {
+			await api.context.post(`/api/v1/tweets/${tweetId}/reactions/`, {
+				headers: {
+					"Content-Type": "application/json",
+					"X-CSRFToken": api.csrf,
+					Referer: `${API_BASE}/`,
+				},
+				data: { kind: "like" },
+			});
+		} finally {
+			await api.context.dispose();
+		}
+		try {
+			// USER1 視点: trigger は ❤️ + aria-pressed=true
+			const ctxA = await browser.newContext();
+			const pageA = await ctxA.newPage();
+			await loginUI(pageA, USER1.email, USER1.password);
+			await openTweet(pageA, tweetId);
+			const triggerA = pageA
+				.locator('button[aria-haspopup="true"][aria-label*="長押し"]')
+				.first();
+			await expect(triggerA).toHaveAttribute("aria-pressed", "true");
+			await ctxA.close();
+
+			// 匿名視点: trigger は 👍 + aria-pressed=false
+			const ctxAnon = await browser.newContext();
+			const pageAnon = await ctxAnon.newPage();
+			await pageAnon.goto(`/tweet/${tweetId}`);
+			const triggerAnon = pageAnon
+				.locator('button[aria-haspopup="true"][aria-label*="長押し"]')
+				.first();
+			await expect(triggerAnon).toHaveAttribute("aria-pressed", "false");
+			await expect(triggerAnon).toHaveAttribute("aria-label", /^いいね \(/);
+			await ctxAnon.close();
+		} finally {
+			await clearReactionAs(USER1, tweetId);
+			await deleteTweetAs(USER2, tweetId);
+		}
+	});
+
+	test("RCT-34 UI: ReactionSummary は total=0 で非表示 (#383)", async ({
+		page,
+	}) => {
+		const tweetId = await postTweetAs(USER2, `RCT-34 ${Date.now()}`);
+		try {
+			await page.goto(`/tweet/${tweetId}`);
+			// 0 件のリアクション → ReactionSummary は出ない
+			await expect(
+				page.getByRole("group", { name: "リアクションの内訳" }),
+			).toHaveCount(0);
+		} finally {
+			await deleteTweetAs(USER2, tweetId);
+		}
+	});
+
+	test("RCT-35 UI: ReactionSummary が count > 0 で表示される (#383)", async ({
+		page,
+	}) => {
+		const tweetId = await postTweetAs(USER2, `RCT-35 ${Date.now()}`);
+		// USER1 が API で like を付ける
+		const api = await apiAuthed(USER1.email, USER1.password);
+		try {
+			await api.context.post(`/api/v1/tweets/${tweetId}/reactions/`, {
+				headers: {
+					"Content-Type": "application/json",
+					"X-CSRFToken": api.csrf,
+					Referer: `${API_BASE}/`,
+				},
+				data: { kind: "like" },
+			});
+		} finally {
+			await api.context.dispose();
+		}
+		try {
+			await page.goto(`/tweet/${tweetId}`);
+			const summary = page.getByRole("group", {
+				name: "リアクションの内訳",
+			});
+			await expect(summary).toBeVisible({ timeout: 10_000 });
+			await expect(summary).toContainText("❤️");
+			await expect(summary).toContainText("1 件");
+		} finally {
+			await clearReactionAs(USER1, tweetId);
+			await deleteTweetAs(USER2, tweetId);
+		}
+	});
 });
