@@ -38,6 +38,8 @@ import {
 } from "react";
 import { toast } from "react-toastify";
 
+import ReactionLikeIcon from "@/components/reactions/ReactionLikeIcon";
+
 import {
 	REACTION_KINDS,
 	REACTION_META,
@@ -60,7 +62,6 @@ interface ReactionBarProps {
 const EMPTY: ReactionAggregate = { counts: {}, my_kind: null };
 const LONG_PRESS_MS = 500;
 const QUICK_KIND: ReactionKind = "like";
-const DEFAULT_TRIGGER_EMOJI = "👍";
 
 export default function ReactionBar({
 	tweetId,
@@ -87,9 +88,6 @@ export default function ReactionBar({
 		[state.counts],
 	);
 	const myActive = state.my_kind;
-	const triggerEmoji = myActive
-		? REACTION_META[myActive].emoji
-		: DEFAULT_TRIGGER_EMOJI;
 	const triggerSrLabel = myActive
 		? `${REACTION_META[myActive].label}を取消 (長押しで他のリアクション)`
 		: "いいね (長押しで他のリアクション)";
@@ -236,12 +234,20 @@ export default function ReactionBar({
 				onPointerLeave={handlePointerUpOrCancel}
 				onKeyDown={onTriggerKeyDown}
 				className={`flex min-h-[32px] touch-manipulation select-none items-center gap-1 rounded px-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-					myActive
-						? "text-lime-700 dark:text-lime-300"
-						: "text-muted-foreground hover:text-foreground"
+					myActive === "like"
+						? "text-blue-500"
+						: myActive
+							? "text-lime-700 dark:text-lime-300"
+							: "text-muted-foreground hover:text-foreground"
 				}`}
 			>
-				<span aria-hidden="true">{triggerEmoji}</span>
+				{/* #387: my_kind=like は青塗り ThumbsUp、my_kind=null は白抜き
+				    ThumbsUp、その他の kind は emoji で表示。 */}
+				{myActive === "like" || myActive === null ? (
+					<ReactionLikeIcon active={myActive === "like"} />
+				) : (
+					<span aria-hidden="true">{REACTION_META[myActive].emoji}</span>
+				)}
 				<span aria-hidden="true">{total}</span>
 				<span className="sr-only">
 					(現在の合計 {total} 件、長押しまたは Alt+Enter で他のリアクション)
@@ -258,6 +264,7 @@ export default function ReactionBar({
 						const meta = REACTION_META[kind];
 						const count = state.counts[kind] ?? 0;
 						const isMine = state.my_kind === kind;
+						const isLike = kind === "like";
 						return (
 							<button
 								key={kind}
@@ -268,11 +275,17 @@ export default function ReactionBar({
 								onClick={() => handlePick(kind)}
 								className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
 									isMine
-										? "bg-lime-500/20 text-lime-700 dark:text-lime-300"
+										? isLike
+											? "bg-blue-500/20 text-blue-500"
+											: "bg-lime-500/20 text-lime-700 dark:text-lime-300"
 										: "hover:bg-muted"
 								} disabled:opacity-50`}
 							>
-								<span aria-hidden="true">{meta.emoji}</span>
+								{isLike ? (
+									<ReactionLikeIcon active={isMine} />
+								) : (
+									<span aria-hidden="true">{meta.emoji}</span>
+								)}
 								<span>{count}</span>
 							</button>
 						);

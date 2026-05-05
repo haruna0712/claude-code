@@ -47,11 +47,12 @@ describe("ReactionSummary", () => {
 			/>,
 		);
 		const group = screen.getByRole("group", { name: "リアクションの内訳" });
-		// emoji + count が表示される
-		expect(group.textContent).toContain("❤️");
+		// #387: like は ThumbsUp svg、他は emoji。sr-only label で確認。
+		expect(group.textContent).toContain("いいね");
 		expect(group.textContent).toContain("4");
 		expect(group.textContent).toContain("📚");
 		expect(group.textContent).toContain("3");
+		// agree (👍) は emoji
 		expect(group.textContent).toContain("👍");
 		expect(group.textContent).toContain("2");
 	});
@@ -67,9 +68,9 @@ describe("ReactionSummary", () => {
 		);
 		const group = screen.getByRole("group", { name: "リアクションの内訳" });
 		// top 3: like, learned, agree → 表示
-		expect(group.textContent).toContain("❤️");
+		expect(group.textContent).toContain("いいね"); // like sr-only label (#387)
 		expect(group.textContent).toContain("📚");
-		expect(group.textContent).toContain("👍");
+		expect(group.textContent).toContain("👍"); // agree emoji
 		// 4th 以降は表示しない
 		expect(group.textContent).not.toContain("🙏");
 		expect(group.textContent).not.toContain("😂");
@@ -86,7 +87,7 @@ describe("ReactionSummary", () => {
 			/>,
 		);
 		const group = screen.getByRole("group", { name: "リアクションの内訳" });
-		expect(group.textContent).toContain("❤️");
+		expect(group.textContent).toContain("いいね"); // like sr-only label (#387)
 		expect(group.textContent).not.toContain("📚");
 	});
 
@@ -120,7 +121,8 @@ describe("ReactionSummary", () => {
 		);
 		const group = screen.getByRole("group", { name: "リアクションの内訳" });
 		const text = group.textContent ?? "";
-		const likeIdx = text.indexOf("❤️");
+		// #387: like は sr-only label "いいね" で識別 (ThumbsUp svg は textContent に出ない)
+		const likeIdx = text.indexOf("いいね");
 		const interestingIdx = text.indexOf("💡");
 		expect(likeIdx).toBeGreaterThanOrEqual(0);
 		expect(interestingIdx).toBeGreaterThan(likeIdx);

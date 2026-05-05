@@ -43,13 +43,16 @@ describe("ReactionBar — collapsed state", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("renders 👍 trigger when no my_kind", () => {
-		render(<ReactionBar tweetId={1} />);
+	it("renders ThumbsUp icon (outlined) when no my_kind (#387)", () => {
+		const { container } = render(<ReactionBar tweetId={1} />);
 		const trigger = triggerByDefault();
 		expect(trigger).toBeInTheDocument();
 		expect(trigger.getAttribute("aria-expanded")).toBe("false");
 		expect(trigger.getAttribute("aria-pressed")).toBe("false");
-		expect(trigger.textContent).toContain("👍");
+		// my_kind=null → outlined ThumbsUp svg (lucide-react)
+		const svg = container.querySelector("button svg");
+		expect(svg).toBeTruthy();
+		expect(svg?.getAttribute("fill")).toBe("none");
 	});
 
 	it("renders total count from initial aggregate", () => {
@@ -62,15 +65,31 @@ describe("ReactionBar — collapsed state", () => {
 		expect(triggerByDefault().textContent).toContain("3");
 	});
 
-	it("shows my emoji + aria-pressed=true when my_kind is set", () => {
-		render(
+	it("renders ThumbsUp filled (active) when my_kind=like (#387)", () => {
+		const { container } = render(
 			<ReactionBar
 				tweetId={1}
 				initial={{ counts: { like: 2 }, my_kind: "like" }}
 			/>,
 		);
 		const trigger = triggerByActive();
-		expect(trigger.textContent).toContain("❤️");
+		expect(trigger.getAttribute("aria-pressed")).toBe("true");
+		const svg = container.querySelector("button svg");
+		expect(svg).toBeTruthy();
+		expect(svg?.getAttribute("fill")).toBe("currentColor");
+		// 青色 (text-blue-500) が trigger に当たっている
+		expect(trigger.className).toContain("text-blue-500");
+	});
+
+	it("shows other kind's emoji on trigger when my_kind != like", () => {
+		render(
+			<ReactionBar
+				tweetId={1}
+				initial={{ counts: { learned: 2 }, my_kind: "learned" }}
+			/>,
+		);
+		const trigger = triggerByActive();
+		expect(trigger.textContent).toContain("📚");
 		expect(trigger.getAttribute("aria-pressed")).toBe("true");
 	});
 });

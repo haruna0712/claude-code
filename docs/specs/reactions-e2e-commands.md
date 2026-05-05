@@ -149,6 +149,9 @@ npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line 
 
 # RCT-37: ReactionSummary はリロードせず即時反映する (#385)
 npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-37"
+
+# RCT-38: like は青塗り ThumbsUp icon で表示 (#387)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-38"
 ```
 
 ## 5. Phase 2 既存 golden path との関係

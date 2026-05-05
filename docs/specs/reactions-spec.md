@@ -256,14 +256,19 @@ stateDiagram-v2
 
 ### 4.1 ReactionBar UI 描画
 
-`#381` で **Facebook 風 UX** に変更。trigger は単一の "👍 (Good)" ボタンとして表示し、click は **常に like トグル**、長押しで picker を開く。別 kind に変えたい場合は長押しから選ぶ。
+`#381` で **Facebook 風 UX** に変更。trigger は単一の "Good (Like)" ボタンとして表示し、click は **常に like トグル**、長押しで picker を開く。別 kind に変えたい場合は長押しから選ぶ。
 
-**重要 (#383): trigger 表示は viewer 視点**。`my_kind` は API レスポンス内で **request.user 別** に計算されるので、自分が like 済みの tweet を自分が見れば ❤️、同じ tweet を他人が見れば (その人が未 reaction なら) 👍。匿名閲覧時は常に 👍 (`my_kind=null`)。tweet API 取得時に `reaction_summary` を一緒に返している (§2.10) ので、初期表示も viewer 別の値で正しく出る。
+**重要 (#383): trigger 表示は viewer 視点**。`my_kind` は API レスポンス内で **request.user 別** に計算されるので、自分が like 済みの tweet を自分が見れば「青塗り ThumbsUp」、同じ tweet を他人が見れば (その人が未 reaction なら) 「白抜き ThumbsUp」。匿名閲覧時は常に白抜き (`my_kind=null`)。tweet API 取得時に `reaction_summary` を一緒に返している (§2.10) ので、初期表示も viewer 別の値で正しく出る。
 
-| 状態           | trigger 表示                     | aria-pressed | aria-label                                    |
-| -------------- | -------------------------------- | ------------ | --------------------------------------------- |
-| `my_kind=null` | `👍 {total}` (灰色)              | `false`      | `いいね (長押しで他のリアクション)`           |
-| `my_kind=K`    | `{emoji(K)} {total}` (lime 強調) | `true`       | `{label(K)}を取消 (長押しで他のリアクション)` |
+| 状態             | trigger 表示                                   | aria-pressed | aria-label                                    |
+| ---------------- | ---------------------------------------------- | ------------ | --------------------------------------------- |
+| `my_kind=null`   | **白抜き ThumbsUp** SVG (灰色) + `{total}`     | `false`      | `いいね (長押しで他のリアクション)`           |
+| `my_kind=like`   | **青塗り ThumbsUp** SVG (blue-500) + `{total}` | `true`       | `いいねを取消 (長押しで他のリアクション)`     |
+| `my_kind=K (他)` | `{emoji(K)} {total}` (lime 強調)               | `true`       | `{label(K)}を取消 (長押しで他のリアクション)` |
+
+**`like` の特別扱い (#387)**: Facebook の Like ボタン慣習に合わせ、`like` reaction は `lucide-react` の `ThumbsUp` SVG icon で render する (絵文字ではなく)。`fill="none"` (白抜き) と `fill="currentColor"` + `text-blue-500` (青塗り) を切り替えてアクティブ状態を表現する。他の 9 種は従来通り emoji (💡, 📚, 🙏, 👍, 😲, 🎉, 🫡, 😂, 💻)。
+
+実装は `client/src/components/reactions/ReactionLikeIcon.tsx` (`<ReactionLikeIcon active />`) を使う。同 component は ReactionBar trigger / picker / ReactionSummary chip 全てから呼ばれる。
 
 picker 内の grid (`role="group"`) は #379 で確定済の挙動を維持:
 
@@ -343,7 +348,7 @@ picker 内の grid (`role="group"`) は #379 で確定済の挙動を維持:
 - N の default は **3**。`maxVisibleKinds` props で上書き可。
 - sort 順は **count 降順** (tie は `REACTION_KINDS` の宣言順 `like → interesting → learned → ...`)。
 - 0 件の kind は表示対象から除外 (= 上位 N 種は **必ず count > 0**)。
-- 例: `❤️ 4  📚 3  👍 2`
+- 例: `[青塗りThumbsUp] 4  📚 3  👍 2` (#387 で `like` は SVG ThumbsUp に変更、他は emoji のまま)
 - **#385**: 当初 (#383) は末尾に `· {total} 件` を表示していたが、FB / カロッター の慣習に合わせて撤去。kind 内訳のみ。
 
 #### リアルタイム反映 (#385)
