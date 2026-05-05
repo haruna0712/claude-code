@@ -6,6 +6,7 @@ import FollowButton from "@/components/follows/FollowButton";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
+import type { CurrentUser } from "@/lib/api/users";
 import { stringifyJsonLd } from "@/lib/json-ld";
 
 interface PublicProfile {
@@ -58,6 +59,14 @@ async function loadTweets(handle: string): Promise<TweetSummary[]> {
 	}
 }
 
+async function loadCurrentUser(): Promise<CurrentUser | null> {
+	try {
+		return await serverFetch<CurrentUser>("/users/me/");
+	} catch {
+		return null;
+	}
+}
+
 export async function generateMetadata({
 	params,
 }: PageProps): Promise<Metadata> {
@@ -95,7 +104,10 @@ export default async function ProfilePage({ params }: PageProps) {
 	const profile = await loadProfile(params.handle);
 	if (!profile) notFound();
 
-	const tweets = await loadTweets(profile.username);
+	const [tweets, currentUser] = await Promise.all([
+		loadTweets(profile.username),
+		loadCurrentUser(),
+	]);
 
 	const jsonLd = {
 		"@context": "https://schema.org",
@@ -189,6 +201,7 @@ export default async function ProfilePage({ params }: PageProps) {
 					tweets={tweets}
 					ariaLabel={`@${profile.username} のツイート`}
 					emptyMessage="まだツイートがありません。"
+					currentUserHandle={currentUser?.username}
 				/>
 			</section>
 		</main>

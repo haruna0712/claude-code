@@ -12,7 +12,7 @@
 		"test:coverage": "vitest run --coverage",
 		"test:e2e": "playwright test",
 		"test:e2e:install": "playwright install chromium --with-deps",
-		"gen:api-types": "openapi-typescript ${API_SCHEMA_URL:-http://localhost:8080/swagger.json} --output src/types/api.generated.ts && prettier --write src/types/api.generated.ts",
+		"gen:api-types": "openapi-typescript ${API_SCHEMA_URL:-http://localhost:8080/api/schema/} --output src/types/api.generated.ts && prettier --write src/types/api.generated.ts",
 		"gen:api-types:check": "npm run gen:api-types && git diff --exit-code -- src/types/api.generated.ts || (echo '\\nERROR: src/types/api.generated.ts is stale. Run: cd client && npm run gen:api-types' >&2; exit 1)"
 	},
 	"dependencies": {

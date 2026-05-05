@@ -8,7 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import TweetCard from "@/components/timeline/TweetCard";
 import { unrepostTweet } from "@/lib/api/repost";
-import type { TweetSummary } from "@/lib/api/tweets";
+import { deleteTweet, type TweetSummary } from "@/lib/api/tweets";
 
 // Mock next/navigation for Link components
 vi.mock("next/navigation", () => ({
@@ -29,7 +29,7 @@ vi.mock("@/lib/api/tweets", async () => {
 		await vi.importActual<typeof import("@/lib/api/tweets")>(
 			"@/lib/api/tweets",
 		);
-	return { ...actual, fetchTweet: vi.fn() };
+	return { ...actual, fetchTweet: vi.fn(), deleteTweet: vi.fn() };
 });
 
 const BASE_TWEET: TweetSummary = {
@@ -262,6 +262,47 @@ describe("TweetCard — action buttons (placeholder)", () => {
 		render(<TweetCard tweet={BASE_TWEET} />);
 		const replyBtn = screen.getByRole("button", { name: /リプライ/i });
 		expect(replyBtn.tagName).toBe("BUTTON");
+	});
+
+	it("shows delete menu only for my own non-repost tweet", async () => {
+		render(<TweetCard tweet={BASE_TWEET} currentUserHandle="alice" />);
+		await userEvent.click(
+			screen.getByRole("button", { name: "ツイートのその他メニュー" }),
+		);
+		expect(
+			await screen.findByRole("menuitem", { name: "削除" }),
+		).toBeInTheDocument();
+	});
+
+	it("does not show delete menu for another user's tweet", () => {
+		render(<TweetCard tweet={BASE_TWEET} currentUserHandle="bob" />);
+		expect(
+			screen.queryByRole("button", { name: "ツイートのその他メニュー" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("deletes my own tweet and removes its timeline row", async () => {
+		vi.mocked(deleteTweet).mockResolvedValue();
+		const onTimelineItemRemoved = vi.fn();
+		render(
+			<TweetCard
+				tweet={BASE_TWEET}
+				currentUserHandle="alice"
+				onTimelineItemRemoved={onTimelineItemRemoved}
+			/>,
+		);
+
+		await userEvent.click(
+			screen.getByRole("button", { name: "ツイートのその他メニュー" }),
+		);
+		await userEvent.click(
+			await screen.findByRole("menuitem", { name: "削除" }),
+		);
+
+		await waitFor(() => {
+			expect(deleteTweet).toHaveBeenCalledWith(42);
+			expect(onTimelineItemRemoved).toHaveBeenCalledWith(42);
+		});
 	});
 });
 

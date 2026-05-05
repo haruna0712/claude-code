@@ -20,6 +20,7 @@ import type { TweetSummary } from "@/lib/api/tweets";
 interface ConversationRepliesProps {
 	focal: TweetSummary;
 	initialReplies: TweetSummary[];
+	currentUserHandle?: string;
 }
 
 function dedupById(tweets: TweetSummary[]): TweetSummary[] {
@@ -34,6 +35,7 @@ function dedupById(tweets: TweetSummary[]): TweetSummary[] {
 export default function ConversationReplies({
 	focal,
 	initialReplies,
+	currentUserHandle,
 }: ConversationRepliesProps) {
 	const [replies, setReplies] = useState<TweetSummary[]>(
 		dedupById(initialReplies),
@@ -70,6 +72,7 @@ export default function ConversationReplies({
 					tweets={[focal]}
 					ariaLabel="ツイート詳細"
 					onDescendantPosted={handleDescendantPosted}
+					currentUserHandle={currentUserHandle}
 				/>
 			</section>
 
@@ -82,6 +85,7 @@ export default function ConversationReplies({
 						tweets={replies}
 						ariaLabel="リプライ一覧"
 						onDescendantPosted={handleDescendantPosted}
+						currentUserHandle={currentUserHandle}
 					/>
 				</section>
 			) : (

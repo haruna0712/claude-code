@@ -5,6 +5,7 @@ import ConversationReplies from "@/components/timeline/ConversationReplies";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
+import type { CurrentUser } from "@/lib/api/users";
 import { stringifyJsonLd } from "@/lib/json-ld";
 
 interface PageProps {
@@ -84,6 +85,14 @@ async function loadReplies(focalId: number): Promise<TweetSummary[]> {
 	}
 }
 
+async function loadCurrentUser(): Promise<CurrentUser | null> {
+	try {
+		return await serverFetch<CurrentUser>("/users/me/");
+	} catch {
+		return null;
+	}
+}
+
 function truncate(text: string, limit: number): string {
 	if (text.length <= limit) return text;
 	return text.slice(0, limit - 1) + "…";
@@ -140,9 +149,10 @@ export default async function TweetDetailPage({ params }: PageProps) {
 
 	// #326: conversation view — ancestor chain (parent 方向) + replies (子方向)
 	// を server-side で並行取得。focal は中央に表示。
-	const [ancestors, replies] = await Promise.all([
+	const [ancestors, replies, currentUser] = await Promise.all([
 		loadAncestors(tweet.reply_to?.id),
 		loadReplies(tweet.id),
+		loadCurrentUser(),
 	]);
 
 	const jsonLd = {
@@ -173,13 +183,21 @@ export default async function TweetDetailPage({ params }: PageProps) {
 			    focal は border-l 強調で視覚的に区別する (Twitter conversation view)。 */}
 			{ancestors.length > 0 ? (
 				<section aria-label="親ツイート" className="mb-2">
-					<TweetCardList tweets={ancestors} ariaLabel="親ツイート" />
+					<TweetCardList
+						tweets={ancestors}
+						ariaLabel="親ツイート"
+						currentUserHandle={currentUser?.username}
+					/>
 				</section>
 			) : null}
 
 			{/* #337: focal + replies を client component に切り出して、reply 投稿時
 			    に即時 append できるようにする (リロード不要)。 */}
-			<ConversationReplies focal={tweet} initialReplies={replies} />
+			<ConversationReplies
+				focal={tweet}
+				initialReplies={replies}
+				currentUserHandle={currentUser?.username}
+			/>
 		</main>
 	);
 }

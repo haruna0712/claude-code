@@ -13,6 +13,7 @@
  * (HomeFeed と同じ pattern)。
  */
 
+import { useCallback, useEffect, useState } from "react";
 import TweetCard from "@/components/timeline/TweetCard";
 import type { TweetSummary } from "@/lib/api/tweets";
 
@@ -31,6 +32,7 @@ interface TweetCardListProps {
 	 * #337: TweetCard 内で reply / quote / repost が投稿された際に bubble up.
 	 */
 	onDescendantPosted?: (tweet: TweetSummary) => void;
+	currentUserHandle?: string;
 }
 
 export default function TweetCardList({
@@ -38,8 +40,17 @@ export default function TweetCardList({
 	ariaLabel,
 	emptyMessage = "ツイートがありません。",
 	onDescendantPosted,
+	currentUserHandle,
 }: TweetCardListProps) {
-	if (tweets.length === 0) {
+	const [visibleTweets, setVisibleTweets] = useState(tweets);
+	useEffect(() => {
+		setVisibleTweets(tweets);
+	}, [tweets]);
+	const handleTimelineItemRemoved = useCallback((tweetId: number) => {
+		setVisibleTweets((prev) => prev.filter((tweet) => tweet.id !== tweetId));
+	}, []);
+
+	if (visibleTweets.length === 0) {
 		return <p className="text-sm text-muted-foreground">{emptyMessage}</p>;
 	}
 	return (
@@ -49,13 +60,15 @@ export default function TweetCardList({
 			aria-busy="false"
 			className="flex flex-col gap-3"
 		>
-			{tweets.map((tweet, index) => (
+			{visibleTweets.map((tweet, index) => (
 				<TweetCard
 					key={tweet.id}
 					tweet={tweet}
 					posinset={index + 1}
-					setsize={tweets.length}
+					setsize={visibleTweets.length}
 					onDescendantPosted={onDescendantPosted}
+					currentUserHandle={currentUserHandle}
+					onTimelineItemRemoved={handleTimelineItemRemoved}
 				/>
 			))}
 		</section>

@@ -12,11 +12,23 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useCallback, useMemo, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
+import { MoreHorizontal, Trash2 } from "lucide-react";
+import { toast } from "react-toastify";
 import ReactionBar from "@/components/reactions/ReactionBar";
 import ExpandableBody from "@/components/timeline/ExpandableBody";
 import PostDialog from "@/components/tweets/PostDialog";
 import RepostButton from "@/components/tweets/RepostButton";
-import type { TweetMini, TweetSummary } from "@/lib/api/tweets";
+import {
+	deleteTweet,
+	type TweetMini,
+	type TweetSummary,
+} from "@/lib/api/tweets";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatRelativeTime } from "@/lib/timeline/formatTime";
 
 interface TweetCardProps {
@@ -145,9 +157,15 @@ export default function TweetCard({
 	const router = useRouter();
 	const [replyOpen, setReplyOpen] = useState(false);
 	const [quoteOpen, setQuoteOpen] = useState(false);
+	const [deleteBusy, setDeleteBusy] = useState(false);
+	const [locallyDeleted, setLocallyDeleted] = useState(false);
 	const isRepost = tweet.type === "repost" && tweet.repost_of;
 	const displayTweet = isRepost ? tweet.repost_of! : tweet;
 	const reposterName = tweet.author_display_name ?? tweet.author_handle;
+	const canDelete =
+		!isRepost &&
+		!!currentUserHandle &&
+		displayTweet.author_handle === currentUserHandle;
 
 	// #340: card 全体クリックで /tweet/<id> に遷移 (X 慣習)。
 	// 内部 link / button は伝播を止めて従来動作。テキスト drag-select も保護。
@@ -194,6 +212,20 @@ export default function TweetCard({
 		},
 		[navigateToDetail],
 	);
+	const handleDelete = useCallback(async () => {
+		if (deleteBusy) return;
+		setDeleteBusy(true);
+		try {
+			await deleteTweet(tweet.id);
+			setLocallyDeleted(true);
+			onTimelineItemRemoved?.(tweet.id);
+			toast.success("ツイートを削除しました");
+		} catch {
+			toast.error("ツイートを削除できませんでした");
+			setDeleteBusy(false);
+		}
+	}, [deleteBusy, onTimelineItemRemoved, tweet.id]);
+
 	// #334: reply / quote 投稿成功時に楽観的に親 count badge を +1 する。
 	// PostDialog onPosted コールバック → ここで state を更新し、再レンダーで
 	// footer の count が即時反映される。リロード不要。
@@ -238,6 +270,10 @@ export default function TweetCard({
 	);
 
 	// #327: 削除済み tweet は tombstone で代替 (action button 一切出さない)
+	if (locallyDeleted) {
+		return null;
+	}
+
 	if (tweet.is_deleted) {
 		return <DeletedTombstone posinset={posinset} setsize={setsize} />;
 	}
@@ -344,6 +380,33 @@ export default function TweetCard({
 					>
 						{relativeTime}
 					</time>
+					{canDelete ? (
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<button
+									type="button"
+									aria-label="ツイートのその他メニュー"
+									disabled={deleteBusy}
+									className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+								>
+									<MoreHorizontal className="size-4" aria-hidden="true" />
+								</button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="end" className="min-w-[10rem]">
+								<DropdownMenuItem
+									className="text-destructive focus:text-destructive"
+									disabled={deleteBusy}
+									onSelect={(event) => {
+										event.preventDefault();
+										handleDelete();
+									}}
+								>
+									<Trash2 className="mr-2 size-4" aria-hidden="true" />
+									削除
+								</DropdownMenuItem>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					) : null}
 				</div>
 			</header>
 
