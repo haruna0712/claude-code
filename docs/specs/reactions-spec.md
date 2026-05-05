@@ -218,23 +218,50 @@ stateDiagram-v2
 
 ### 4.1 ReactionBar UI 描画
 
-| 状態           | trigger ボタン文言 (`triggerLabel`) | grid 内 ボタン色 (kind=K)            | aria-pressed |
-| -------------- | ----------------------------------- | ------------------------------------ | ------------ |
-| `my_kind=null` | `リアクション {total}`              | 全 kind: 灰色 hover                  | 全 false     |
-| `my_kind=K`    | `{emoji(K)} {total}`                | K: lime-500/20 強調 / 他: 灰色 hover | K のみ true  |
+`#381` で **Facebook 風 UX** に変更。trigger は単一の "👍 (Good)" ボタンとして表示し、click は **常に like トグル**、長押しで picker を開く。別 kind に変えたい場合は長押しから選ぶ。
+
+| 状態           | trigger 表示                     | aria-pressed | aria-label                                    |
+| -------------- | -------------------------------- | ------------ | --------------------------------------------- |
+| `my_kind=null` | `👍 {total}` (灰色)              | `false`      | `いいね (長押しで他のリアクション)`           |
+| `my_kind=K`    | `{emoji(K)} {total}` (lime 強調) | `true`       | `{label(K)}を取消 (長押しで他のリアクション)` |
+
+picker 内の grid (`role="group"`) は #379 で確定済の挙動を維持:
+
+- 全 10 kind ボタン (灰色 hover、選択中は lime-500/20 強調)
+- `aria-pressed=true` は my_kind に一致する kind のみ
+- `busyKind !== null` の間は disabled
 
 要点:
 
-- `total` は `sum(counts)` で 10 kind 合算。X の Like 数表示と同じ「自分の kind と関係なく合計を出す」スタンス。
-- trigger ボタンは **常に 1 つ**。grid を開閉する。Alt+Enter キーで開閉できる (SPEC §6.2 アクセシビリティ)。
-- `busyKind !== null` の間は grid 内全ボタンが `disabled`、optimistic update 中の二重押下を防止。
+- `total` は `sum(counts)` で 10 kind 合算 (X の Like 数表示踏襲)。
+- trigger ボタンは **1 つ**。click / Enter で quick toggle、長押し / Alt+Enter で picker。
+- a11y: trigger は `aria-haspopup="true"`, `aria-expanded={open}`, `aria-pressed={my_kind!==null}`。
 
-#### 4.1.1 popup の開閉 (#379)
+#### 4.1.1 操作と判定 (#381)
+
+| 操作                                    | 動作                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------ |
+| click / tap (短押し, < `LONG_PRESS_MS`) | quick toggle: `my_kind=null` → POST `like`、それ以外 → POST `my_kind` (= 取消) |
+| 長押し (>= `LONG_PRESS_MS=500ms`)       | picker を開く (`setOpen(true)`)                                                |
+| picker 内 kind click                    | 既存挙動: kind を反映して popup close (#379, #187)                             |
+| Enter キー                              | quick toggle (= click と同じ。button が自動で click 発火)                      |
+| `Alt+Enter` キー                        | picker 開閉 (キーボード代替、長押しの a11y alternative)                        |
+| Escape                                  | popup close (#379)                                                             |
+| outside click                           | popup close (#379)                                                             |
+
+長押し判定の実装:
+
+- `pointerdown` (button=0 のときのみ) で `setTimeout(LONG_PRESS_MS=500)` を開始、`longPressFiredRef.current=false`
+- timer 満了で `longPressFiredRef.current=true` + `setOpen(true)`
+- `pointerup` / `pointercancel` / `pointerleave` で timer 解除
+- 続く `click` イベントで `longPressFiredRef.current === true` なら quick toggle を **suppress** し、ref を false にリセット
+- jsdom (test 環境) では `e.button` が undefined になるため、guard は `typeof e.button === "number" && e.button !== 0` (production の real browser のみ右 click を抑制)
+
+#### 4.1.2 popup の開閉 (#379, 既存)
 
 | トリガ                               | 振る舞い                                           |
 | ------------------------------------ | -------------------------------------------------- |
-| trigger ボタン click / Enter         | popup を toggle (open ↔ close)                    |
-| trigger ボタン Alt+Enter             | popup を toggle (キーボード代替)                   |
+| 長押し / Alt+Enter                   | popup を open                                      |
 | grid 内 kind 押下                    | popup を **即時 close** + Optimistic update + POST |
 | popup 外領域 (document) を mousedown | popup を **close**                                 |
 | `Escape` キー                        | popup を **close**                                 |

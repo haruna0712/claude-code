@@ -116,6 +116,27 @@ npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line 
 
 # RCT-23: Escape キーで popup が close する (#379)
 npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-23"
+
+# RCT-25: trigger を click すると quick toggle で like される (#381)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-25"
+
+# RCT-26: my_kind=K のときに trigger を click すると K を取消す (#381)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-26"
+
+# RCT-27: trigger を 500ms 以上長押しすると picker が開く (#381)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-27"
+
+# RCT-28: 短押しは quick toggle のみ (#381)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-28"
+
+# RCT-30: 長押し後 picker から kind 選択 (#381 + #379)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-30"
+
+# RCT-31: Enter キーで quick toggle (#381)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-31"
+
+# RCT-32: Alt+Enter キーで picker 開閉 (#381 / #187)
+npx playwright test e2e/reactions-scenarios.spec.ts --workers=1 --reporter=line --grep "RCT-32"
 ```
 
 ## 5. Phase 2 既存 golden path との関係
