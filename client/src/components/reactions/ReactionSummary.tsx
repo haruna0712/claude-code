@@ -17,6 +17,7 @@
  * - #385: 末尾の `· N 件` 総計表示は撤去 (FB 慣習に合わせて kind 内訳のみ)。
  */
 
+import ReactionLikeIcon from "@/components/reactions/ReactionLikeIcon";
 import {
 	REACTION_KINDS,
 	REACTION_META,
@@ -73,7 +74,12 @@ export default function ReactionSummary({
 					key={kind}
 					className="inline-flex items-center gap-0.5 rounded-full bg-muted/40 px-2 py-0.5"
 				>
-					<span aria-hidden="true">{REACTION_META[kind].emoji}</span>
+					{/* #387: like は青塗り ThumbsUp で、他は emoji */}
+					{kind === "like" ? (
+						<ReactionLikeIcon active />
+					) : (
+						<span aria-hidden="true">{REACTION_META[kind].emoji}</span>
+					)}
 					<span className="sr-only">{REACTION_META[kind].label}</span>
 					<span>{count}</span>
 				</span>

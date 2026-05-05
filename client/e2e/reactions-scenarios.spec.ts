@@ -872,4 +872,32 @@ test.describe("Reactions UI (ReactionBar)", () => {
 			await deleteTweetAs(USER2, tweetId);
 		}
 	});
+
+	test("RCT-38 UI: like は ThumbsUp SVG (default outlined / active blue-fill) (#387)", async ({
+		page,
+	}) => {
+		const tweetId = await postTweetAs(USER2, `RCT-38 ${Date.now()}`);
+		try {
+			await loginUI(page, USER1.email, USER1.password);
+			await openTweet(page, tweetId);
+			const trigger = await reactionTrigger(page);
+			// 初期 (my_kind=null): trigger 内の ThumbsUp svg は fill="none"
+			const initialFill = await trigger
+				.locator("svg")
+				.first()
+				.getAttribute("fill");
+			expect(initialFill).toBe("none");
+			// quick toggle で like
+			await quickToggleUI(page, tweetId);
+			await expect(trigger).toHaveAttribute("aria-pressed", "true");
+			// active 後: ThumbsUp svg が fill="currentColor" + 青色
+			const activeSvg = trigger.locator("svg").first();
+			await expect(activeSvg).toHaveAttribute("fill", "currentColor");
+			const triggerClass = (await trigger.getAttribute("class")) ?? "";
+			expect(triggerClass).toContain("text-blue-500");
+		} finally {
+			await clearReactionAs(USER1, tweetId);
+			await deleteTweetAs(USER2, tweetId);
+		}
+	});
 });

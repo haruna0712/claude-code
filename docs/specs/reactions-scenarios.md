@@ -671,6 +671,25 @@
 - 別 kind に変えた場合 (例: 長押し picker → learned を選択) は ReactionSummary も即時 `📚 1` に変わる。
 - 実装: ReactionBar の `onChange` callback で TweetCard の `reactionAggregate` state を更新し、ReactionSummary に渡す。
 
+### RCT-38: like は Facebook 風の青塗り ThumbsUp icon で表示される (#387)
+
+前提:
+
+- target tweet T、actor A は T に reaction を持っていない (`my_kind=null`)。
+
+操作:
+
+- A が T を表示する。
+- A が trigger を short-click して like を付ける。
+
+期待結果:
+
+- 初期 (`my_kind=null`): trigger 内の icon は **白抜き ThumbsUp SVG** (`fill="none"`、`text-muted-foreground` 灰色)。
+- click 後 (`my_kind="like"`): trigger 内の icon が **青塗り ThumbsUp SVG** (`fill="currentColor"`、`text-blue-500`) に変わる。`aria-pressed=true`。
+- ReactionSummary chip も `like` のとき青塗り ThumbsUp で表示される (集計表示は viewer 別ではなく常に active 描画)。
+- 他の kind (例: `learned`) を picker から選んだ場合は、trigger に `📚` emoji + lime 強調 (旧来通り)。
+- 実装: `client/src/components/reactions/ReactionLikeIcon.tsx` で `lucide-react` の `ThumbsUp` を使い、`active` props で fill/color を切り替える。
+
 ## 4. E2E化メモ
 
 各 E2E は上記の `RCT-XX` をテスト名に含める。
