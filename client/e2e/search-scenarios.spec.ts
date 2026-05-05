@@ -349,3 +349,76 @@ test.describe("Search UI (/search)", () => {
 		).toBeVisible();
 	});
 });
+
+// =============================================================================
+// Navbar HeaderSearchBox (#377)
+// =============================================================================
+
+test.describe("Search UI (Navbar HeaderSearchBox)", () => {
+	test("SRC-26: 任意ページの Navbar から submit すると /search?q= に遷移する", async ({
+		page,
+	}) => {
+		await page.goto("/explore");
+		const navbar = page.locator("nav").first();
+		const navbarSearch = navbar.getByRole("search", {
+			name: "ツイート検索",
+		});
+		await expect(navbarSearch).toBeVisible({ timeout: 10_000 });
+		await navbarSearch.getByRole("searchbox").fill("python");
+		await page.keyboard.press("Enter");
+		await expect(page).toHaveURL(/\/search\?q=python/);
+		// /search ページ内 SearchBox にも初期値として伝播
+		await expect(
+			page
+				.locator('main input[name="q"]')
+				.or(page.locator('section input[name="q"]')),
+		).toHaveValue("python");
+	});
+
+	test("SRC-27: Navbar HeaderSearchBox の空文字 submit は navigate しない", async ({
+		page,
+	}) => {
+		await page.goto("/explore");
+		const navbar = page.locator("nav").first();
+		const navbarSearch = navbar.getByRole("search", {
+			name: "ツイート検索",
+		});
+		await expect(navbarSearch).toBeVisible();
+		await navbarSearch.getByRole("searchbox").focus();
+		await page.keyboard.press("Enter");
+		await expect(page).toHaveURL(/\/explore$/);
+	});
+
+	test("SRC-28: Navbar HeaderSearchBox は URL の q を初期値として受け取らない", async ({
+		page,
+	}) => {
+		await gotoSearch(page, "python");
+		const navbar = page.locator("nav").first();
+		const navbarSearchInput = navbar.getByRole("searchbox", {
+			name: "検索クエリ",
+		});
+		await expect(navbarSearchInput).toBeVisible();
+		await expect(navbarSearchInput).toHaveValue("");
+	});
+
+	test("SRC-29: Navbar HeaderSearchBox は未ログインでも表示・動作する", async ({
+		browser,
+	}) => {
+		// 専用 anonymous context
+		const context = await browser.newContext();
+		const page = await context.newPage();
+		try {
+			await page.goto("/explore");
+			const navbar = page.locator("nav").first();
+			const navbarSearch = navbar.getByRole("search", {
+				name: "ツイート検索",
+			});
+			await expect(navbarSearch).toBeVisible({ timeout: 10_000 });
+			await navbarSearch.getByRole("searchbox").fill("python");
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(/\/search\?q=python/);
+		} finally {
+			await context.close();
+		}
+	});
+});
