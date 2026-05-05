@@ -60,10 +60,15 @@ describe("TweetCard — basic rendering", () => {
 
 	it("renders author header as link to /u/<handle> (#320)", () => {
 		render(<TweetCard tweet={BASE_TWEET} />);
-		const link = screen.getByRole("link", {
+		// #392: avatar も name link も同じ aria-label を持つ。両方とも /u/alice
+		// に向かう Link であることを確認 (name + avatar の 2 つで profile に飛べる)。
+		const links = screen.getAllByRole("link", {
 			name: /Alice Smith.*@alice.*プロフィール/,
 		});
-		expect(link).toHaveAttribute("href", "/u/alice");
+		expect(links.length).toBeGreaterThanOrEqual(2);
+		for (const link of links) {
+			expect(link).toHaveAttribute("href", "/u/alice");
+		}
 	});
 
 	it("renders relative time", () => {

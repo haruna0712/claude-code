@@ -54,10 +54,14 @@ describe("TweetCard — #340 click navigation", () => {
 	it("作者リンク (a) クリック時は遷移しない", async () => {
 		const user = userEvent.setup();
 		render(<TweetCard tweet={BASE} />);
-		const link = screen.getByRole("link", {
+		// #392: avatar Link も追加されたので getAllByRole で複数 OK、
+		// 最初の link (avatar) を click する。article 親 onClick が
+		// `closest('a')` で抜けるかを検証する点は変わらず。
+		const links = screen.getAllByRole("link", {
 			name: /Alice .*?のプロフィール/,
 		});
-		await user.click(link);
+		expect(links.length).toBeGreaterThanOrEqual(2);
+		await user.click(links[0]!);
 		expect(pushMock).not.toHaveBeenCalled();
 	});
 

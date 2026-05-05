@@ -156,7 +156,26 @@ DRF default の `AnonRateThrottle` / `UserRateThrottle` が適用される。専
   - ready (`users.length > 0`): user 行を `flex flex-col gap-3` で list 化
   - ready (`users.length === 0`): "おすすめユーザーがいません" の placeholder
   - error: "おすすめの取得に失敗しました" の placeholder
-- 各 user 行: avatar / display_name / @handle / reason chip / FollowButton
+
+#### 3.1.1 各 user 行のレイアウト (#392)
+
+X (Twitter) の "Who to follow" panel に倣い、以下の構成で render する:
+
+```
+[avatar] [display_name (太字)]   [Follow button]
+         [@handle (灰色)]
+         [bio (灰色, 2 行 line-clamp)]
+         [reason chip (auth + reason 有り の場合のみ)]
+```
+
+- **avatar** は `<Link href="/u/<handle>" aria-label="<name> のプロフィール">` で wrap (#392)
+- **display_name + @handle + bio** ブロックも `<Link>` で wrap (1 つの link で十分。Tab fold 数を減らすため)
+  - display_name が空文字のときは `@handle` を太字 fallback で表示
+- **bio**: `tailwind line-clamp-2` で 2 行に truncate
+- **reason chip**: 既存通り `localizeReason(user.reason)` 経由で日本語化、auth + 値ありのときのみ表示
+- **FollowButton**: 認証時のみ。avatar / 名前 Link とは別の interactive element
+
+詳しい遷移仕様は [profile-navigation-spec.md](./profile-navigation-spec.md) を参照。
 
 ### 3.2 API helper: `trending.ts::fetchRecommendedUsers` / `fetchPopularUsers`
 

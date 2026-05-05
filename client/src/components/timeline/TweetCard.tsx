@@ -353,22 +353,32 @@ export default function TweetCard({
 			) : null}
 			{/* Author row */}
 			<header className="flex items-center gap-3">
-				{displayTweet.author_avatar_url ? (
-					<img
-						src={displayTweet.author_avatar_url}
-						alt=""
-						aria-hidden="true"
-						className="size-10 shrink-0 rounded-full object-cover"
-					/>
-				) : (
-					<div
-						data-testid="avatar-placeholder"
-						className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground"
-						aria-hidden="true"
-					>
-						{authorName.charAt(0).toUpperCase()}
-					</div>
-				)}
+				{/* #392: avatar を Link 化 (X 慣習)。display_name / @handle Link
+				    とは別 Link にし、avatar 自体は `aria-hidden` の装飾扱い。
+				    Link の `aria-label` が SR に「<name> のプロフィール」を読ませる。
+				    profile-navigation-spec.md §3.1 参照。 */}
+				<Link
+					href={`/u/${displayTweet.author_handle}`}
+					aria-label={`${authorName} (@${displayTweet.author_handle}) のプロフィール`}
+					className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				>
+					{displayTweet.author_avatar_url ? (
+						<img
+							src={displayTweet.author_avatar_url}
+							alt=""
+							aria-hidden="true"
+							className="size-10 rounded-full object-cover"
+						/>
+					) : (
+						<div
+							data-testid="avatar-placeholder"
+							className="flex size-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground"
+							aria-hidden="true"
+						>
+							{authorName.charAt(0).toUpperCase()}
+						</div>
+					)}
+				</Link>
 
 				{/* #320: 作者名 / @handle を /u/<handle> への Link 化。Tweet 本文の
 				    click 領域 (詳細遷移) と分離するため、Link は header 内のみ。
