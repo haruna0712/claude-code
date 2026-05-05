@@ -615,6 +615,7 @@ AWS_ACCESS_KEY_ID = getenv("AWS_ACCESS_KEY_ID", "")
 AWS_SECRET_ACCESS_KEY = getenv("AWS_SECRET_ACCESS_KEY", "")
 AWS_S3_REGION_NAME = getenv("AWS_S3_REGION_NAME", "ap-northeast-1")
 AWS_STORAGE_BUCKET_NAME = getenv("AWS_STORAGE_BUCKET_NAME", "")
+AWS_S3_CUSTOM_DOMAIN = getenv("AWS_S3_CUSTOM_DOMAIN", "")
 AWS_DEFAULT_ACL = None  # BucketOwnerEnforced と整合 (ACL 無効化)
 AWS_S3_FILE_OVERWRITE = False  # 同名ファイルは自動で suffix 付け
 AWS_S3_SIGNATURE_VERSION = "s3v4"
@@ -629,7 +630,7 @@ AWS_S3_OBJECT_PARAMETERS = {
 # として enforce する。空要素は list comprehension で除外して local 開発
 # (AWS_STORAGE_BUCKET_NAME 未設定) では実質 no-op になる。
 ALLOWED_MEDIA_DOMAINS = [
-    getenv("AWS_S3_CUSTOM_DOMAIN", ""),  # CloudFront カスタムドメイン
+    AWS_S3_CUSTOM_DOMAIN,  # CloudFront カスタムドメイン
     f"{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com"
     if AWS_STORAGE_BUCKET_NAME
     else "",  # S3 virtual-host 形式
@@ -649,7 +650,7 @@ STORAGES = {
         "OPTIONS": (
             {
                 "bucket_name": AWS_STORAGE_BUCKET_NAME,
-                "custom_domain": getenv("AWS_S3_CUSTOM_DOMAIN", "") or None,
+                "custom_domain": AWS_S3_CUSTOM_DOMAIN or None,
                 "location": "media",
             }
             if _use_s3

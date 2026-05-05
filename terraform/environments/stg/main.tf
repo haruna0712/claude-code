@@ -253,6 +253,7 @@ module "services" {
   cors_allowed_origins = "https://${var.app_subdomain}.${var.domain_name}"
   media_bucket_name    = module.storage.media_bucket_id
   media_public_domain  = "${var.app_subdomain}.${var.domain_name}"
+  static_bucket_name   = module.storage.static_bucket_id
 
   # SSR fetch base URL (Next → Django via ALB internal lookup)
   alb_dns_name = module.compute.alb_dns_name
@@ -333,7 +334,8 @@ module "observability" {
 #   - PutObject  : presigned URL 経由のアップロード
 #   - GetObject  : 添付ダウンロード (ヘッド確認 + ファイルサイズ確認、SPEC §7)
 #   - DeleteObject : メッセージ削除時のオブジェクト削除 (SPEC §7.3、24h 削除キュー)
-# avatar/header は users/*、DM添付は dm/* prefix に限定する。
+# avatar/header は users/*、DM添付は dm/*、collectstatic は static bucket の static/*
+# prefix に限定する。
 # ---------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "ecs_dm_attachment_access" {
@@ -380,8 +382,48 @@ data "aws_iam_policy_document" "ecs_dm_attachment_access" {
   }
 }
 
+data "aws_iam_policy_document" "ecs_static_collectstatic_access" {
+  statement {
+    sid    = "AllowStaticCollectObjectAccessStg"
+    effect = "Allow"
+    actions = [
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:GetObjectVersion",
+      "s3:DeleteObject",
+    ]
+    resources = ["${module.storage.static_bucket_arn}/static/*"]
+  }
+
+  statement {
+    sid       = "AllowStaticCollectListStg"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [module.storage.static_bucket_arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["static/*", "static/", "static"]
+    }
+  }
+
+  statement {
+    sid       = "AllowStaticBucketLocationStg"
+    effect    = "Allow"
+    actions   = ["s3:GetBucketLocation"]
+    resources = [module.storage.static_bucket_arn]
+  }
+}
+
 resource "aws_iam_role_policy" "ecs_dm_attachment" {
   name   = "${var.project}-stg-ecs-presigned-media"
   role   = module.compute.ecs_task_role_name
   policy = data.aws_iam_policy_document.ecs_dm_attachment_access.json
+}
+
+resource "aws_iam_role_policy" "ecs_static_collectstatic" {
+  name   = "${var.project}-stg-ecs-static-collectstatic"
+  role   = module.compute.ecs_task_role_name
+  policy = data.aws_iam_policy_document.ecs_static_collectstatic_access.json
 }

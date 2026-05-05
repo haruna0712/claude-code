@@ -35,6 +35,7 @@ locals {
     { name = "AWS_S3_REGION_NAME", value = var.aws_region },
     { name = "AWS_STORAGE_BUCKET_NAME", value = var.media_bucket_name },
     { name = "AWS_S3_CUSTOM_DOMAIN", value = var.media_public_domain },
+    { name = "AWS_STATIC_BUCKET_NAME", value = var.static_bucket_name },
     { name = "POSTGRES_HOST", value = var.rds_endpoint },
     { name = "POSTGRES_PORT", value = "5432" },
     { name = "POSTGRES_DB", value = var.rds_database_name },

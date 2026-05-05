@@ -115,6 +115,11 @@ variable "media_public_domain" {
   type        = string
 }
 
+variable "static_bucket_name" {
+  description = "S3 static bucket name used by Django collectstatic when S3 media storage is enabled."
+  type        = string
+}
+
 variable "alb_dns_name" {
   description = "ALB DNS name (e.g., 'sns-stg-alb-xxx.ap-northeast-1.elb.amazonaws.com'). Used as the SSR fetch base URL injected into Next.js task definition (`API_BASE_URL`). Public domain (`var.domain`) was avoided because DNS delegation to Route53 is incomplete during stg bring-up; ALB DNS resolves to private IPs from inside the VPC."
   type        = string
