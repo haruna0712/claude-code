@@ -7,10 +7,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WhoToFollow from "@/components/sidebar/WhoToFollow";
 import { fetchPopularUsers, fetchRecommendedUsers } from "@/lib/api/trending";
 
-vi.mock("@/lib/api/trending", () => ({
-	fetchRecommendedUsers: vi.fn(),
-	fetchPopularUsers: vi.fn(),
-}));
+vi.mock("@/lib/api/trending", async () => {
+	const actual =
+		await vi.importActual<typeof import("@/lib/api/trending")>(
+			"@/lib/api/trending",
+		);
+	return {
+		...actual,
+		fetchRecommendedUsers: vi.fn(),
+		fetchPopularUsers: vi.fn(),
+	};
+});
 
 // #296: FollowButton は RTK Query を使うため Provider 配線が必要だが、
 // 本 test は WhoToFollow の挙動 (fetch / render / empty / error) を検証する

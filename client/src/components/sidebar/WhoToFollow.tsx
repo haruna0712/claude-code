@@ -18,6 +18,7 @@ import FollowButton from "@/components/follows/FollowButton";
 import {
 	fetchPopularUsers,
 	fetchRecommendedUsers,
+	localizeReason,
 	type SidebarUser,
 } from "@/lib/api/trending";
 
@@ -124,9 +125,9 @@ export default function WhoToFollow({ isAuthenticated }: WhoToFollowProps) {
 								<span className="block truncate text-xs text-muted-foreground">
 									@{user.handle}
 								</span>
-								{isAuthenticated && user.reason && (
+								{isAuthenticated && localizeReason(user.reason) && (
 									<span className="mt-1 inline-block rounded-full bg-lime-500/10 px-2 py-0.5 text-xs text-lime-700 dark:text-lime-400">
-										{user.reason}
+										{localizeReason(user.reason)}
 									</span>
 								)}
 							</div>
