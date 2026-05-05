@@ -154,9 +154,20 @@ async function openTweet(page: Page, tweetId: number) {
 }
 
 async function reactionTrigger(page: Page) {
-	return page.locator('button[aria-label="リアクション"]').first();
+	// #381: trigger の aria-label は my_kind により変わる
+	//   - my_kind=null: "いいね (長押しで他のリアクション)"
+	//   - my_kind=K   : "<label>を取消 (長押しで他のリアクション)"
+	// aria-haspopup=true を持つ button が常に唯一の trigger なのでこれで識別する。
+	return page
+		.locator('button[aria-haspopup="true"][aria-label*="長押し"]')
+		.first();
 }
 
+/**
+ * picker から kind を選ぶ helper。長押しで picker を開いてから kind を click する。
+ * Alt+Enter でも picker は開けるが、Playwright の長押し検証も兼ねて
+ * mouse hold を使う。
+ */
 async function pickReactionUI(
 	page: Page,
 	tweetId: number,
@@ -165,16 +176,35 @@ async function pickReactionUI(
 	const trigger = await reactionTrigger(page);
 	await expect(trigger).toBeVisible({ timeout: 10_000 });
 	if ((await trigger.getAttribute("aria-expanded")) !== "true") {
-		await trigger.click();
+		// Alt+Enter でキーボード経由 open (mouse hold より test 安定)
+		await trigger.focus();
+		await page.keyboard.press("Alt+Enter");
+		await expect(trigger).toHaveAttribute("aria-expanded", "true");
 	}
 	const responsePromise = page.waitForResponse(
 		(r) =>
 			r.url().includes(`/api/v1/tweets/${tweetId}/reactions/`) &&
 			r.request().method() === "POST",
 	);
-	// aria-label="<label> (<count> 件)" にマッチさせる
+	// picker 内 button は aria-label="<label> (<count> 件)" 形式
 	const button = page.locator(`button[aria-label^="${label} ("]`).first();
 	await button.click();
+	const res = await responsePromise;
+	return res.status();
+}
+
+/**
+ * #381: trigger を short-click して quick toggle (like) を発火する helper。
+ */
+async function quickToggleUI(page: Page, tweetId: number): Promise<number> {
+	const trigger = await reactionTrigger(page);
+	await expect(trigger).toBeVisible({ timeout: 10_000 });
+	const responsePromise = page.waitForResponse(
+		(r) =>
+			r.url().includes(`/api/v1/tweets/${tweetId}/reactions/`) &&
+			r.request().method() === "POST",
+	);
+	await trigger.click();
 	const res = await responsePromise;
 	return res.status();
 }
@@ -473,7 +503,7 @@ test.describe("Reactions API (per-spec setup)", () => {
 // =============================================================================
 
 test.describe("Reactions UI (ReactionBar)", () => {
-	test("RCT-01 UI: like を押下すると 201 が返り aria-pressed=true になる", async ({
+	test("RCT-01 UI: picker から like を押下すると 201 + trigger aria-pressed=true", async ({
 		page,
 	}) => {
 		const tweetId = await postTweetAs(USER2, `RCT-01-ui ${Date.now()}`);
@@ -482,15 +512,16 @@ test.describe("Reactions UI (ReactionBar)", () => {
 			await openTweet(page, tweetId);
 			const status = await pickReactionUI(page, tweetId, "いいね");
 			expect([200, 201]).toContain(status);
-			const likeButton = page.locator('button[aria-label^="いいね ("]').first();
-			await expect(likeButton).toHaveAttribute("aria-pressed", "true");
+			// pick 後 popup は close、trigger 側で my_kind 反映を確認
+			const trigger = await reactionTrigger(page);
+			await expect(trigger).toHaveAttribute("aria-pressed", "true");
 		} finally {
 			await clearReactionAs(USER1, tweetId);
 			await deleteTweetAs(USER2, tweetId);
 		}
 	});
 
-	test("RCT-02 UI: 同じ like を再押下すると aria-pressed が外れる", async ({
+	test("RCT-02 UI: 同じ like を picker から 2 回押下すると aria-pressed が外れる", async ({
 		page,
 	}) => {
 		const tweetId = await postTweetAs(USER2, `RCT-02-ui ${Date.now()}`);
@@ -499,8 +530,8 @@ test.describe("Reactions UI (ReactionBar)", () => {
 			await openTweet(page, tweetId);
 			await pickReactionUI(page, tweetId, "いいね");
 			await pickReactionUI(page, tweetId, "いいね");
-			const likeButton = page.locator('button[aria-label^="いいね ("]').first();
-			await expect(likeButton).toHaveAttribute("aria-pressed", "false");
+			const trigger = await reactionTrigger(page);
+			await expect(trigger).toHaveAttribute("aria-pressed", "false");
 		} finally {
 			await clearReactionAs(USER1, tweetId);
 			await deleteTweetAs(USER2, tweetId);
@@ -516,6 +547,10 @@ test.describe("Reactions UI (ReactionBar)", () => {
 			await openTweet(page, tweetId);
 			await pickReactionUI(page, tweetId, "いいね");
 			await pickReactionUI(page, tweetId, "勉強になった");
+			// pick 後 popup close、再 open して picker 側 aria-pressed を verify
+			const trigger = await reactionTrigger(page);
+			await trigger.focus();
+			await page.keyboard.press("Alt+Enter");
 			await expect(
 				page.locator('button[aria-label^="いいね ("]').first(),
 			).toHaveAttribute("aria-pressed", "false");
@@ -528,23 +563,16 @@ test.describe("Reactions UI (ReactionBar)", () => {
 		}
 	});
 
-	test("RCT-17 UI: trigger に Alt+Enter で grid を開閉できる", async ({
-		page,
-	}) => {
-		const tweetId = await postTweetAs(USER2, `RCT-17 ${Date.now()}`);
-		try {
-			await loginUI(page, USER1.email, USER1.password);
-			await openTweet(page, tweetId);
-			const trigger = await reactionTrigger(page);
-			await trigger.focus();
-			await page.keyboard.press("Alt+Enter");
-			await expect(trigger).toHaveAttribute("aria-expanded", "true");
-			await page.keyboard.press("Alt+Enter");
-			await expect(trigger).toHaveAttribute("aria-expanded", "false");
-		} finally {
-			await deleteTweetAs(USER2, tweetId);
-		}
-	});
+	// #381 で trigger click は quick toggle になったため、popup を開く操作は
+	// Alt+Enter (キーボード代替) を使う。長押しは Playwright で安定して
+	// 模擬しづらく、また RCT-27 で別途検証する。
+	async function openPickerViaKbd(page: Page) {
+		const trigger = await reactionTrigger(page);
+		await trigger.focus();
+		await page.keyboard.press("Alt+Enter");
+		await expect(trigger).toHaveAttribute("aria-expanded", "true");
+		return trigger;
+	}
 
 	test("RCT-21 UI: kind 選択で popup が即時 close する (#379)", async ({
 		page,
@@ -553,11 +581,8 @@ test.describe("Reactions UI (ReactionBar)", () => {
 		try {
 			await loginUI(page, USER1.email, USER1.password);
 			await openTweet(page, tweetId);
-			const trigger = await reactionTrigger(page);
-			await trigger.click();
-			await expect(trigger).toHaveAttribute("aria-expanded", "true");
+			const trigger = await openPickerViaKbd(page);
 			await page.locator('button[aria-label^="いいね ("]').first().click();
-			// popup が close する
 			await expect(trigger).toHaveAttribute("aria-expanded", "false");
 			await expect(
 				page.getByRole("group", { name: "リアクションを選択" }),
@@ -575,9 +600,7 @@ test.describe("Reactions UI (ReactionBar)", () => {
 		try {
 			await loginUI(page, USER1.email, USER1.password);
 			await openTweet(page, tweetId);
-			const trigger = await reactionTrigger(page);
-			await trigger.click();
-			await expect(trigger).toHaveAttribute("aria-expanded", "true");
+			const trigger = await openPickerViaKbd(page);
 			// Navbar / 別領域を click
 			await page
 				.locator("nav")
@@ -596,10 +619,124 @@ test.describe("Reactions UI (ReactionBar)", () => {
 		try {
 			await loginUI(page, USER1.email, USER1.password);
 			await openTweet(page, tweetId);
-			const trigger = await reactionTrigger(page);
-			await trigger.click();
-			await expect(trigger).toHaveAttribute("aria-expanded", "true");
+			const trigger = await openPickerViaKbd(page);
 			await page.keyboard.press("Escape");
+			await expect(trigger).toHaveAttribute("aria-expanded", "false");
+		} finally {
+			await deleteTweetAs(USER2, tweetId);
+		}
+	});
+
+	// =====================================================================
+	// FB-style trigger (#381)
+	// =====================================================================
+
+	test("RCT-25 UI: trigger click で quick toggle (like) — picker は開かない (#381)", async ({
+		page,
+	}) => {
+		const tweetId = await postTweetAs(USER2, `RCT-25 ${Date.now()}`);
+		try {
+			await loginUI(page, USER1.email, USER1.password);
+			await openTweet(page, tweetId);
+			const status = await quickToggleUI(page, tweetId);
+			expect([200, 201]).toContain(status);
+			const trigger = await reactionTrigger(page);
+			await expect(trigger).toHaveAttribute("aria-expanded", "false");
+			await expect(trigger).toHaveAttribute("aria-pressed", "true");
+			await expect(
+				page.getByRole("group", { name: "リアクションを選択" }),
+			).toHaveCount(0);
+		} finally {
+			await clearReactionAs(USER1, tweetId);
+			await deleteTweetAs(USER2, tweetId);
+		}
+	});
+
+	test("RCT-26 UI: my_kind=K のときに trigger click で K を取消す (#381)", async ({
+		page,
+	}) => {
+		const tweetId = await postTweetAs(USER2, `RCT-26 ${Date.now()}`);
+		try {
+			await loginUI(page, USER1.email, USER1.password);
+			await openTweet(page, tweetId);
+			// 事前に learned を picker で付ける
+			await pickReactionUI(page, tweetId, "勉強になった");
+			const trigger = await reactionTrigger(page);
+			await expect(trigger).toHaveAttribute("aria-pressed", "true");
+			// trigger click → my_kind を取消す (POST kind=learned で removed)
+			await quickToggleUI(page, tweetId);
+			await expect(trigger).toHaveAttribute("aria-pressed", "false");
+		} finally {
+			await clearReactionAs(USER1, tweetId);
+			await deleteTweetAs(USER2, tweetId);
+		}
+	});
+
+	test("RCT-27 UI: 500ms 以上の長押しで picker が開く (#381)", async ({
+		page,
+	}) => {
+		const tweetId = await postTweetAs(USER2, `RCT-27 ${Date.now()}`);
+		try {
+			await loginUI(page, USER1.email, USER1.password);
+			await openTweet(page, tweetId);
+			const trigger = await reactionTrigger(page);
+			const box = await trigger.boundingBox();
+			if (!box) throw new Error("trigger has no bounding box");
+			await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+			await page.mouse.down();
+			// 600ms 保持 (LONG_PRESS_MS=500ms より長く)
+			await page.waitForTimeout(600);
+			await expect(trigger).toHaveAttribute("aria-expanded", "true");
+			await page.mouse.up();
+			// 続く click は suppress 済み — quick toggle は走らない (API 呼ばれない)
+			await page.waitForTimeout(200);
+			// picker は開いたまま
+			await expect(
+				page.getByRole("group", { name: "リアクションを選択" }),
+			).toBeVisible();
+		} finally {
+			await deleteTweetAs(USER2, tweetId);
+		}
+	});
+
+	test("RCT-31 UI: Enter キーで quick toggle (#381)", async ({ page }) => {
+		const tweetId = await postTweetAs(USER2, `RCT-31 ${Date.now()}`);
+		try {
+			await loginUI(page, USER1.email, USER1.password);
+			await openTweet(page, tweetId);
+			const trigger = await reactionTrigger(page);
+			await trigger.focus();
+			const responsePromise = page.waitForResponse(
+				(r) =>
+					r.url().includes(`/api/v1/tweets/${tweetId}/reactions/`) &&
+					r.request().method() === "POST",
+			);
+			await page.keyboard.press("Enter");
+			const status = (await responsePromise).status();
+			expect([200, 201]).toContain(status);
+			await expect(trigger).toHaveAttribute("aria-pressed", "true");
+			// picker は開かない
+			await expect(
+				page.getByRole("group", { name: "リアクションを選択" }),
+			).toHaveCount(0);
+		} finally {
+			await clearReactionAs(USER1, tweetId);
+			await deleteTweetAs(USER2, tweetId);
+		}
+	});
+
+	test("RCT-32 UI: Alt+Enter で picker open / 再度で close (#381)", async ({
+		page,
+	}) => {
+		const tweetId = await postTweetAs(USER2, `RCT-32 ${Date.now()}`);
+		try {
+			await loginUI(page, USER1.email, USER1.password);
+			await openTweet(page, tweetId);
+			const trigger = await reactionTrigger(page);
+			await trigger.focus();
+			await page.keyboard.press("Alt+Enter");
+			await expect(trigger).toHaveAttribute("aria-expanded", "true");
+			await page.keyboard.press("Alt+Enter");
 			await expect(trigger).toHaveAttribute("aria-expanded", "false");
 		} finally {
 			await deleteTweetAs(USER2, tweetId);

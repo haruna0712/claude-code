@@ -443,6 +443,137 @@
 - UI: popup は close せず、開いたまま。
 - ユーザが kind を選ぶ前に意図せず popup が閉じてしまう事故を防ぐ。
 
+### RCT-25: trigger を click すると quick toggle で like される (#381 / FB 風)
+
+前提:
+
+- actor A、target tweet T (作者は B)。
+- A は T に reaction を持っていない (`my_kind=null`)。
+- trigger ボタンの aria-label は `いいね (長押しで他のリアクション)` で、表示は `👍 {total}`。
+
+操作:
+
+- A が trigger を short-click する (短押し、< 500ms)。
+
+期待結果:
+
+- API: `POST /api/v1/tweets/<T.id>/reactions/` `{kind: "like"}` が **201** を返す。
+- DB: `Reaction(user=A, tweet=T, kind="like")` 行が追加される。
+- UI: picker popup は **開かない**。
+- UI: trigger 表示が `❤️ {total+1}`、`aria-pressed=true`、`aria-label="いいねを取消 (長押しで他のリアクション)"`。
+
+### RCT-26: my_kind=K のときに trigger を click すると K を取消す (#381)
+
+前提:
+
+- actor A は T に reaction `learned` を持っている (`my_kind="learned"`)。
+- trigger 表示は `📚 {total}`。
+
+操作:
+
+- A が trigger を short-click する。
+
+期待結果:
+
+- API: `POST /api/v1/tweets/<T.id>/reactions/` `{kind: "learned"}` (= 同じ kind 再押下で取消)。
+- DB: A の Reaction 行は DELETE。
+- UI: trigger 表示が `👍 {total-1}`、`aria-pressed=false`、`aria-label="いいね (長押しで他のリアクション)"`。
+- UI: picker popup は開かない。
+- 別 kind (例: like) に switch したい場合は **長押しで picker を開いて選ぶ** 必要がある (= FB 同等の UX)。
+
+### RCT-27: trigger を 500ms 以上長押しすると picker が開く (#381)
+
+前提:
+
+- actor A、target tweet T。
+
+操作:
+
+- A が trigger を `pointerdown` し、500ms 以上保持してから `pointerup`。
+
+期待結果:
+
+- UI: 500ms 経過後に picker popup (`role="group" aria-label="リアクションを選択"`) が表示される。
+- UI: trigger の `aria-expanded=true`。
+- API: 長押し中は API 呼び出し無し。続く `click` event は **quick toggle を suppress** する (= picker 開いただけで like トグルが走らない)。
+
+### RCT-28: 長押し未満 (短押し) は quick toggle のみ (#381)
+
+前提:
+
+- actor A、target tweet T、`my_kind=null`。
+
+操作:
+
+- A が trigger を `pointerdown` し、200ms 程度で `pointerup` → `click`。
+
+期待結果:
+
+- UI: picker は開かない (`aria-expanded=false`)。
+- API: `POST kind=like` が発火 → 201。
+- 「うっかり長押し」を回避し、通常 click で確実に like できる UX。
+
+### RCT-29: 長押し中の `pointercancel` で長押しが取消される (#381)
+
+前提:
+
+- actor A が trigger を `pointerdown` 開始 (300ms 経過)。
+
+操作:
+
+- ブラウザが scroll などで `pointercancel` イベントを発火する (touch スクロール時等)。
+
+期待結果:
+
+- timer がクリアされ、500ms 待っても picker が開かない。
+- `click` も発火しない (= quick toggle も走らない)。
+
+### RCT-30: 長押し後の picker から kind を選ぶと反映 + popup close (#381 + #379)
+
+前提:
+
+- actor A が trigger を長押しして picker が開いている (RCT-27 の延長)。
+
+操作:
+
+- picker 内の任意 kind (例: `learned`) を click する。
+
+期待結果:
+
+- API: `POST kind=learned` → my_kind が `learned` に変わる。
+- UI: popup が close (#379 既存)。trigger 表示が `📚 {total+1}`。
+
+### RCT-31: Enter キーは quick toggle (= click と同じ、#381)
+
+前提:
+
+- actor A が trigger ボタンに focus を当てている、`my_kind=null`。
+
+操作:
+
+- `Enter` キーを押す。
+
+期待結果:
+
+- ブラウザ標準の button click が発火 → quick toggle で `POST kind=like`。
+- picker は開かない。
+
+### RCT-32: Alt+Enter キーは picker open (#381 / #187 の置き換え)
+
+前提:
+
+- actor A が trigger ボタンに focus を当てている。
+
+操作:
+
+- `Alt+Enter` を押す。
+
+期待結果:
+
+- picker が open (`aria-expanded=true`)。
+- 続けて `Alt+Enter` で close (toggle)。
+- a11y: 長押しが使えないキーボードユーザ向けの代替 (SPEC §6.2)。
+
 ## 4. E2E化メモ
 
 各 E2E は上記の `RCT-XX` をテスト名に含める。

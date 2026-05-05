@@ -1,8 +1,14 @@
 /**
- * Tests for ReactionBar (P2-14 / Issue #187).
+ * Tests for ReactionBar (P2-14 #187, FB-style #381).
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ReactionBar from "@/components/reactions/ReactionBar";
@@ -19,6 +25,16 @@ vi.mock("react-toastify", () => ({
 	toast: { error: vi.fn(), success: vi.fn() },
 }));
 
+// trigger は aria-label が my_kind に応じて変わる:
+//   - my_kind=null → "いいね (長押しで他のリアクション)"
+//   - my_kind=K    → "<label>を取消 (長押しで他のリアクション)"
+const TRIGGER_LIKE_LABEL = /いいね \(長押し/;
+const TRIGGER_TAKE_BACK = /を取消 \(長押し/;
+const triggerByDefault = () =>
+	screen.getByRole("button", { name: TRIGGER_LIKE_LABEL });
+const triggerByActive = () =>
+	screen.getByRole("button", { name: TRIGGER_TAKE_BACK });
+
 describe("ReactionBar — collapsed state", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -27,11 +43,13 @@ describe("ReactionBar — collapsed state", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("renders an empty trigger when no initial counts", () => {
+	it("renders 👍 trigger when no my_kind", () => {
 		render(<ReactionBar tweetId={1} />);
-		const trigger = screen.getByRole("button", { name: /リアクション/ });
+		const trigger = triggerByDefault();
 		expect(trigger).toBeInTheDocument();
 		expect(trigger.getAttribute("aria-expanded")).toBe("false");
+		expect(trigger.getAttribute("aria-pressed")).toBe("false");
+		expect(trigger.textContent).toContain("👍");
 	});
 
 	it("renders total count from initial aggregate", () => {
@@ -41,66 +59,28 @@ describe("ReactionBar — collapsed state", () => {
 				initial={{ counts: { like: 2, agree: 1 }, my_kind: null }}
 			/>,
 		);
-		expect(
-			screen.getByRole("button", { name: /リアクション/ }),
-		).toHaveTextContent("3");
+		expect(triggerByDefault().textContent).toContain("3");
 	});
 
-	it("shows my emoji when my_kind is set", () => {
+	it("shows my emoji + aria-pressed=true when my_kind is set", () => {
 		render(
 			<ReactionBar
 				tweetId={1}
 				initial={{ counts: { like: 2 }, my_kind: "like" }}
 			/>,
 		);
-		const trigger = screen.getByRole("button", { name: /リアクション/ });
+		const trigger = triggerByActive();
 		expect(trigger.textContent).toContain("❤️");
+		expect(trigger.getAttribute("aria-pressed")).toBe("true");
 	});
 });
 
-describe("ReactionBar — picker", () => {
+describe("ReactionBar — quick toggle (click) #381", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});
 
-	it("opens the picker on trigger click", async () => {
-		render(<ReactionBar tweetId={1} />);
-		await userEvent.click(screen.getByRole("button", { name: /リアクション/ }));
-		expect(
-			screen.getByRole("group", { name: "リアクションを選択" }),
-		).toBeInTheDocument();
-	});
-
-	it("opens the picker on Alt+Enter (keyboard alt)", () => {
-		render(<ReactionBar tweetId={1} />);
-		const trigger = screen.getByRole("button", { name: /リアクション/ });
-		fireEvent.keyDown(trigger, { key: "Enter", altKey: true });
-		expect(
-			screen.getByRole("group", { name: "リアクションを選択" }),
-		).toBeInTheDocument();
-	});
-
-	it("renders all 10 emoji buttons when open", async () => {
-		render(<ReactionBar tweetId={1} />);
-		await userEvent.click(screen.getByRole("button", { name: /リアクション/ }));
-		// Each emoji button has aria-label "<label> (N 件)"
-		expect(screen.getByRole("button", { name: /いいね/ })).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: /面白い/ })).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: /勉強になった/ }),
-		).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: /コードよき/ }),
-		).toBeInTheDocument();
-	});
-});
-
-describe("ReactionBar — toggle", () => {
-	beforeEach(() => {
-		vi.clearAllMocks();
-	});
-
-	it("optimistically increments count and POSTs (popup closes #379)", async () => {
+	it("click on default trigger sends like POST and does not open picker", async () => {
 		vi.mocked(toggleReaction).mockResolvedValue({
 			kind: "like",
 			created: true,
@@ -109,28 +89,21 @@ describe("ReactionBar — toggle", () => {
 		});
 
 		render(<ReactionBar tweetId={42} />);
-		const trigger = screen.getByRole("button", { name: /リアクション/ });
+		const trigger = triggerByDefault();
 		await userEvent.click(trigger);
-		await userEvent.click(screen.getByRole("button", { name: /いいね/ }));
 
-		// #379: pick 後は popup が閉じる → trigger の aria-expanded=false に。
-		await waitFor(() => {
-			expect(trigger.getAttribute("aria-expanded")).toBe("false");
-		});
-		// Trigger label が my_kind 反映 (❤️ 1) になる。
-		expect(trigger.textContent).toContain("❤️");
 		expect(toggleReaction).toHaveBeenCalledWith(42, "like");
-
-		// 再 open して aria-pressed が反映されていることを確認。
-		await userEvent.click(trigger);
+		// picker は開かない
 		expect(
-			screen
-				.getByRole("button", { name: /いいね/ })
-				.getAttribute("aria-pressed"),
-		).toBe("true");
+			screen.queryByRole("group", { name: "リアクションを選択" }),
+		).not.toBeInTheDocument();
+		// optimistic で my_kind=like → trigger label が変わる
+		await waitFor(() => {
+			expect(triggerByActive()).toBeInTheDocument();
+		});
 	});
 
-	it("toggles off when clicking the same kind twice (popup closes after each pick)", async () => {
+	it("click when my_kind=like → toggle off (POST kind=like → removed)", async () => {
 		vi.mocked(toggleReaction).mockResolvedValue({
 			kind: null,
 			created: false,
@@ -140,57 +113,87 @@ describe("ReactionBar — toggle", () => {
 
 		render(
 			<ReactionBar
-				tweetId={1}
+				tweetId={7}
 				initial={{ counts: { like: 1 }, my_kind: "like" }}
 			/>,
 		);
-		const trigger = screen.getByRole("button", { name: /リアクション/ });
+		const trigger = triggerByActive();
 		await userEvent.click(trigger);
-		await userEvent.click(screen.getByRole("button", { name: /いいね/ }));
 
-		// popup が閉じる
+		expect(toggleReaction).toHaveBeenCalledWith(7, "like");
 		await waitFor(() => {
-			expect(trigger.getAttribute("aria-expanded")).toBe("false");
+			expect(triggerByDefault()).toBeInTheDocument();
 		});
-		// trigger label は my_kind=null に戻る
-		expect(trigger.textContent).not.toContain("❤️");
-
-		// 再 open → like の aria-pressed=false
-		await userEvent.click(trigger);
-		expect(
-			screen
-				.getByRole("button", { name: /いいね/ })
-				.getAttribute("aria-pressed"),
-		).toBe("false");
 	});
 
-	it("rolls back optimistic state and toasts on error (popup still closes)", async () => {
+	it("click when my_kind=love (other) → toggle off the existing kind", async () => {
+		vi.mocked(toggleReaction).mockResolvedValue({
+			kind: null,
+			created: false,
+			changed: false,
+			removed: true,
+		});
+
+		render(
+			<ReactionBar
+				tweetId={7}
+				initial={{ counts: { learned: 1 }, my_kind: "learned" }}
+			/>,
+		);
+		const trigger = triggerByActive();
+		await userEvent.click(trigger);
+
+		// FB と同じく click は「現在の kind を取消」 (= POST に同じ kind を投げて
+		// サーバ側 toggle 仕様で消える)
+		expect(toggleReaction).toHaveBeenCalledWith(7, "learned");
+	});
+
+	it("rolls back optimistic state on error", async () => {
 		const { toast } = await import("react-toastify");
 		vi.mocked(toggleReaction).mockRejectedValue(new Error("500"));
 
 		render(<ReactionBar tweetId={1} />);
-		const trigger = screen.getByRole("button", { name: /リアクション/ });
-		await userEvent.click(trigger);
-		await userEvent.click(screen.getByRole("button", { name: /いいね/ }));
+		await userEvent.click(triggerByDefault());
 
 		await waitFor(() => {
 			expect(toast.error).toHaveBeenCalledWith(
 				expect.stringContaining("更新できませんでした"),
 			);
 		});
-		// popup は close したまま (失敗してもユーザの click 意思は popup を閉じる)
-		expect(trigger.getAttribute("aria-expanded")).toBe("false");
-		// rollback で my_kind は null
-		expect(trigger.textContent).not.toContain("❤️");
+		// rollback → trigger は default (👍) に戻る
+		expect(triggerByDefault()).toBeInTheDocument();
 	});
 });
 
-describe("ReactionBar — popup dismiss (#379)", () => {
+describe("ReactionBar — long-press opens picker #381", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.useFakeTimers();
+	});
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
-	it("closes popup immediately on kind pick", async () => {
+	it("pointerdown for >= 500ms opens the picker (no quick toggle)", async () => {
+		render(<ReactionBar tweetId={1} />);
+		const trigger = triggerByDefault();
+		fireEvent.pointerDown(trigger, { button: 0 });
+		// 500ms 経過させる (await act でタイマ満了後の React state flush を待つ)
+		await act(async () => {
+			vi.advanceTimersByTime(500);
+		});
+		// picker が開いている
+		expect(
+			screen.getByRole("group", { name: "リアクションを選択" }),
+		).toBeInTheDocument();
+		// 続く pointerup → click は suppress される
+		fireEvent.pointerUp(trigger);
+		fireEvent.click(trigger);
+		// quick toggle が走らないので API は呼ばれていない
+		expect(toggleReaction).not.toHaveBeenCalled();
+	});
+
+	it("pointerdown released before 500ms does NOT open picker (quick toggle path)", async () => {
 		vi.mocked(toggleReaction).mockResolvedValue({
 			kind: "like",
 			created: true,
@@ -199,19 +202,119 @@ describe("ReactionBar — popup dismiss (#379)", () => {
 		});
 
 		render(<ReactionBar tweetId={1} />);
-		const trigger = screen.getByRole("button", { name: /リアクション/ });
-		await userEvent.click(trigger);
+		const trigger = triggerByDefault();
+		fireEvent.pointerDown(trigger, { button: 0 });
+		vi.advanceTimersByTime(200); // < 500ms
+		fireEvent.pointerUp(trigger);
+		// picker は開かない
 		expect(
-			screen.getByRole("group", { name: "リアクションを選択" }),
-		).toBeInTheDocument();
+			screen.queryByRole("group", { name: "リアクションを選択" }),
+		).not.toBeInTheDocument();
+		// click が発火 → quick toggle
+		fireEvent.click(trigger);
+		await vi.runAllTimersAsync();
+		expect(toggleReaction).toHaveBeenCalledWith(1, "like");
+	});
 
-		await userEvent.click(screen.getByRole("button", { name: /いいね/ }));
+	it("pointercancel before 500ms cancels the long-press", () => {
+		render(<ReactionBar tweetId={1} />);
+		const trigger = triggerByDefault();
+		fireEvent.pointerDown(trigger, { button: 0 });
+		vi.advanceTimersByTime(300);
+		fireEvent.pointerCancel(trigger);
+		act(() => {
+			vi.advanceTimersByTime(500);
+		});
 		expect(
 			screen.queryByRole("group", { name: "リアクションを選択" }),
 		).not.toBeInTheDocument();
 	});
 
-	it("closes popup on outside click", async () => {
+	// jsdom の PointerEvent は `button` 初期化値を React synthetic event に
+	// 伝搬しない (e.button が undefined になる) ため、fireEvent では
+	// 右 click 抑制を unit test で再現できない。実装側 guard は
+	// `typeof e.button === "number" && e.button !== 0` で production の
+	// real browser のみ効く。実機検証は Playwright `click({ button: "right" })` 等で。
+	it.todo("ignores non-main button pointerdown (right click) — E2E only");
+});
+
+describe("ReactionBar — keyboard #381 / #187", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("Alt+Enter opens the picker (キーボード代替)", () => {
+		render(<ReactionBar tweetId={1} />);
+		const trigger = triggerByDefault();
+		fireEvent.keyDown(trigger, { key: "Enter", altKey: true });
+		expect(
+			screen.getByRole("group", { name: "リアクションを選択" }),
+		).toBeInTheDocument();
+	});
+
+	it("Alt+Enter toggles the picker open/closed", () => {
+		render(<ReactionBar tweetId={1} />);
+		const trigger = triggerByDefault();
+		fireEvent.keyDown(trigger, { key: "Enter", altKey: true });
+		expect(trigger.getAttribute("aria-expanded")).toBe("true");
+		fireEvent.keyDown(trigger, { key: "Enter", altKey: true });
+		expect(trigger.getAttribute("aria-expanded")).toBe("false");
+	});
+});
+
+describe("ReactionBar — picker", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("renders all 10 emoji buttons when open via Alt+Enter", () => {
+		render(<ReactionBar tweetId={1} />);
+		const trigger = triggerByDefault();
+		fireEvent.keyDown(trigger, { key: "Enter", altKey: true });
+		// picker 内 button は aria-label="<label> (<N> 件)" 形式。trigger の
+		// "いいね (長押しで...)" と区別するため "件)" 付きで照合する。
+		expect(
+			screen.getByRole("button", { name: /いいね \(\d+ 件\)/ }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: /面白い \(\d+ 件\)/ }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: /勉強になった \(\d+ 件\)/ }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: /コードよき \(\d+ 件\)/ }),
+		).toBeInTheDocument();
+	});
+
+	it("picker pick → POST + popup closes", async () => {
+		vi.mocked(toggleReaction).mockResolvedValue({
+			kind: "learned",
+			created: true,
+			changed: false,
+			removed: false,
+		});
+
+		render(<ReactionBar tweetId={42} />);
+		const trigger = triggerByDefault();
+		fireEvent.keyDown(trigger, { key: "Enter", altKey: true });
+		await userEvent.click(
+			screen.getByRole("button", { name: /勉強になった \(\d+ 件\)/ }),
+		);
+
+		expect(toggleReaction).toHaveBeenCalledWith(42, "learned");
+		expect(
+			screen.queryByRole("group", { name: "リアクションを選択" }),
+		).not.toBeInTheDocument();
+	});
+});
+
+describe("ReactionBar — popup dismiss (#379)", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("closes popup on outside click", () => {
 		render(
 			<div>
 				<ReactionBar tweetId={1} />
@@ -220,23 +323,22 @@ describe("ReactionBar — popup dismiss (#379)", () => {
 				</button>
 			</div>,
 		);
-		const trigger = screen.getByRole("button", { name: /リアクション/ });
-		await userEvent.click(trigger);
+		const trigger = triggerByDefault();
+		fireEvent.keyDown(trigger, { key: "Enter", altKey: true });
 		expect(
 			screen.getByRole("group", { name: "リアクションを選択" }),
 		).toBeInTheDocument();
 
-		// useEffect 内で listen している mousedown を発火
 		fireEvent.mouseDown(screen.getByTestId("outside"));
 		expect(
 			screen.queryByRole("group", { name: "リアクションを選択" }),
 		).not.toBeInTheDocument();
 	});
 
-	it("does not close on mousedown inside the popup container", async () => {
+	it("does not close on mousedown inside the popup container", () => {
 		render(<ReactionBar tweetId={1} />);
-		const trigger = screen.getByRole("button", { name: /リアクション/ });
-		await userEvent.click(trigger);
+		const trigger = triggerByDefault();
+		fireEvent.keyDown(trigger, { key: "Enter", altKey: true });
 		const group = screen.getByRole("group", { name: "リアクションを選択" });
 		fireEvent.mouseDown(group);
 		expect(
@@ -244,26 +346,16 @@ describe("ReactionBar — popup dismiss (#379)", () => {
 		).toBeInTheDocument();
 	});
 
-	it("closes popup on Escape key", async () => {
+	it("closes popup on Escape key", () => {
 		render(<ReactionBar tweetId={1} />);
-		const trigger = screen.getByRole("button", { name: /リアクション/ });
-		await userEvent.click(trigger);
+		const trigger = triggerByDefault();
+		fireEvent.keyDown(trigger, { key: "Enter", altKey: true });
 		expect(
 			screen.getByRole("group", { name: "リアクションを選択" }),
 		).toBeInTheDocument();
-
 		fireEvent.keyDown(document, { key: "Escape" });
 		expect(
 			screen.queryByRole("group", { name: "リアクションを選択" }),
 		).not.toBeInTheDocument();
-	});
-
-	it("trigger re-click still toggles the popup (existing behaviour)", async () => {
-		render(<ReactionBar tweetId={1} />);
-		const trigger = screen.getByRole("button", { name: /リアクション/ });
-		await userEvent.click(trigger);
-		expect(trigger.getAttribute("aria-expanded")).toBe("true");
-		await userEvent.click(trigger);
-		expect(trigger.getAttribute("aria-expanded")).toBe("false");
 	});
 });
