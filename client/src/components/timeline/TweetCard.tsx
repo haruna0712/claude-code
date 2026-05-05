@@ -10,7 +10,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
@@ -244,13 +244,23 @@ export default function TweetCard({
 	// #327: 全 hooks は早期 return より前に呼ぶ (React rules of hooks)。
 	// CRITICAL: sanitize HTML before rendering — strips <script>, event handlers,
 	// javascript: hrefs, <iframe>, <style>, and other XSS vectors.
-	const safeHtml = useMemo(
-		() =>
-			DOMPurify.sanitize(displayTweet.html ?? escapeHtml(displayTweet.body), {
-				USE_PROFILES: { html: true },
-			}),
-		[displayTweet.body, displayTweet.html],
-	);
+	//
+	// #375: Server (SSR) では DOMPurify を呼ばない。next.config.mjs が server build
+	// で `isomorphic-dompurify` を browser-only `dompurify` にエイリアスしているため
+	// (jsdom が webpack で parse できない理由)、server で `DOMPurify.sanitize()`
+	// を呼ぶと "window is not defined" 系で throw → SSR が 500 になる。
+	// 戦略: server では backend (bleach) 済の html をそのまま使い、client mount
+	// 後の useEffect で DOMPurify による defense-in-depth を再適用する。
+	// hydration mismatch を避けるため初期 render は両側で同じ raw html。
+	const initialHtml = displayTweet.html ?? escapeHtml(displayTweet.body);
+	const [safeHtml, setSafeHtml] = useState(initialHtml);
+	useEffect(() => {
+		// typeof window check は alias 構成下で念のための二重防御。
+		if (typeof window === "undefined") return;
+		setSafeHtml(
+			DOMPurify.sanitize(initialHtml, { USE_PROFILES: { html: true } }),
+		);
+	}, [initialHtml]);
 
 	const relativeTime = useMemo(
 		() => formatRelativeTime(displayTweet.created_at),
