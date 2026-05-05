@@ -10,6 +10,7 @@ import {
 	fetchTrendingTags,
 	fetchRecommendedUsers,
 	fetchPopularUsers,
+	localizeReason,
 	type TrendingTag,
 	type SidebarUser,
 } from "@/lib/api/trending";
@@ -168,5 +169,94 @@ describe("fetchPopularUsers", () => {
 		mock.onGet("/users/popular/").networkError();
 
 		await expect(fetchPopularUsers(5, client)).rejects.toThrow();
+	});
+
+	// #390: backend が実際に返す wrap 形 (`{user: {...}, reason: ...}`) を flatten する
+	it("flattens backend wrap shape {user: {...}, reason: ...} (#390)", async () => {
+		const { client, mock } = stub();
+		const wrappedRow = {
+			user: {
+				id: "abc-123",
+				handle: "test3",
+				display_name: "haruna",
+				avatar_url: "https://stg.codeplace.me/avatar.webp",
+				bio: "engineer",
+				followers_count: 1,
+			},
+			reason: "popular",
+		};
+		mock.onGet("/users/popular/").reply(200, { results: [wrappedRow] });
+		const users = await fetchPopularUsers(5, client);
+		expect(users).toHaveLength(1);
+		expect(users[0]!.handle).toBe("test3");
+		expect(users[0]!.display_name).toBe("haruna");
+		expect(users[0]!.followers_count).toBe(1);
+		expect(users[0]!.reason).toBe("popular");
+	});
+
+	it("flattens recommended wrap shape too", async () => {
+		const { client, mock } = stub();
+		mock.onGet("/users/recommended/").reply(200, {
+			results: [
+				{
+					user: {
+						id: "x",
+						handle: "alice",
+						display_name: "Alice",
+						avatar_url: "",
+						bio: "",
+						followers_count: 0,
+					},
+					reason: "recent_reaction",
+				},
+			],
+		});
+		const users = await fetchRecommendedUsers(5, client);
+		expect(users[0]!.handle).toBe("alice");
+		expect(users[0]!.reason).toBe("recent_reaction");
+	});
+
+	it("treats null reason as undefined (no chip)", async () => {
+		const { client, mock } = stub();
+		mock.onGet("/users/popular/").reply(200, {
+			results: [
+				{
+					user: {
+						id: "y",
+						handle: "bob",
+						display_name: "Bob",
+						avatar_url: "",
+						bio: "",
+						followers_count: 0,
+					},
+					reason: null,
+				},
+			],
+		});
+		const users = await fetchPopularUsers(5, client);
+		expect(users[0]!.reason).toBeUndefined();
+	});
+});
+
+// ----- localizeReason -----
+
+describe("localizeReason (#390)", () => {
+	it("maps 'recent_reaction' to a Japanese label", () => {
+		expect(localizeReason("recent_reaction")).toBe(
+			"最近リアクションした投稿者",
+		);
+	});
+
+	it("maps 'popular' to a Japanese label", () => {
+		expect(localizeReason("popular")).toBe("フォロワーが多い");
+	});
+
+	it("returns undefined for undefined / null / empty", () => {
+		expect(localizeReason(undefined)).toBeUndefined();
+		expect(localizeReason("")).toBeUndefined();
+	});
+
+	it("falls back to the raw value for unknown reasons (forward-compat)", () => {
+		expect(localizeReason("brand_new_reason")).toBe("brand_new_reason");
 	});
 });
