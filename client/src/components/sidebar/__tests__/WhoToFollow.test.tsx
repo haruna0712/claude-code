@@ -23,10 +23,21 @@ vi.mock("@/lib/api/trending", async () => {
 // 本 test は WhoToFollow の挙動 (fetch / render / empty / error) を検証する
 // もので FollowButton 内部実装は対象外。dummy component に差し替え、aria-label
 // で「FollowButton が targetHandle 付きで render されたか」だけ確認する。
+// #408: onChange callback を click で発火させ、dismiss 挙動を assert できるようにする。
 vi.mock("@/components/follows/FollowButton", () => ({
 	__esModule: true,
-	default: ({ targetHandle }: { targetHandle: string }) => (
-		<button type="button" aria-label={`mock-follow-${targetHandle}`}>
+	default: ({
+		targetHandle,
+		onChange,
+	}: {
+		targetHandle: string;
+		onChange?: (next: boolean) => void;
+	}) => (
+		<button
+			type="button"
+			aria-label={`mock-follow-${targetHandle}`}
+			onClick={() => onChange?.(true)}
+		>
 			フォロー
 		</button>
 	),
@@ -166,5 +177,39 @@ describe("WhoToFollow", () => {
 			name: /stg007.*@stg007.*プロフィール/,
 		});
 		expect(links.length).toBeGreaterThanOrEqual(2);
+	});
+
+	it("removes a user from the list after FollowButton onChange(true) (#408)", async () => {
+		const userEvent = (await import("@testing-library/user-event")).default;
+		vi.mocked(fetchRecommendedUsers).mockResolvedValue([
+			{
+				handle: "alice",
+				display_name: "Alice",
+				avatar_url: "",
+				bio: "",
+				is_following: false,
+				reason: undefined,
+			},
+			{
+				handle: "bob",
+				display_name: "Bob",
+				avatar_url: "",
+				bio: "",
+				is_following: false,
+				reason: undefined,
+			},
+		]);
+		render(<WhoToFollow isAuthenticated={true} />);
+
+		// 初期状態: 両者表示
+		await screen.findByLabelText("mock-follow-alice");
+		expect(screen.getByLabelText("mock-follow-bob")).toBeInTheDocument();
+
+		// alice の Follow ボタンを click → onChange(true) → list から消える
+		await userEvent.click(screen.getByLabelText("mock-follow-alice"));
+		expect(
+			screen.queryByLabelText("mock-follow-alice"),
+		).not.toBeInTheDocument();
+		expect(screen.getByLabelText("mock-follow-bob")).toBeInTheDocument();
 	});
 });
