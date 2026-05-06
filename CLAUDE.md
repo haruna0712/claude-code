@@ -173,7 +173,7 @@ docker compose -f local.yml exec api python manage.py migrate
 # Swagger UI:      http://localhost:8080/api/schema/swagger-ui/
 # ReDoc:           http://localhost:8080/api/schema/redoc/
 # Legacy ReDoc:    http://localhost:8080/redoc/
-# Admin:           http://localhost:8080/supersecret/
+# Admin:           http://localhost:8080/admin/
 # Mailpit:         http://localhost:8025/
 # Flower (Celery): http://localhost:5555/
 
