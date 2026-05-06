@@ -4,10 +4,12 @@ import ComposeTweetDialog from "@/components/tweets/ComposeTweetDialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAuthNavigation } from "@/hooks";
+import { useUnreadCount } from "@/hooks/useUnreadCount";
 import { useUserProfile } from "@/hooks/useUseProfile";
 import type { LeftNavIconName, LeftNavLink } from "@/types";
 import { HomeModernIcon } from "@heroicons/react/24/solid";
 import {
+	Bell,
 	CircleUser,
 	Compass,
 	Home,
@@ -30,6 +32,7 @@ const ICON_MAP: Record<
 	Search,
 	MessageSquare,
 	User,
+	Bell,
 };
 
 /** isProfile link は self handle を埋めて返す。handle 未取得時は null。 */
@@ -73,6 +76,8 @@ export default function LeftNavbar() {
 	const selfHandle = profile?.username;
 	const selfDisplayName = profile?.display_name?.trim() || profile?.username;
 	const [composeOpen, setComposeOpen] = useState(false);
+	// #412: 認証済みのみ未読数を polling
+	const { count: unreadCount } = useUnreadCount(isAuthenticated);
 
 	// logout / 認証失効時に dialog 状態が残らないようリセット (TS-rev MEDIUM)
 	useEffect(() => {
@@ -123,7 +128,11 @@ export default function LeftNavbar() {
 						<Link
 							href={href}
 							key={linkItem.label}
-							aria-label={linkItem.label}
+							aria-label={
+								linkItem.path === "/notifications" && unreadCount > 0
+									? `${linkItem.label} (${unreadCount} 件の未読)`
+									: linkItem.label
+							}
 							aria-current={isActive ? "page" : undefined}
 							className={`${
 								isActive
@@ -134,6 +143,7 @@ export default function LeftNavbar() {
 							<NavIcon link={linkItem} isActive={isActive} />
 							{/* lg 以下では label を視覚的に隠すが、a11y のため Link 自体に
 							    aria-label を付与している (max-lg で text を display:none に
+							    した場合も SR からは label が display:none に
 							    した場合も SR からは label が読み上げられる)。 */}
 							<p
 								aria-hidden="true"
@@ -141,6 +151,15 @@ export default function LeftNavbar() {
 							>
 								{linkItem.label}
 							</p>
+							{/* #412: 通知 link の右側に未読バッジ。0 件のときは出さない。 */}
+							{linkItem.path === "/notifications" && unreadCount > 0 ? (
+								<span
+									aria-hidden="true"
+									className="ml-auto inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white max-lg:absolute max-lg:right-2 max-lg:top-2 max-lg:ml-0"
+								>
+									{unreadCount > 99 ? "99+" : unreadCount}
+								</span>
+							) : null}
 						</Link>
 					);
 				})}

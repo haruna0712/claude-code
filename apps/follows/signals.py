@@ -57,12 +57,20 @@ def on_follow_created(sender: type[Follow], instance: Follow, created: bool, **k
     followee_pk = instance.followee_id
     follower_obj = instance.follower
     followee_obj = instance.followee
+    # #412: target_id は User.id (UUID) を使う (public API と整合)。
+    followee_uuid = getattr(followee_obj, "id", None)
 
     def _bump() -> None:
         _bump_counter(follower_pk, "following_count", 1)
         _bump_counter(followee_pk, "followers_count", 1)
-        # Phase 4A 実装後に自動で有効化される forward-compat shim
-        safe_notify(kind="FOLLOW", recipient=followee_obj, actor=follower_obj)
+        # #412: target_type/target_id を追加。followee 自身を target に (UUID)。
+        safe_notify(
+            kind="follow",
+            recipient=followee_obj,
+            actor=follower_obj,
+            target_type="user",
+            target_id=followee_uuid,
+        )
         # P2-08: TL キャッシュ invalidate
         try:
             from apps.timeline.services import invalidate_home_tl

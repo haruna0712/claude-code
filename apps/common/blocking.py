@@ -49,21 +49,26 @@ def is_blocked_relationship(user_a: AbstractBaseUser, user_b: AbstractBaseUser) 
 
 
 def safe_notify(kind: str, recipient: Any, actor: Any | None = None, **extra: Any) -> None:
-    """通知を発火する。`apps.notifications.Notification` 未実装中は no-op.
+    """通知を発火する (#412 で実装完了).
 
-    Phase 2 では Follow / Reaction / Reply / Quote / Repost で通知を発火したいが、
-    apps.notifications は Phase 4A まで本実装されない。本関数はその間 silent に
-    skip する forward-compat shim。
+    apps.notifications.services.create_notification の薄いラッパ。dedup /
+    self-notify guard / target stringify は service 側に集約済。
+    呼び出し元が `target_type=`, `target_id=` を **extra で渡せば serializer
+    が target preview を解決する。
 
-    Phase 4A 実装後は `Notification.objects.create(kind=..., recipient=...,
-    actor=..., **extra)` を呼ぶように本関数の実装だけ差し替えれば既存の呼び出し
-    元すべてが自動で有効化される。
+    forward-compat: `from apps.notifications.services import create_notification`
+    を直接呼ぶ migration を阻まないため、この shim は薄く維持する。
     """
+    if recipient is None:
+        return
     try:
-        Notification = apps.get_model("notifications", "Notification")
-    except LookupError:
+        from apps.notifications.services import create_notification
+    except ImportError:  # pragma: no cover - Phase 0 期間の forward-compat
         return
-    if recipient is None or (actor is not None and recipient.pk == actor.pk):
-        # 自分が自分に通知することはない (例: 自ツイートにリアクションしても通知不要)。
-        return
-    Notification.objects.create(kind=kind, recipient=recipient, actor=actor, **extra)
+    create_notification(
+        kind=kind,
+        recipient=recipient,
+        actor=actor,
+        target_type=extra.get("target_type", ""),
+        target_id=extra.get("target_id"),
+    )
