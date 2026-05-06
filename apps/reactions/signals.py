@@ -47,8 +47,15 @@ def on_reaction_saved(
         from apps.tweets.models import Tweet
 
         Tweet.objects.filter(pk=tweet_pk).update(reaction_count=F("reaction_count") + 1)
-        # Phase 4A 実装後に自動有効化
-        safe_notify(kind="LIKE", recipient=tweet_author, actor=actor)
+        # #412: kind="like" 通知を発火 (Phase 4A 実装で有効化)
+        if tweet_author is not None:
+            safe_notify(
+                kind="like",
+                recipient=tweet_author,
+                actor=actor,
+                target_type="tweet",
+                target_id=tweet_pk,
+            )
 
     transaction.on_commit(_bump)
 
