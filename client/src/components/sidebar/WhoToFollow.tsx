@@ -23,7 +23,9 @@ import {
 } from "@/lib/api/trending";
 
 const SKELETON_ROWS = 3;
-const LIMIT = 5;
+// #399: 基本表示数を 3 に。backend 側で relaxed fallback (既フォロー込み) が
+// 走るため、未フォロー候補が少なくても 3 人埋めようと試みる。
+const LIMIT = 3;
 
 type LoadState = "loading" | "ready" | "error";
 

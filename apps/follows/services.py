@@ -95,15 +95,21 @@ def _candidates_from_followers_count(exclude_ids: set[int], limit: int) -> list[
     return [{"user_id": row["pk"], "reason": "popular"} for row in qs]
 
 
-def _serialize_users(rows: list[dict]) -> list[dict[str, Any]]:
+def _serialize_users(
+    rows: list[dict], following_ids: set[int] | None = None
+) -> list[dict[str, Any]]:
     """user_id を実 User に解決し API レスポンス形式に整形.
 
     #394: 二段防御で is_active=True のみを返す。Step 2 (reaction) で
     取得した user_id は is_active 未チェックなので、最終 serialize 時に
     弾く必要がある。
+
+    #399: ``following_ids`` が渡された場合、各 row に ``is_following`` を付加。
+    relaxed fallback で既フォローユーザを推奨に出すケースの label 表示用。
     """
     user_ids = [r["user_id"] for r in rows]
     users = {u.pk: u for u in User.objects.filter(pk__in=user_ids, is_active=True)}
+    following = following_ids or set()
     out: list[dict[str, Any]] = []
     for r in rows:
         u = users.get(r["user_id"])
@@ -118,6 +124,7 @@ def _serialize_users(rows: list[dict]) -> list[dict[str, Any]]:
                     "avatar_url": u.avatar_url,
                     "bio": u.bio,
                     "followers_count": u.followers_count,
+                    "is_following": u.pk in following,
                 },
                 "reason": r["reason"],
             }
@@ -129,21 +136,37 @@ def compute_who_to_follow(user, limit: int = DEFAULT_LIMIT) -> list[dict[str, An
     """SPEC §5.3 の優先順 (興味タグ → リアクション → フォロワー数 fallback) で候補を作成.
 
     興味関心タグ (UserInterestTag) は Phase 4 以降で実装されるまで skip。
+
+    #399: 候補が limit を満たさない場合の **relaxed fallback** を追加。
+      Step 2/3 では既フォロー (following) を除外するが、それでも limit に満たない
+      ときは Step 4 で「自分・blocked のみ除外」して埋める。これにより小規模 DB
+      でも 3 人推奨を表示しやすくなる (frontend は ``is_following`` を見て
+      ボタン表示を切り替える)。
     """
-    exclude = {user.pk} | _existing_follow_ids(user) | _blocked_user_ids(user)
+    self_id = {user.pk}
+    blocked = _blocked_user_ids(user)
+    following = _existing_follow_ids(user)
+    base_exclude = self_id | blocked | following
 
     candidates: list[dict] = []
     # Step 1 (interest tags): skip until UserInterestTag が実装されたら有効化
 
-    # Step 2: reaction history
-    candidates.extend(_candidates_from_reactions(user, exclude, limit))
+    # Step 2: reaction history (excludes self + blocked + following)
+    candidates.extend(_candidates_from_reactions(user, base_exclude, limit))
 
-    # Step 3: fallback
+    # Step 3: popular fallback (excludes self + blocked + following)
     if len(candidates) < limit:
-        already = exclude | {c["user_id"] for c in candidates}
+        already = base_exclude | {c["user_id"] for c in candidates}
         candidates.extend(_candidates_from_followers_count(already, limit - len(candidates)))
 
-    return _serialize_users(candidates[:limit])
+    # Step 4 (#399): relaxed fallback — 既フォローも候補に含める。
+    # 自分 / blocked は引き続き除外。frontend は is_following=true のとき
+    # 「フォロー中」表示に切替。
+    if len(candidates) < limit:
+        already = self_id | blocked | {c["user_id"] for c in candidates}
+        candidates.extend(_candidates_from_followers_count(already, limit - len(candidates)))
+
+    return _serialize_users(candidates[:limit], following_ids=following)
 
 
 def get_who_to_follow(user, limit: int = DEFAULT_LIMIT) -> list[dict[str, Any]]:
@@ -176,6 +199,8 @@ def get_popular_users(limit: int = DEFAULT_LIMIT) -> list[dict[str, Any]]:
                 "avatar_url": row["avatar_url"],
                 "bio": row["bio"],
                 "followers_count": row["followers_count"],
+                # 未認証なので is_following は常に False (#399 — 型安定のため出す)
+                "is_following": False,
             },
             "reason": None,
         }

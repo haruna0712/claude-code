@@ -66,7 +66,7 @@ describe("WhoToFollow", () => {
 		vi.mocked(fetchRecommendedUsers).mockResolvedValue(SAMPLE);
 		render(<WhoToFollow isAuthenticated={true} />);
 		await waitFor(() => {
-			expect(fetchRecommendedUsers).toHaveBeenCalledWith(5);
+			expect(fetchRecommendedUsers).toHaveBeenCalledWith(3);
 		});
 		expect(fetchPopularUsers).not.toHaveBeenCalled();
 	});
@@ -75,7 +75,7 @@ describe("WhoToFollow", () => {
 		vi.mocked(fetchPopularUsers).mockResolvedValue(SAMPLE);
 		render(<WhoToFollow isAuthenticated={false} />);
 		await waitFor(() => {
-			expect(fetchPopularUsers).toHaveBeenCalledWith(5);
+			expect(fetchPopularUsers).toHaveBeenCalledWith(3);
 		});
 		expect(fetchRecommendedUsers).not.toHaveBeenCalled();
 	});
