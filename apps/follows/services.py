@@ -180,6 +180,15 @@ def get_who_to_follow(user, limit: int = DEFAULT_LIMIT) -> list[dict[str, Any]]:
     return rows
 
 
+def invalidate_who_to_follow(user) -> None:
+    """user 自身の WTF キャッシュを無効化する (#404).
+
+    follow / unfollow 直後に呼ぶことで、次の `/users/recommended/` 呼び出しで
+    最新の候補に基づいて再 build される。古い candidates が TTL 60 分残るのを防ぐ。
+    """
+    cache.delete(CACHE_KEY.format(user_id=user.pk))
+
+
 def get_popular_users(limit: int = DEFAULT_LIMIT) -> list[dict[str, Any]]:
     """未ログイン用 popular: フォロワー数上位 (reason は付けない).
 
