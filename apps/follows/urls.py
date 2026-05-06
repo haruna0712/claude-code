@@ -20,6 +20,7 @@ from apps.follows.views import (
     PopularUsersView,
     RecommendedUsersView,
 )
+from apps.reactions.views import UserLikedTweetsView
 
 urlpatterns = [
     # P2-10: <handle>/follow/ より優先するため static path を先に
@@ -47,5 +48,11 @@ urlpatterns = [
         "<str:handle>/following/",
         FollowingListView.as_view(),
         name="follows-following-list",
+    ),
+    # #421: handle がいいねした tweet 一覧
+    path(
+        "<str:handle>/likes/",
+        UserLikedTweetsView.as_view(),
+        name="users-likes",
     ),
 ]

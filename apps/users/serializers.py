@@ -157,6 +157,9 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             "full_name",
             "date_joined",
             "is_following",
+            # #421: フォロー数 / フォロワー数 (X 風プロフィール表示)
+            "followers_count",
+            "following_count",
         ]
         # 公開 API はすべて read_only (PATCH は /me/ 経由のみ)。
         # ``fields`` と同じ list を参照させると、DRF 内部で片方に mutate が走った
