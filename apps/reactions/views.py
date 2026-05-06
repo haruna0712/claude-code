@@ -4,6 +4,7 @@
 - POST   /api/v1/tweets/<tweet_id>/reactions/ body=`{kind}` → 作成 / 種別変更 / 取消
 - DELETE /api/v1/tweets/<tweet_id>/reactions/                → 明示的取消
 - GET    /api/v1/tweets/<tweet_id>/reactions/                → kind ごとの集計
+- GET    /api/v1/users/<handle>/likes/                       → ユーザがいいねした tweet 一覧 (#421)
 
 upsert toggle 仕様 (arch H-1: kind 変更は UPDATE のみ、DELETE+CREATE しない):
 - 既存なし & 新規 → INSERT (201, created=True)
@@ -16,10 +17,14 @@ from __future__ import annotations
 import logging
 from collections import Counter
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
+from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.generics import ListAPIView
+from rest_framework.pagination import CursorPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -34,6 +39,9 @@ from apps.reactions.serializers import (
     ReactionResponseSerializer,
 )
 from apps.tweets.models import Tweet
+from apps.tweets.serializers import TweetListSerializer
+
+User = get_user_model()
 
 logger = logging.getLogger(__name__)
 
@@ -147,3 +155,56 @@ class ReactionView(APIView):
 
         payload = {"counts": full_counts, "my_kind": my_kind}
         return Response(ReactionAggregateSerializer(payload).data)
+
+
+class UserLikesCursorPagination(CursorPagination):
+    page_size = 20
+    ordering = "-created_at"
+    cursor_query_param = "cursor"
+    max_page_size = 50
+
+
+class UserLikedTweetsView(ListAPIView):
+    """GET /api/v1/users/<handle>/likes/ — handle がいいねした tweet 一覧 (#421).
+
+    Reaction (kind=LIKE) を created_at 降順で取得し、対応する Tweet を返す。
+    削除済 tweet (`is_deleted=True`) は除外。
+    """
+
+    permission_classes = [AllowAny]
+    serializer_class = TweetListSerializer
+    pagination_class = UserLikesCursorPagination
+
+    def get_queryset(self) -> QuerySet[Tweet]:  # type: ignore[type-arg]
+        handle = self.kwargs["handle"]
+        target_user = get_object_or_404(User, username=handle, is_active=True)
+        # Tweet を Reaction の created_at で並べる: subquery でも join でもよいが
+        # シンプルに Tweet.objects から filter (反応した tweet のみ)。
+        liked_tweet_ids = (
+            Reaction.objects.filter(user=target_user, kind=ReactionKind.LIKE)
+            .order_by("-created_at")
+            .values_list("tweet_id", flat=True)
+        )
+        # `in` の order は preserve されないので、created_at 降順を維持するため
+        # 一旦 list に materialize → preserve_order で取得
+        ids = list(liked_tweet_ids[:200])  # MVP: 直近 200 件まで
+        if not ids:
+            return Tweet.objects.none()
+        # Tweet.objects は is_deleted=False のみ
+        # ids の順序を保つため annotate で sort key を付ける
+        from django.db.models import Case, IntegerField, Value, When
+
+        order_cases = [When(pk=tid, then=Value(idx)) for idx, tid in enumerate(ids)]
+        return (
+            Tweet.objects.select_related("author", "reply_to", "quote_of", "repost_of")
+            .filter(pk__in=ids)
+            .annotate(
+                _liked_order=Case(*order_cases, output_field=IntegerField()),
+            )
+            .order_by("_liked_order")
+        )
+
+    def get_serializer_context(self):  # type: ignore[no-untyped-def]
+        ctx = super().get_serializer_context()
+        ctx["request"] = self.request
+        return ctx

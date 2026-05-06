@@ -50,6 +50,9 @@ EXPECTED_PUBLIC_KEYS = {
     # #296: FollowButton 初期状態判定用 (ログイン中の閲覧者が follow 中か).
     # PII では無く bool のみ、未ログイン時は false。
     "is_following",
+    # #421: X 風プロフィールに follower / following 数を表示するため公開。
+    "followers_count",
+    "following_count",
 }
 
 
