@@ -1,13 +1,23 @@
 "use client";
+import ComposeTweetDialog from "@/components/tweets/ComposeTweetDialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAuthNavigation } from "@/hooks";
 import { useUserProfile } from "@/hooks/useUseProfile";
 import type { LeftNavIconName, LeftNavLink } from "@/types";
-import { Compass, Home, MessageSquare, Search, User } from "lucide-react";
+import {
+	CircleUser,
+	Compass,
+	Home,
+	MessageSquare,
+	Plus,
+	Search,
+	User,
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ComponentType } from "react";
+import { type ComponentType, useEffect, useState } from "react";
 
 const ICON_MAP: Record<
 	LeftNavIconName,
@@ -59,9 +69,16 @@ export default function LeftNavbar() {
 		useAuthNavigation();
 	const { profile } = useUserProfile();
 	const selfHandle = profile?.username;
+	const selfDisplayName = profile?.display_name?.trim() || profile?.username;
+	const [composeOpen, setComposeOpen] = useState(false);
+
+	// logout / 認証失効時に dialog 状態が残らないようリセット (TS-rev MEDIUM)
+	useEffect(() => {
+		if (!isAuthenticated && composeOpen) setComposeOpen(false);
+	}, [isAuthenticated, composeOpen]);
 
 	return (
-		<section className="bg-baby_rich light-border custom-scrollbar shadow-platinum sticky left-0 top-0 flex h-screen flex-col justify-between overflow-y-auto border-r p-6 pt-36 max-sm:hidden lg:w-[297px] dark:shadow-none">
+		<section className="bg-baby_rich light-border custom-scrollbar shadow-platinum sticky left-0 top-0 flex h-screen flex-col justify-between overflow-y-auto border-r p-6 pt-36 dark:shadow-none max-sm:hidden lg:w-[297px]">
 			<nav
 				aria-label="メインナビゲーション"
 				className="flex flex-1 flex-col gap-2"
@@ -109,6 +126,21 @@ export default function LeftNavbar() {
 						</Link>
 					);
 				})}
+
+				{/* #396: + ポストボタン (認証済みのみ)。lg+ は label "ポスト"、
+				    sm〜lg は icon のみ。click → ComposeTweetDialog を open。
+				    a11y: aria-label を可視テキスト "ポスト" と一致させる (SC 2.5.3)。 */}
+				{isAuthenticated ? (
+					<Button
+						type="button"
+						onClick={() => setComposeOpen(true)}
+						aria-label="ポスト"
+						className="electricIndigo-gradient text-babyPowder mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-full text-base font-semibold shadow-md hover:opacity-90 max-lg:size-12 max-lg:rounded-full max-lg:p-0"
+					>
+						<Plus className="size-5 shrink-0" aria-hidden="true" />
+						<span className="max-lg:hidden">ポスト</span>
+					</Button>
+				) : null}
 			</nav>
 
 			{isAuthenticated ? (
@@ -119,6 +151,34 @@ export default function LeftNavbar() {
 					>
 						Log Out
 					</Button>
+
+					{/* #396: 自分プロフィール chip (X 風 — avatar + display_name + @handle)。
+					    handle 未取得時は表示しない (link 先が決まらないため)。
+					    a11y: aria-label を可視テキストで開始 (SC 2.5.3)。
+					    アイコンのみが見える max-lg では @handle のみで十分なので
+					    `${selfDisplayName} @${selfHandle}` 形式に統一。 */}
+					{selfHandle ? (
+						<Link
+							href={`/u/${selfHandle}`}
+							aria-label={`${selfDisplayName} @${selfHandle} のプロフィール`}
+							className="hover:bg-baby_richBlack/5 flex items-center gap-3 rounded-full p-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						>
+							<Avatar className="size-10 shrink-0">
+								<AvatarImage src={profile?.avatar_url} alt="" />
+								<AvatarFallback>
+									<CircleUser className="size-6" aria-hidden="true" />
+								</AvatarFallback>
+							</Avatar>
+							<div className="flex min-w-0 flex-1 flex-col text-left max-lg:hidden">
+								<span className="truncate text-sm font-semibold text-foreground">
+									{selfDisplayName}
+								</span>
+								<span className="truncate text-xs text-muted-foreground">
+									@{selfHandle}
+								</span>
+							</div>
+						</Link>
+					) : null}
 				</div>
 			) : (
 				<div className="flex flex-col gap-3">
@@ -134,6 +194,10 @@ export default function LeftNavbar() {
 					</Link>
 				</div>
 			)}
+
+			{isAuthenticated ? (
+				<ComposeTweetDialog open={composeOpen} onOpenChange={setComposeOpen} />
+			) : null}
 		</section>
 	);
 }
