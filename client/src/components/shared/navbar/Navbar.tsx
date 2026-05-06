@@ -1,9 +1,7 @@
 import { HomeModernIcon } from "@heroicons/react/24/solid";
 import Link from "next/link";
 import React from "react";
-import ThemeSwitcher from "./ThemeSwitcher";
 import MobileNavbar from "./MobileNavbar";
-import AuthAvatar from "@/components/shared/navbar/AuthAvatar";
 
 export default function Navbar() {
 	return (
@@ -15,14 +13,13 @@ export default function Navbar() {
 				</p>
 			</Link>
 
-			{/* #396: グローバル検索 box は RightSidebar 上部に移設。Navbar は
-			    シンプルに保つ (logo + theme + auth + mobile) */}
+			{/* #406: AuthAvatar / ThemeSwitcher を撤去。
+			    - AuthAvatar: LeftNavbar 下部の self profile chip と冗長
+			    - ThemeSwitcher: RightSidebar の検索 box と被って入力を阻害していた
+			      → LeftNavbar の「設定」メニュー配下に移設 (SettingsMenu 参照) */}
 
-			<div className="flex shrink-0 items-center gap-3 sm:gap-5 lg:gap-6">
-				<ThemeSwitcher />
-				<AuthAvatar />
-				<MobileNavbar />
-			</div>
+			{/* sm 未満は MobileNavbar (Sheet) に nav リンク群を委ねる */}
+			<MobileNavbar />
 		</nav>
 	);
 }

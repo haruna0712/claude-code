@@ -49,6 +49,20 @@ vi.mock("@/hooks/useUseProfile", () => ({
 	useUserProfile: () => profileState,
 }));
 
+// SettingsMenu は別 unit test (#406) 済み。ここでは LeftNavbar が onLogout を
+// 渡しているかだけ確認したいので stub。
+vi.mock("@/components/shared/navbar/SettingsMenu", () => ({
+	default: ({ onLogout }: { onLogout?: () => void }) => (
+		<button
+			type="button"
+			data-testid="settings-menu-stub"
+			onClick={() => onLogout?.()}
+		>
+			設定
+		</button>
+	),
+}));
+
 // ComposeTweetDialog は別 unit test 済み。ここでは起動ロジックだけ確認したいので stub。
 const composeOpenSpy = vi.fn();
 vi.mock("@/components/tweets/ComposeTweetDialog", () => ({
@@ -134,6 +148,26 @@ describe("LeftNavbar — self profile chip", () => {
 		expect(
 			screen.queryByRole("link", { name: /のプロフィール$/ }),
 		).not.toBeInTheDocument();
+	});
+});
+
+describe("LeftNavbar — SettingsMenu wiring (#406)", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		authNavState.isAuthenticated = true;
+		profileState.profile = {
+			username: "alice",
+			display_name: "Alice",
+			avatar_url: "",
+		};
+	});
+
+	it("renders SettingsMenu when authenticated and forwards onLogout", async () => {
+		render(<LeftNavbar />);
+		const stub = screen.getByTestId("settings-menu-stub");
+		expect(stub).toBeInTheDocument();
+		await userEvent.click(stub);
+		expect(authNavState.handleLogout).toHaveBeenCalledTimes(1);
 	});
 });
 

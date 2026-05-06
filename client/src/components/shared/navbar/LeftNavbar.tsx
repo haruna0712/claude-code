@@ -1,4 +1,5 @@
 "use client";
+import SettingsMenu from "@/components/shared/navbar/SettingsMenu";
 import ComposeTweetDialog from "@/components/tweets/ComposeTweetDialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -145,12 +146,10 @@ export default function LeftNavbar() {
 
 			{isAuthenticated ? (
 				<div className="flex flex-col gap-3">
-					<Button
-						onClick={handleLogout}
-						className="lime-gradient small-medium light-border-2 btn-tertiary text-baby_ballon min-h-[41px] w-full rounded-lg border px-4 py-3 shadow-none"
-					>
-						Log Out
-					</Button>
+					{/* #406: Logout 単独ボタンを SettingsMenu (テーマ切替 + ログアウト) に
+					    置き換え。Navbar から ThemeSwitcher を撤去したのに伴いここに
+					    集約する。 */}
+					<SettingsMenu onLogout={handleLogout} />
 
 					{/* #396: 自分プロフィール chip (X 風 — avatar + display_name + @handle)。
 					    handle 未取得時は表示しない (link 先が決まらないため)。
