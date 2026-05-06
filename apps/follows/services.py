@@ -189,16 +189,20 @@ def invalidate_who_to_follow(user) -> None:
     cache.delete(CACHE_KEY.format(user_id=user.pk))
 
 
-def get_popular_users(limit: int = DEFAULT_LIMIT) -> list[dict[str, Any]]:
+def get_popular_users(
+    limit: int = DEFAULT_LIMIT, exclude_user_id: int | None = None
+) -> list[dict[str, Any]]:
     """未ログイン用 popular: フォロワー数上位 (reason は付けない).
 
     #394: is_active=True のみ。`PublicProfileView` の隠蔽方針に揃える。
+    #406: ``exclude_user_id`` が指定されたら除外 (認証済 viewer 用の二重防御)。
     """
-    qs = (
-        User.objects.filter(is_active=True)
-        .order_by("-followers_count")
-        .values("id", "username", "display_name", "avatar_url", "bio", "followers_count")[:limit]
-    )
+    qs = User.objects.filter(is_active=True)
+    if exclude_user_id is not None:
+        qs = qs.exclude(pk=exclude_user_id)
+    qs = qs.order_by("-followers_count").values(
+        "id", "username", "display_name", "avatar_url", "bio", "followers_count"
+    )[:limit]
     return [
         {
             "user": {

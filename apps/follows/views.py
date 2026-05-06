@@ -172,6 +172,11 @@ class PopularUsersView(APIView):
     """GET /api/v1/users/popular/?limit=10
 
     未ログイン用。フォロワー数上位を返す。explore で使う。
+
+    #406: 認証済 viewer から呼ばれた場合は self を除外。frontend (RightSidebar)
+    が cookie 不整合や redirect 直後の状態で popular endpoint を叩くケースが
+    あり、そのとき自分が WhoToFollow に出てしまうため、二重防御として
+    backend 側でも除外する。
     """
 
     permission_classes = [AllowAny]
@@ -183,5 +188,6 @@ class PopularUsersView(APIView):
             limit = max(1, min(int(request.query_params.get("limit", 10)), 50))
         except (TypeError, ValueError):
             limit = 10
-        rows = get_popular_users(limit=limit)
+        exclude_user_id = request.user.pk if request.user.is_authenticated else None
+        rows = get_popular_users(limit=limit, exclude_user_id=exclude_user_id)
         return Response({"results": rows})
