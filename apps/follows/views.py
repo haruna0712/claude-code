@@ -177,6 +177,8 @@ class PopularUsersView(APIView):
     が cookie 不整合や redirect 直後の状態で popular endpoint を叩くケースが
     あり、そのとき自分が WhoToFollow に出てしまうため、二重防御として
     backend 側でも除外する。
+    #410: 認証済 viewer から呼ばれた場合は **既フォロー** も除外する。
+    WhoToFollow に「フォロー中」が並ぶ UX を防ぐ (recommended と整合)。
     """
 
     permission_classes = [AllowAny]
@@ -188,6 +190,12 @@ class PopularUsersView(APIView):
             limit = max(1, min(int(request.query_params.get("limit", 10)), 50))
         except (TypeError, ValueError):
             limit = 10
-        exclude_user_id = request.user.pk if request.user.is_authenticated else None
-        rows = get_popular_users(limit=limit, exclude_user_id=exclude_user_id)
+        if request.user.is_authenticated:
+            rows = get_popular_users(
+                limit=limit,
+                exclude_user_id=request.user.pk,
+                exclude_following_for_user=request.user,
+            )
+        else:
+            rows = get_popular_users(limit=limit)
         return Response({"results": rows})

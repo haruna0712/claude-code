@@ -1,10 +1,4 @@
-"""Tests for #406 — popular endpoint excludes authenticated viewer's self.
-
-Service-level (`get_popular_users`) tests are sufficient for unit coverage.
-View-level wiring (`PopularUsersView` → `request.user.pk`) は既存
-`test_url_routing.py::test_popular_routes_to_popular_view_not_user_lookup`
-で routing が、本テストで service の挙動が、それぞれ独立にカバーされる。
-"""
+"""Tests for #406 / #410 — popular endpoint excludes self + following."""
 
 from __future__ import annotations
 
@@ -13,7 +7,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.follows.services import get_popular_users
-from apps.follows.tests._factories import make_user
+from apps.follows.tests._factories import make_follow, make_user
 
 
 @pytest.mark.django_db
@@ -62,3 +56,38 @@ class TestPopularUsersViewExcludesSelfWhenAuthenticated:
         assert resp.status_code == 200, resp.content
         handles = {r["user"]["handle"] for r in resp.data["results"]}
         assert a.username in handles
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+class TestPopularExcludesFollowing:
+    """#410: 認証済 viewer の既フォローも popular から除外する."""
+
+    def test_get_popular_users_with_exclude_following(self) -> None:
+        viewer = make_user()
+        followed = make_user()
+        unfollowed = make_user()
+        make_follow(viewer, followed)
+
+        rows = get_popular_users(
+            limit=10,
+            exclude_user_id=viewer.pk,
+            exclude_following_for_user=viewer,
+        )
+        handles = {r["user"]["handle"] for r in rows}
+        assert followed.username not in handles
+        assert unfollowed.username in handles
+
+    def test_view_excludes_following_when_authenticated(self, api_client: APIClient) -> None:
+        viewer = make_user()
+        followed = make_user()
+        unfollowed = make_user()
+        make_follow(viewer, followed)
+        api_client.force_authenticate(user=viewer)
+
+        resp = api_client.get(reverse("users-popular"), {"limit": 10})
+        assert resp.status_code == 200, resp.content
+        handles = {r["user"]["handle"] for r in resp.data["results"]}
+        assert viewer.username not in handles
+        assert followed.username not in handles
+        assert unfollowed.username in handles
