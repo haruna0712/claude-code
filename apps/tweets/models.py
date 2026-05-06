@@ -199,11 +199,27 @@ class Tweet(models.Model):
 
         `is_deleted=True` / `deleted_at=now` をセットして保存する。
         物理削除は行わない (§3.9)。
+
+        #400: 単純リポスト (``type=REPOST``) は元ツイート削除と同時に
+        cascade で論理削除する。元投稿が消えると repost は body 空のため
+        TL に意味のない tombstone (「このツイートは削除されました」) を
+        残すだけになるので、合わせて消す。
+        引用 (``type=QUOTE``) は本文を持つ独立した発言なので cascade しない。
         """
 
         self.is_deleted = True
         self.deleted_at = timezone.now()
         self.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
+
+        # 単純リポストの cascade soft-delete (#400)
+        # `self.reposts` は `Tweet.objects` 経由 = 既に削除済みは除外されている。
+        # bulk update で signals は飛ばないが、元 tweet が is_deleted=True で
+        # TL に出ない以上 repost_count の整合は不要。
+        self.reposts.filter(type=TweetType.REPOST).update(
+            is_deleted=True,
+            deleted_at=self.deleted_at,
+            updated_at=timezone.now(),
+        )
 
     def can_edit(self) -> bool:
         """編集可能かを判定する (§3.5)。
