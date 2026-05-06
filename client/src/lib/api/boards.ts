@@ -13,11 +13,15 @@
  * - POST   /api/v1/threads/<id>/posts/                     → レス作成 (auth)
  * - DELETE /api/v1/posts/<id>/                             → レス削除 (本人 + admin)
  * - POST   /api/v1/boards/thread-post-images/upload-url/   → 画像 presigned URL
+ *
+ * テストでは ``createApiClient()`` + ``MockAdapter`` を渡してモックする
+ * (apps/users/tweets と同じ pattern)。
  */
 
-import type { PaginatedResponse } from "@/types";
+import type { AxiosInstance } from "axios";
 
 import { api } from "@/lib/api/client";
+import type { PaginatedResponse } from "@/types";
 
 export interface Board {
 	slug: string;
@@ -97,66 +101,10 @@ export interface ImagePayload {
 	order: number;
 }
 
-// ---------------------------------------------------------------------------
-// 一覧 / 詳細 (browser axios — 匿名でも叩ける)
-// ---------------------------------------------------------------------------
-
-export async function fetchBoards(): Promise<Board[]> {
-	const res = await api.get<Board[]>("/boards/");
-	return res.data;
-}
-
-export async function fetchBoard(slug: string): Promise<Board> {
-	const res = await api.get<Board>(`/boards/${encodeURIComponent(slug)}/`);
-	return res.data;
-}
-
-export async function fetchBoardThreads(
-	slug: string,
-	page = 1,
-): Promise<PaginatedResponse<ThreadSummary>> {
-	const res = await api.get<PaginatedResponse<ThreadSummary>>(
-		`/boards/${encodeURIComponent(slug)}/threads/`,
-		{ params: { page } },
-	);
-	return res.data;
-}
-
-export async function fetchThread(id: number): Promise<ThreadDetail> {
-	const res = await api.get<ThreadDetail>(`/threads/${id}/`);
-	return res.data;
-}
-
-export async function fetchThreadPosts(
-	id: number,
-	page = 1,
-): Promise<PaginatedResponse<ThreadPost>> {
-	const res = await api.get<PaginatedResponse<ThreadPost>>(
-		`/threads/${id}/posts/`,
-		{ params: { page } },
-	);
-	return res.data;
-}
-
-// ---------------------------------------------------------------------------
-// 書き込み系 (auth)
-// ---------------------------------------------------------------------------
-
 export interface CreateThreadPayload {
 	title: string;
 	first_post_body: string;
 	first_post_images?: ImagePayload[];
-}
-
-export async function createThread(
-	slug: string,
-	payload: CreateThreadPayload,
-): Promise<ThreadCreateResponse> {
-	const res = await api.post<ThreadCreateResponse>(
-		`/boards/${encodeURIComponent(slug)}/threads/`,
-		payload,
-	);
-	return res.data;
 }
 
 export interface CreateThreadPostPayload {
@@ -164,34 +112,94 @@ export interface CreateThreadPostPayload {
 	images?: ImagePayload[];
 }
 
+export interface RequestImageUploadUrlPayload {
+	content_type: string;
+	content_length: number;
+}
+
+export async function fetchBoards(
+	client: AxiosInstance = api,
+): Promise<Board[]> {
+	const res = await client.get<Board[]>("/boards/");
+	return res.data;
+}
+
+export async function fetchBoard(
+	slug: string,
+	client: AxiosInstance = api,
+): Promise<Board> {
+	const res = await client.get<Board>(`/boards/${encodeURIComponent(slug)}/`);
+	return res.data;
+}
+
+export async function fetchBoardThreads(
+	slug: string,
+	page = 1,
+	client: AxiosInstance = api,
+): Promise<PaginatedResponse<ThreadSummary>> {
+	const res = await client.get<PaginatedResponse<ThreadSummary>>(
+		`/boards/${encodeURIComponent(slug)}/threads/`,
+		{ params: { page } },
+	);
+	return res.data;
+}
+
+export async function fetchThread(
+	id: number,
+	client: AxiosInstance = api,
+): Promise<ThreadDetail> {
+	const res = await client.get<ThreadDetail>(`/threads/${id}/`);
+	return res.data;
+}
+
+export async function fetchThreadPosts(
+	id: number,
+	page = 1,
+	client: AxiosInstance = api,
+): Promise<PaginatedResponse<ThreadPost>> {
+	const res = await client.get<PaginatedResponse<ThreadPost>>(
+		`/threads/${id}/posts/`,
+		{ params: { page } },
+	);
+	return res.data;
+}
+
+export async function createThread(
+	slug: string,
+	payload: CreateThreadPayload,
+	client: AxiosInstance = api,
+): Promise<ThreadCreateResponse> {
+	const res = await client.post<ThreadCreateResponse>(
+		`/boards/${encodeURIComponent(slug)}/threads/`,
+		payload,
+	);
+	return res.data;
+}
+
 export async function createThreadPost(
 	threadId: number,
 	payload: CreateThreadPostPayload,
+	client: AxiosInstance = api,
 ): Promise<ThreadPostWithState> {
-	const res = await api.post<ThreadPostWithState>(
+	const res = await client.post<ThreadPostWithState>(
 		`/threads/${threadId}/posts/`,
 		payload,
 	);
 	return res.data;
 }
 
-export async function deleteThreadPost(postId: number): Promise<void> {
-	await api.delete(`/posts/${postId}/`);
-}
-
-// ---------------------------------------------------------------------------
-// 画像 presigned URL
-// ---------------------------------------------------------------------------
-
-export interface RequestImageUploadUrlPayload {
-	content_type: string;
-	content_length: number;
+export async function deleteThreadPost(
+	postId: number,
+	client: AxiosInstance = api,
+): Promise<void> {
+	await client.delete(`/posts/${postId}/`);
 }
 
 export async function requestImageUploadUrl(
 	payload: RequestImageUploadUrlPayload,
+	client: AxiosInstance = api,
 ): Promise<ImageUploadUrlResponse> {
-	const res = await api.post<ImageUploadUrlResponse>(
+	const res = await client.post<ImageUploadUrlResponse>(
 		"/boards/thread-post-images/upload-url/",
 		payload,
 	);
