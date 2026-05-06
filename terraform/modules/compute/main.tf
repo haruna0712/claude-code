@@ -284,6 +284,28 @@ resource "aws_lb_listener_rule" "api" {
   }
 }
 
+# /admin/* → app tg (Django admin) (#439)
+# CloudFront default behavior が ALB に流すので、ALB 側で /admin/* を app tg
+# (Django) に振り直す必要がある。/static/* (Django admin static) も併せて
+# app tg に振らないと admin の CSS/JS が 404 になる。
+resource "aws_lb_listener_rule" "admin" {
+  count = var.alb_certificate_arn == "" ? 0 : 1
+
+  listener_arn = aws_lb_listener.https[0].arn
+  priority     = 15 # /api/* (10) より後、/ws/* (20) より先
+
+  condition {
+    path_pattern {
+      values = ["/admin/*", "/admin"]
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.this["app"].arn
+  }
+}
+
 # /ws/* → daphne tg (sticky session 有効)
 resource "aws_lb_listener_rule" "ws" {
   count = var.alb_certificate_arn == "" ? 0 : 1
