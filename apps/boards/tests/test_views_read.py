@@ -77,6 +77,23 @@ class TestThreadDetailAndPosts:
         res = client.get(f"/api/v1/threads/{thread.id}/")
         assert res.status_code == 404
 
+    def test_posts_404_for_soft_deleted_thread(self) -> None:
+        """python-reviewer MEDIUM #8: 削除済スレの posts は GET も 404."""
+        thread = make_thread(is_deleted=True)
+        client = APIClient()
+        res = client.get(f"/api/v1/threads/{thread.id}/posts/")
+        assert res.status_code == 404
+
+    def test_thread_detail_includes_thread_state(self) -> None:
+        """python-reviewer LOW #9: thread_state が detail にも入っていること."""
+        thread = make_thread(post_count=995)
+        client = APIClient()
+        res = client.get(f"/api/v1/threads/{thread.id}/")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["thread_state"]["post_count"] == 995
+        assert body["thread_state"]["approaching_limit"] is True
+
     def test_posts_list_includes_redacted_for_deleted(self) -> None:
         from django.utils import timezone
 

@@ -167,6 +167,19 @@ class TestThreadPostDelete:
         res = c.delete(f"/api/v1/posts/{post.id}/")
         assert res.status_code in (401, 403)
 
+    def test_other_user_cannot_delete_already_soft_deleted_post(self) -> None:
+        """python-reviewer HIGH #1: is_deleted=True の post でも非所有者は 403。"""
+        from django.utils import timezone
+
+        u = make_user()
+        post = make_thread_post(author=u, body="x")
+        post.is_deleted = True
+        post.deleted_at = timezone.now()
+        post.save()
+        c = _client_for(make_user())
+        res = c.delete(f"/api/v1/posts/{post.id}/")
+        assert res.status_code == 403
+
     def test_post_count_unchanged_on_delete(self) -> None:
         u = make_user()
         thread = make_thread(post_count=3)
@@ -220,6 +233,31 @@ class TestImageUploadUrl:
         )
         assert res.status_code == 400
         assert res.json()["code"] == "image_too_large"
+
+    @override_settings(
+        AWS_STORAGE_BUCKET_NAME="test-bucket",
+        AWS_S3_REGION_NAME="ap-northeast-1",
+    )
+    def test_image_url_host_validation_rejects_attacker_domain(self) -> None:
+        """python-reviewer HIGH #3: AWS bucket 設定下で attacker host を拒否。"""
+        thread = make_thread(post_count=0)
+        c = _client_for(make_user())
+        res = c.post(
+            f"/api/v1/threads/{thread.id}/posts/",
+            {
+                "body": "x",
+                "images": [
+                    {
+                        "image_url": "https://attacker.example.com/x.png",
+                        "width": 10,
+                        "height": 10,
+                        "order": 0,
+                    }
+                ],
+            },
+            format="json",
+        )
+        assert res.status_code == 400
 
     @override_settings(
         AWS_STORAGE_BUCKET_NAME="test-bucket",

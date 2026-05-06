@@ -80,9 +80,9 @@ class ThreadListPagination(PageNumberPagination):
 
 
 class PostListPagination(PageNumberPagination):
+    # boards-spec §3.1 で「ページサイズ 50」と固定指定。
+    # python-reviewer MEDIUM #6: page_size_query_param を撤去してクライアント上書き不可。
     page_size = 50
-    page_size_query_param = "page_size"
-    max_page_size = 100
 
 
 class BoardListView(generics.ListAPIView):
@@ -154,13 +154,23 @@ class BoardThreadListView(generics.ListCreateAPIView):
 
 
 class ThreadDetailView(generics.RetrieveAPIView):
-    """`GET /api/v1/threads/<id>/` — スレ詳細 (匿名 OK)."""
+    """`GET /api/v1/threads/<id>/` — スレ詳細 (匿名 OK).
+
+    python-reviewer LOW #9 反映: ``thread_state`` を含めて返し、
+    フロントが初期描画時点で 990 警告 / 1000 lock を判定できるようにする。
+    """
 
     serializer_class = ThreadDetailSerializer
     permission_classes = [AllowAny]
 
     def get_queryset(self):
         return Thread.objects.filter(is_deleted=False).select_related("author", "board")
+
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        instance = self.get_object()
+        data = self.get_serializer(instance).data
+        data["thread_state"] = serialize_thread_state(instance)
+        return Response(data)
 
 
 class ThreadPostListCreateView(generics.ListCreateAPIView):
@@ -220,13 +230,17 @@ class ThreadPostDeleteView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request: Request, post_id: int) -> Response:
+        # python-reviewer HIGH #1: 認可チェックを先に行う。is_deleted=True の post に対して
+        # 非所有者がリクエストすると 204 (idempotent) ではなく 403 を返す。
+        # 既存 post の存在情報を漏らさない (404 で OK だが、404→403 で済むなら 403)。
         post = get_object_or_404(ThreadPost, pk=post_id)
-        if post.is_deleted:
-            return Response(status=status.HTTP_204_NO_CONTENT)
         is_author = post.author_id is not None and post.author_id == request.user.pk
         is_admin = bool(getattr(request.user, "is_staff", False))
         if not (is_author or is_admin):
             return Response({"detail": "削除権限がありません。"}, status=403)
+
+        if post.is_deleted:
+            return Response(status=status.HTTP_204_NO_CONTENT)
 
         post.is_deleted = True
         post.deleted_at = timezone.now()

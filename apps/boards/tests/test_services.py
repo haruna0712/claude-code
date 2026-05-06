@@ -159,10 +159,10 @@ class TestCreateThreadWithFirstPost:
 
         board = make_board()
         author = make_user()
-        from django.db import IntegrityError
+        from django.core.exceptions import ValidationError
 
         existing_count = Thread.objects.count()
-        with pytest.raises(IntegrityError):
+        with pytest.raises(ValidationError):
             create_thread_with_first_post(
                 board=board,
                 author=author,

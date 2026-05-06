@@ -52,7 +52,10 @@ class ThreadAdmin(admin.ModelAdmin):
 
     @admin.action(description="選択したスレッドを論理削除する")
     def soft_delete_threads(self, request: Any, queryset: Any) -> None:
-        queryset.update(is_deleted=True, deleted_at=timezone.now())
+        # python-reviewer MEDIUM #5: queryset.update は auto_now を発火しないため
+        # updated_at を明示的に渡してダウンストリームの cache-bust 等を整合させる。
+        now = timezone.now()
+        queryset.update(is_deleted=True, deleted_at=now, updated_at=now)
 
 
 class ThreadPostImageInline(admin.TabularInline):
@@ -78,4 +81,7 @@ class ThreadPostAdmin(admin.ModelAdmin):
 
     @admin.action(description="選択したレスを論理削除する")
     def soft_delete_posts(self, request: Any, queryset: Any) -> None:
-        queryset.update(is_deleted=True, deleted_at=timezone.now())
+        # python-reviewer MEDIUM #5: queryset.update は auto_now を発火しないため
+        # updated_at を明示的に渡してダウンストリームの cache-bust 等を整合させる。
+        now = timezone.now()
+        queryset.update(is_deleted=True, deleted_at=now, updated_at=now)

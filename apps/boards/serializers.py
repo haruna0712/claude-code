@@ -76,6 +76,16 @@ class BoardSerializer(serializers.ModelSerializer):
         fields = ["slug", "name", "description", "order", "color"]
         read_only_fields = fields
 
+    def validate_color(self, value: str) -> str:
+        # python-reviewer HIGH #2: HEX_COLOR_RE を実適用する。
+        # 現状は admin が write 経路だが、color を validation せず入れると
+        # フロントの Tailwind class 適用箇所で予期しない値が出る。
+        if not HEX_COLOR_RE.match(value):
+            raise serializers.ValidationError(
+                "color は #rrggbb 形式 (16 進 6 桁) で指定してください。"
+            )
+        return value
+
 
 class ThreadPostImageSerializer(serializers.ModelSerializer):
     class Meta:
