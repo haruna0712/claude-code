@@ -1,4 +1,4 @@
-"""Notification URL config (#412)."""
+"""Notification URL config (#412 / #415)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from apps.notifications.views import (
     NotificationListView,
     NotificationReadAllView,
     NotificationReadView,
+    NotificationSettingsView,
     NotificationUnreadCountView,
 )
 
@@ -22,6 +23,11 @@ urlpatterns = [
         "read-all/",
         NotificationReadAllView.as_view(),
         name="notifications-read-all",
+    ),
+    path(
+        "settings/",
+        NotificationSettingsView.as_view(),
+        name="notifications-settings",
     ),
     path(
         "<uuid:pk>/read/",

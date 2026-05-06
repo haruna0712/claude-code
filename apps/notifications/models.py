@@ -84,3 +84,31 @@ class Notification(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - debug repr
         return f"Notification(id={self.pk}, kind={self.kind}, recipient={self.recipient_id})"
+
+
+class NotificationSetting(models.Model):
+    """ユーザの通知設定 (#415).
+
+    ER §2.13。`(user, kind)` の UniqueConstraint で 1 行 = 1 種別。
+    既定値は `enabled=True` で、行が存在しない kind も True 扱い (= opt-out 記録のみ)。
+    """
+
+    id = models.UUIDField(primary_key=True, default=_uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notification_settings",
+    )
+    kind = models.CharField(max_length=30, choices=NotificationKind.choices)
+    enabled = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "kind"], name="unique_user_kind_setting"),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - debug repr
+        return f"NotificationSetting(user={self.user_id}, kind={self.kind}, enabled={self.enabled})"

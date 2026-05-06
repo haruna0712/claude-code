@@ -96,3 +96,36 @@ export async function markNotificationRead(id: string): Promise<void> {
 export async function markAllNotificationsRead(): Promise<void> {
 	await api.post("/notifications/read-all/");
 }
+
+// -------------------------------------------------------------------------
+// #415 NotificationSetting
+// -------------------------------------------------------------------------
+
+export interface NotificationSettingItem {
+	kind: NotificationKind;
+	enabled: boolean;
+}
+
+export interface NotificationSettingsResponse {
+	settings: NotificationSettingItem[];
+}
+
+export async function fetchNotificationSettings(): Promise<
+	NotificationSettingItem[]
+> {
+	const res = await api.get<NotificationSettingsResponse>(
+		"/notifications/settings/",
+	);
+	return res.data?.settings ?? [];
+}
+
+export async function updateNotificationSetting(
+	kind: NotificationKind,
+	enabled: boolean,
+): Promise<NotificationSettingItem> {
+	const res = await api.patch<NotificationSettingItem>(
+		"/notifications/settings/",
+		{ kind, enabled },
+	);
+	return res.data;
+}

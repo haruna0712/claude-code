@@ -17,8 +17,9 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
+import { Bell, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
+import Link from "next/link";
 import type { ReactElement } from "react";
 
 interface SettingsMenuProps {
@@ -84,6 +85,17 @@ export default function SettingsMenu({
 						) : null}
 					</DropdownMenuItem>
 				))}
+				{/* #415: 通知設定へのリンクを設定メニューに追加 */}
+				<DropdownMenuSeparator />
+				<DropdownMenuItem asChild className="cursor-pointer gap-2">
+					<Link
+						href="/settings/notifications"
+						className="flex items-center gap-2"
+					>
+						<Bell className="size-4" aria-hidden="true" />
+						<span>通知の設定</span>
+					</Link>
+				</DropdownMenuItem>
 				{onLogout ? (
 					<>
 						<DropdownMenuSeparator />

@@ -10,7 +10,11 @@ from typing import Any
 
 from rest_framework import serializers
 
-from apps.notifications.models import Notification
+from apps.notifications.models import (
+    Notification,
+    NotificationKind,
+    NotificationSetting,
+)
 
 TWEET_BODY_EXCERPT_LENGTH = 50
 
@@ -118,3 +122,25 @@ def build_target_previews(notifications: list[Notification]) -> dict[str, dict[s
             }
 
     return out
+
+
+# -------------------------------------------------------------------------
+# #415 NotificationSetting
+# -------------------------------------------------------------------------
+
+
+class NotificationSettingItemSerializer(serializers.Serializer):
+    """1 行 (kind, enabled) のレスポンス形."""
+
+    kind = serializers.ChoiceField(choices=NotificationKind.choices)
+    enabled = serializers.BooleanField()
+
+
+def list_notification_settings_for(user: Any) -> list[dict[str, Any]]:
+    """user の全 10 種別の設定を返す。DB 行が無い kind は ``enabled=True``.
+
+    順序は ``NotificationKind.choices`` に従う。
+    """
+    rows = NotificationSetting.objects.filter(user=user).only("kind", "enabled")
+    by_kind = {r.kind: r.enabled for r in rows}
+    return [{"kind": k, "enabled": by_kind.get(k, True)} for k, _label in NotificationKind.choices]

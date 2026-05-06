@@ -5,6 +5,7 @@
 
 責務:
 - self-notify guard: actor == recipient の場合は no-op
+- **設定 OFF skip** (#415): NotificationSetting で OFF の kind は通知作成しない
 - dedup window: 24h 以内の同一 (recipient, actor, kind, target_type, target_id)
   は skip (連投 like / unlike loop の noise を抑える、X 流)
 - target_id stringify: 呼び出し側が int / UUID / str を渡しても CharField に
@@ -24,6 +25,20 @@ logger = logging.getLogger(__name__)
 DEDUP_WINDOW = timedelta(hours=24)
 
 
+def is_kind_enabled_for(user: Any, kind: str) -> bool:
+    """user が kind 通知を受け取る設定か (#415).
+
+    DB 行が無ければ ``True`` を返す (= 既定 ON、opt-out 記録のみ)。
+    user=None なら False (system notification の receive 不可)。
+    """
+    if user is None:
+        return False
+    from apps.notifications.models import NotificationSetting
+
+    setting = NotificationSetting.objects.filter(user=user, kind=kind).first()
+    return setting is None or setting.enabled
+
+
 def create_notification(
     *,
     kind: str,
@@ -32,7 +47,7 @@ def create_notification(
     target_type: str = "",
     target_id: Any = None,
 ) -> Any | None:
-    """通知を作る (dedup / self-skip 込み)。
+    """通知を作る (dedup / self-skip / 設定 OFF skip 込み)。
 
     Returns:
         作成された Notification、または skip された場合 None。
@@ -41,6 +56,10 @@ def create_notification(
 
     # self-notify guard
     if actor is not None and getattr(actor, "pk", None) == getattr(recipient, "pk", None):
+        return None
+
+    # #415: NotificationSetting で OFF なら早期 return (dedup query 走らせない)
+    if not is_kind_enabled_for(recipient, kind):
         return None
 
     # target_id stringify
