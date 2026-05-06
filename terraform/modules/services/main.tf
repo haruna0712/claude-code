@@ -36,6 +36,11 @@ locals {
     { name = "AWS_STORAGE_BUCKET_NAME", value = var.media_bucket_name },
     { name = "AWS_S3_CUSTOM_DOMAIN", value = var.media_public_domain },
     { name = "AWS_STATIC_BUCKET_NAME", value = var.static_bucket_name },
+    # #439: Django admin の `<link href="/static/admin/css/base.css">` を
+    # CloudFront 経由 (= app_fqdn の /static/* path) で配信させるためのカスタム
+    # ドメイン。base.py の STATICFILES_STORAGE OPTIONS.custom_domain にマッピング
+    # される。CloudFront 側に `/static/* → static origin` の behavior を設定済 (edge/main.tf)。
+    { name = "AWS_S3_STATIC_CUSTOM_DOMAIN", value = var.app_fqdn },
     { name = "POSTGRES_HOST", value = var.rds_endpoint },
     { name = "POSTGRES_PORT", value = "5432" },
     { name = "POSTGRES_DB", value = var.rds_database_name },

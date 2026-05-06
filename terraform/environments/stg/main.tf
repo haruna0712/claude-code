@@ -254,6 +254,7 @@ module "services" {
   media_bucket_name    = module.storage.media_bucket_id
   media_public_domain  = "${var.app_subdomain}.${var.domain_name}"
   static_bucket_name   = module.storage.static_bucket_id
+  app_fqdn             = "${var.app_subdomain}.${var.domain_name}"
 
   # SSR fetch base URL (Next → Django via ALB internal lookup)
   alb_dns_name = module.compute.alb_dns_name

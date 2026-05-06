@@ -324,6 +324,26 @@ resource "aws_cloudfront_distribution" "this" {
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
   }
 
+  # -------- /static/* → S3 static (Django collectstatic 出力) (#439) --------
+  # Django admin が `<link href="/static/admin/css/base.css">` 形式で参照する
+  # ためのルート。ECS の `/start` で `collectstatic` が走り `s3://<static_bucket>/static/`
+  # にファイルが置かれている。OAC 経由で CloudFront からのみアクセス可。
+  # base.py の STATICFILES_STORAGE は S3Storage だが
+  # `AWS_S3_STATIC_CUSTOM_DOMAIN` を CloudFront ドメイン (= app_fqdn) に
+  # 設定すれば Django が生成する URL もここを通る (services モジュール側で
+  # 環境変数を入れる)。
+  ordered_cache_behavior {
+    path_pattern           = "/static/*"
+    target_origin_id       = "static"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_optimized.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.cors_s3.id
+  }
+
   # -------- /ws/* → ALB (WebSocket 透過) --------
   # ⚠️ WebSocket keepalive 要件 (architect PR #52 HIGH):
   #   - CloudFront viewer idle timeout = 10 分 (固定)

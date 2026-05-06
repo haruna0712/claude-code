@@ -120,6 +120,11 @@ variable "static_bucket_name" {
   type        = string
 }
 
+variable "app_fqdn" {
+  description = "Public app FQDN (e.g., 'stg.codeplace.me'). #439: Used as AWS_S3_STATIC_CUSTOM_DOMAIN so Django admin static URLs route through CloudFront's /static/* behavior."
+  type        = string
+}
+
 variable "alb_dns_name" {
   description = "ALB DNS name (e.g., 'sns-stg-alb-xxx.ap-northeast-1.elb.amazonaws.com'). Used as the SSR fetch base URL injected into Next.js task definition (`API_BASE_URL`). Public domain (`var.domain`) was avoided because DNS delegation to Route53 is incomplete during stg bring-up; ALB DNS resolves to private IPs from inside the VPC."
   type        = string
