@@ -67,25 +67,7 @@ qs = (
 
 各候補に `reason="popular"` を付与。
 
-#### Step 4: relaxed fallback (#399)
-
-Step 3 後も候補が `limit` に満たない場合 (= 小規模 DB / 既フォロー済が多い viewer)、**既フォロー除外を解いて** さらに埋める:
-
-```python
-already = self_id | blocked | already_picked
-qs = (
-    User.objects.filter(is_active=True)
-    .exclude(pk__in=already)  # following は除外しない
-    .order_by("-followers_count")
-    [:remaining]
-)
-```
-
-これにより、UI 上は「自分以外で active な全員」が候補になりうる。各候補に `reason="popular"` を付与する (Step 3 と同じ)。
-
-frontend は `is_following=true` のユーザに対しては FollowButton を「フォロー中」表示に切替えるため (`_serialize_users` が `following_ids` を見て付加)、ユーザが既フォロー済の人をうっかり再フォローしてしまう事故は起きない。
-
-> 表示数 (limit) 自体は frontend が決める。WhoToFollow component は `LIMIT=3` (#399 で 5 → 3)。基本 3 人、足りなければ "自分・blocked を除いた active 全員" まで広げて埋める。それでも 0 人 (= viewer 以外の active user が居ない) なら空配列を返す。
+> 表示数 (limit) 自体は frontend が決める。WhoToFollow component は `LIMIT=3` (#399 で 5 → 3)。**既フォローは決して出さない方針** なので、候補が limit に足りなければ 1〜2 人、または 0 人で表示する。「フォロー中」のユーザを推奨に出す Step 4 (#399 で導入) は #410 で撤回した — UI 上「フォロー中」が並んでも操作の意味がないため、X / FB の動線に揃える。
 
 ### 2.2 除外条件
 
