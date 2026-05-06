@@ -456,6 +456,13 @@ _THROTTLE_RATES_BASE = {
     "tag_propose": "20/hour",
     "dm_attachment_presign": "30/hour",
     "dm_attachment_confirm": "30/hour",
+    # Phase 5 boards (boards-spec §3.5):
+    # - スレ作成 5 分に 1 件相当 = 12/hour
+    # - レス投稿 30 秒に 1 件相当 = 120/hour
+    # - 画像 presigned URL 30/hour
+    "boards_thread_create": "12/hour" if not _IS_STG else "120/hour",
+    "boards_post_create": "120/hour" if not _IS_STG else "1200/hour",
+    "boards_image_presign": "30/hour" if not _IS_STG else "300/hour",
 }
 
 REST_FRAMEWORK = {

@@ -11,7 +11,15 @@ import { useAuthNavigation } from "@/hooks";
 import { useUserProfile } from "@/hooks/useUseProfile";
 import type { LeftNavIconName, LeftNavLink } from "@/types";
 import { HomeModernIcon } from "@heroicons/react/24/solid";
-import { Bell, Compass, Home, MessageSquare, Search, User } from "lucide-react";
+import {
+	Bell,
+	Compass,
+	Home,
+	MessageSquare,
+	MessagesSquare,
+	Search,
+	User,
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -27,6 +35,7 @@ const ICON_MAP: Record<
 	MessageSquare,
 	User,
 	Bell,
+	MessagesSquare,
 };
 
 function resolveLinkPath(

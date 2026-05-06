@@ -75,6 +75,9 @@ urlpatterns = [
     path("api/v1/notifications/", include("apps.notifications.urls")),
     path("api/v1/dm/", include("apps.dm.urls")),
     path("api/v1/boards/", include("apps.boards.urls")),
+    # Phase 5: thread / post リソースは boards から分離して別マウント (RESTful URL 設計)。
+    path("api/v1/threads/", include("apps.boards.urls_threads")),
+    path("api/v1/posts/", include("apps.boards.urls_posts")),
     path("api/v1/articles/", include("apps.articles.urls")),
     path("api/v1/moderation/", include("apps.moderation.urls")),
     path("api/v1/bots/", include("apps.bots.urls")),
