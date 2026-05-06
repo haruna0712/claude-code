@@ -40,6 +40,12 @@ export const leftNavLinks: LeftNavLink[] = [
 		requiresAuth: true,
 	},
 	{
+		// Phase 5: 掲示板。匿名閲覧可なので requiresAuth=false。
+		path: "/boards",
+		label: "掲示板",
+		iconName: "MessagesSquare",
+	},
+	{
 		// path は LeftNavbar 側で `/u/<self.handle>` に動的に組み替える
 		path: "",
 		label: "プロフィール",

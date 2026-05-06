@@ -14,6 +14,7 @@ import {
 	Compass,
 	Home,
 	MessageSquare,
+	MessagesSquare,
 	Plus,
 	Search,
 	User,
@@ -33,6 +34,7 @@ const ICON_MAP: Record<
 	MessageSquare,
 	User,
 	Bell,
+	MessagesSquare,
 };
 
 /** isProfile link は self handle を埋めて返す。handle 未取得時は null。 */
