@@ -36,6 +36,9 @@
 | **7+8**            | (Yes, Yes)                  | リポストを取り消す → 引用 keep   | (No, Yes), 引用 (Yes, Yes) keep                   | ⚠️ stg rate-limit で flaky          | 同上                                                                   |
 | **9**              | 削除済み tweet              | 詳細 navigate / 操作             | 404 もしくは tombstone                            | ⚠️ CSRF/rate-limit (test.skip 自動) | DELETE が 403 のとき skip、tombstone 検証は別環境                      |
 | **10**             | REPOST tweet 起点           | リポスト                         | repost_of (= 元 tweet) を target にする           | ✅ サーバ pytest で検証済み         | #346 で apps/tweets/tests/test_actions_api.py に integration test あり |
+| **11 (#400)**      | A が source、B が REPOST    | A を soft_delete                 | B も is_deleted=True、TL から消える               | 🆕 本 PR 追加                       | pytest `test_repost_cascade_soft_delete.py` 5 ケース + Playwright sc11 |
+| **12 (#400)**      | A が source、C が QUOTE     | A を soft_delete                 | C は alive、quote_of_unavailable で placeholder   | 🆕 本 PR 追加                       | quote は本文を持つので cascade しない                                  |
+| **13 (#400)**      | A が source、A の reply D   | A を soft_delete                 | D は alive (#400 では cascade しない)             | 🆕 本 PR 追加                       | reply は会話ツリー保護のため非対象                                     |
 
 > spec ファイル: `client/e2e/repost-quote-state-machine.spec.ts`
 

@@ -670,8 +670,15 @@ class TestSerializerExtension323:
         assert body["reply_to"] is None
         assert body["repost_of"] is None
 
-    def test_repost_nested_includes_is_deleted_for_tombstone(self, api_client: APIClient) -> None:
-        # Arrange: A の tweet を B が repost、その後 A が delete
+    def test_repost_is_cascade_soft_deleted_when_source_is_deleted(
+        self, api_client: APIClient
+    ) -> None:
+        """#400: source 削除と同時に単純リポストも is_deleted=True に揃える.
+
+        #323 で追加された旧テスト (tombstone 表示用に repost_of.is_deleted=True
+        を返す挙動を assert) は #400 で挙動が変わったため置き換え。
+        TL から行ごと消えるのが正解。
+        """
         author_a = make_user()
         author_b = make_user()
         original = make_tweet(author=author_a, body="will be deleted")
@@ -684,15 +691,18 @@ class TestSerializerExtension323:
             type=TweetType.REPOST,
             repost_of=original,
         )
-        # soft delete original (hard delete だと FK が破壊されるので soft_delete を使う)
         original.soft_delete()
-        # Act
-        body = self._detail(api_client, repost.pk)
-        # Assert
-        assert body["type"] == "repost"
-        assert body["repost_of"] is not None
-        assert body["repost_of"]["id"] == original.pk
-        assert body["repost_of"]["is_deleted"] is True
+
+        repost.refresh_from_db()
+        assert repost.is_deleted is True
+        assert repost.deleted_at is not None
+        # default manager は is_deleted=True を除外し、detail view は 410 Gone を返す
+        # (deleted_at が立っているので、404 ではなく tombstone status)
+        resp = api_client.get(reverse("tweets-detail", kwargs={"pk": repost.pk}))
+        assert resp.status_code in (
+            status.HTTP_404_NOT_FOUND,
+            status.HTTP_410_GONE,
+        )
 
     def test_reply_returns_nested_reply_to(self, api_client: APIClient) -> None:
         # Arrange
