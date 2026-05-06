@@ -17,7 +17,7 @@ import Link from "next/link";
 
 export interface FollowListUser {
 	id: string;
-	username: string;
+	handle: string;
 	display_name: string;
 	avatar_url: string;
 	bio: string;
@@ -104,12 +104,12 @@ export default function UserList({ endpoint, emptyMessage }: UserListProps) {
 		<>
 			<ul className="divide-y divide-border">
 				{users.map((u) => {
-					const visibleName = u.display_name || u.username;
+					const visibleName = u.display_name?.trim() || u.handle;
 					return (
-						<li key={u.username} className="flex items-start gap-3 p-4">
+						<li key={u.handle} className="flex items-start gap-3 p-4">
 							<Link
-								href={`/u/${u.username}`}
-								aria-label={`${visibleName} (@${u.username}) のプロフィール`}
+								href={`/u/${u.handle}`}
+								aria-label={`${visibleName} (@${u.handle}) のプロフィール`}
 								className="shrink-0"
 							>
 								<Avatar className="size-12">
@@ -120,15 +120,12 @@ export default function UserList({ endpoint, emptyMessage }: UserListProps) {
 								</Avatar>
 							</Link>
 							<div className="min-w-0 flex-1">
-								<Link
-									href={`/u/${u.username}`}
-									className="block hover:underline"
-								>
+								<Link href={`/u/${u.handle}`} className="block hover:underline">
 									<span className="block truncate text-sm font-semibold text-foreground">
 										{visibleName}
 									</span>
 									<span className="block truncate text-xs text-muted-foreground">
-										@{u.username}
+										@{u.handle}
 									</span>
 								</Link>
 								{u.bio ? (
@@ -139,7 +136,7 @@ export default function UserList({ endpoint, emptyMessage }: UserListProps) {
 							</div>
 							<div className="shrink-0">
 								<FollowButton
-									targetHandle={u.username}
+									targetHandle={u.handle}
 									initialIsFollowing={Boolean(u.is_following)}
 									size="sm"
 								/>

@@ -11,11 +11,12 @@ User = get_user_model()
 class PublicUserMiniSerializer(serializers.ModelSerializer):
     """フォロワー / フォロー中一覧の各行で返す軽量プロフィール。
 
-    フルの PublicProfileSerializer を返すと N+1 と payload 肥大化につながるため、
-    handle / display_name / avatar / followers_count のみに絞る。
+    `is_following` は request.user 視点で行 user を follow しているか
+    (#423: 一覧の「フォロー」/「フォロー解除」ボタン状態を初期反映するため)。
     """
 
     handle = serializers.CharField(source="username", read_only=True)
+    is_following = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -26,8 +27,19 @@ class PublicUserMiniSerializer(serializers.ModelSerializer):
             "avatar_url",
             "bio",
             "followers_count",
+            "is_following",
         )
         read_only_fields = fields
+
+    def get_is_following(self, obj: User) -> bool:
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return False
+        if request.user.pk == obj.pk:
+            return False
+        from apps.follows.models import Follow
+
+        return Follow.objects.filter(follower=request.user, followee=obj).exists()
 
 
 class FollowResponseSerializer(serializers.Serializer):
