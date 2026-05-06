@@ -70,6 +70,14 @@ def on_follow_created(sender: type[Follow], instance: Follow, created: bool, **k
             invalidate_home_tl(follower_obj)
         except ImportError:  # pragma: no cover - timeline 未配置時の fallback
             pass
+        # #404: WTF (who_to_follow) キャッシュ invalidate。
+        # 自分の WTF は base_exclude に following が含まれるので必ず変わる。
+        # followee 側 (フォローされた側) も relaxed fallback で見え方が変わる
+        # 場合があるので一緒に invalidate する (cost は cache.delete 2 回のみ)。
+        from apps.follows.services import invalidate_who_to_follow
+
+        invalidate_who_to_follow(follower_obj)
+        invalidate_who_to_follow(followee_obj)
 
     transaction.on_commit(_bump)
 
@@ -80,6 +88,7 @@ def on_follow_deleted(sender: type[Follow], instance: Follow, **kwargs: Any) -> 
     follower_pk = instance.follower_id
     followee_pk = instance.followee_id
     follower_obj = instance.follower
+    followee_obj = instance.followee
 
     def _bump() -> None:
         _bump_counter(follower_pk, "following_count", -1)
@@ -91,5 +100,10 @@ def on_follow_deleted(sender: type[Follow], instance: Follow, **kwargs: Any) -> 
             invalidate_home_tl(follower_obj)
         except ImportError:  # pragma: no cover
             pass
+        # #404: WTF キャッシュ invalidate (follower / followee 双方)
+        from apps.follows.services import invalidate_who_to_follow
+
+        invalidate_who_to_follow(follower_obj)
+        invalidate_who_to_follow(followee_obj)
 
     transaction.on_commit(_bump)
