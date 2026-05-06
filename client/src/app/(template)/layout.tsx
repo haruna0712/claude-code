@@ -9,9 +9,10 @@ interface LayoutProps {
 }
 
 export default function layout({ children }: LayoutProps) {
-	// #316: ログイン済かを cookie (`logged_in`) で判定して RightSidebar (WhoToFollow
-	// + TrendingTags) に渡す。
-	const isAuthenticated = cookies().get("logged_in")?.value === "true";
+	// #316: ログイン済かを cookie (`logged_in`) で判定して初期値として RightSidebar
+	// に渡す。#419: layout は CSR 遷移で再 render されないため、RightSidebar 内
+	// の useEffect でも document.cookie から再評価する (initial value にだけ使う)。
+	const initialIsAuthenticated = cookies().get("logged_in")?.value === "true";
 
 	return (
 		<main className="bg-baby_veryBlack relative">
@@ -27,7 +28,7 @@ export default function layout({ children }: LayoutProps) {
 				</section>
 				{/* #316: 全 (template) 配下 page で WhoToFollow / TrendingTags を表示。
 				    lg+ で表示、それ以下では非表示。 */}
-				<RightSidebar isAuthenticated={isAuthenticated} />
+				<RightSidebar initialIsAuthenticated={initialIsAuthenticated} />
 			</div>
 		</main>
 	);
