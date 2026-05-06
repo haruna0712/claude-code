@@ -28,7 +28,9 @@ from apps.notifications.serializers import (
     NotificationSerializer,
     build_target_previews,
     list_notification_settings_for,
+    serialize_notification_groups,
 )
+from apps.notifications.services import aggregate_notifications
 
 
 class NotificationCursorPagination(CursorPagination):
@@ -56,23 +58,18 @@ class NotificationListView(ListAPIView):
         return qs
 
     def list(self, request: Request, *args, **kwargs):  # type: ignore[no-untyped-def]
+        # #416: page を行単位で取得 → page 内で aggregate → group 配列を返す。
+        # group が page 境界をまたぐエッジケースは MVP では許容
+        # (同じ group が 2 page に分かれて出る可能性)。
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
+        rows = list(page) if page is not None else list(queryset)
+        groups = aggregate_notifications(rows)
+        previews = build_target_previews(rows)
+        results = serialize_notification_groups(groups, previews)
         if page is None:
-            previews = build_target_previews(list(queryset))
-            serializer = self.get_serializer(
-                queryset,
-                many=True,
-                context={"target_previews": previews, "request": request},
-            )
-            return Response(serializer.data)
-        previews = build_target_previews(list(page))
-        serializer = self.get_serializer(
-            page,
-            many=True,
-            context={"target_previews": previews, "request": request},
-        )
-        return self.get_paginated_response(serializer.data)
+            return Response(results)
+        return self.get_paginated_response(results)
 
 
 class NotificationUnreadCountView(APIView):

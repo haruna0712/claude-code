@@ -71,6 +71,43 @@ class NotificationSerializer(serializers.ModelSerializer):
         return previews.get(key)
 
 
+def serialize_notification_groups(
+    groups: list[dict[str, Any]],
+    target_previews: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """#416: aggregate 後の group dict 配列をレスポンス形に変換.
+
+    後方互換のため `actor` (= actors[0]) と `created_at` (= latest_at) を併存。
+    """
+    out: list[dict[str, Any]] = []
+    for g in groups:
+        actors = g.get("actors", [])
+        first_actor = actors[0] if actors else None
+        target_type = g.get("target_type", "")
+        target_id = g.get("target_id", "")
+        preview = None
+        if target_type and target_id:
+            preview = target_previews.get(f"{target_type}:{target_id}")
+        out.append(
+            {
+                "id": g["id"],
+                "kind": g["kind"],
+                "actor": first_actor,  # 後方互換
+                "actors": actors,
+                "actor_count": g["actor_count"],
+                "target_type": target_type,
+                "target_id": target_id,
+                "target_preview": preview,
+                "read": g["read"],
+                "read_at": g["read_at"],
+                "created_at": g["latest_at"],  # 後方互換
+                "latest_at": g["latest_at"],
+                "row_ids": g["row_ids"],
+            }
+        )
+    return out
+
+
 def build_target_previews(notifications: list[Notification]) -> dict[str, dict[str, Any]]:
     """N+1 回避のためページ単位で target を bulk lookup.
 

@@ -56,13 +56,23 @@ export type NotificationTargetType = "tweet" | "user" | "";
 export interface NotificationItem {
 	id: string;
 	kind: NotificationKind;
+	/** 後方互換: actors[0] と等価。frontend の旧 implementation 用に維持。 */
 	actor: NotificationActor | null;
+	/** #416: グループ化された全 actor のうち上位 3 人。 */
+	actors: NotificationActor[];
+	/** #416: グループ全体の actor 数 (actors.length は最大 3 で truncate される)。 */
+	actor_count: number;
 	target_type: NotificationTargetType;
 	target_id: string;
 	target_preview: NotificationTargetPreview;
 	read: boolean;
 	read_at: string | null;
+	/** 後方互換: latest_at と等価。 */
 	created_at: string;
+	/** #416: グループ内の最新 row の created_at。 */
+	latest_at: string;
+	/** #416: グループ構成 row の id 配列 (一括既読化用)。 */
+	row_ids: string[];
 }
 
 export interface NotificationListResponse {

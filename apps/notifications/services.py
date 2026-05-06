@@ -102,3 +102,90 @@ def create_notification(
             },
         )
         return None
+
+
+# ===========================================================================
+# #416 通知のグループ化
+# ===========================================================================
+
+# 集約対象 kind (like / repost / follow)。quote / reply / mention は集約しない。
+GROUPING_KINDS: frozenset[str] = frozenset({"like", "repost", "follow"})
+
+# 7 日 bucket で集約 (8 日離れた row は別 group)
+GROUP_BUCKET_DAYS = 7
+
+# 上位アバター表示数
+TOP_ACTORS_PER_GROUP = 3
+
+
+def _user_to_actor_dict(user: Any) -> dict[str, Any]:
+    """User を actor dict に整形 (serializer と同じ shape)."""
+    if user is None:
+        return {}
+    return {
+        "id": str(getattr(user, "id", user.pk)),
+        "handle": user.username,
+        "display_name": getattr(user, "display_name", "") or "",
+        "avatar_url": getattr(user, "avatar_url", "") or "",
+    }
+
+
+def _group_key(notif: Any) -> tuple:
+    """7 日 bucket + 同一 (recipient, kind, target) で集約."""
+    bucket = notif.created_at.toordinal() // GROUP_BUCKET_DAYS
+    return (
+        notif.recipient_id,
+        notif.kind,
+        notif.target_type,
+        notif.target_id,
+        bucket,
+    )
+
+
+def _make_single_group(n: Any) -> dict[str, Any]:
+    actor_dict = _user_to_actor_dict(n.actor) if n.actor is not None else None
+    return {
+        "id": str(n.id),
+        "kind": n.kind,
+        "actors": [actor_dict] if actor_dict is not None else [],
+        "actor_count": 1,
+        "target_type": n.target_type,
+        "target_id": n.target_id,
+        "read": n.read,
+        "read_at": n.read_at,
+        "latest_at": n.created_at,
+        "row_ids": [str(n.id)],
+    }
+
+
+def aggregate_notifications(notifications) -> list[dict[str, Any]]:
+    """通知行を group ベースに集約する (#416).
+
+    集約対象 kind (`GROUPING_KINDS`) のうち target を持つ row のみ集約。
+    集約外 kind (quote/reply/mention など) は 1 row = 1 group。
+
+    入力は ``-created_at`` 降順を期待 (latest_at の更新ロジックが単純化される)。
+    """
+    out: list[dict[str, Any]] = []
+    seen: dict[tuple, dict[str, Any]] = {}
+
+    for n in notifications:
+        is_groupable = n.kind in GROUPING_KINDS and bool(n.target_type) and bool(n.target_id)
+        if not is_groupable:
+            out.append(_make_single_group(n))
+            continue
+        key = _group_key(n)
+        existing = seen.get(key)
+        if existing is None:
+            grp = _make_single_group(n)
+            seen[key] = grp
+            out.append(grp)
+            continue
+        existing["actor_count"] += 1
+        if len(existing["actors"]) < TOP_ACTORS_PER_GROUP and n.actor is not None:
+            existing["actors"].append(_user_to_actor_dict(n.actor))
+        # 1 つでも未読なら group=未読
+        if not n.read:
+            existing["read"] = False
+        existing["row_ids"].append(str(n.id))
+    return out
