@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAuthNavigation } from "@/hooks";
 import { useUserProfile } from "@/hooks/useUseProfile";
 import type { LeftNavIconName, LeftNavLink } from "@/types";
+import { HomeModernIcon } from "@heroicons/react/24/solid";
 import {
 	CircleUser,
 	Compass,
@@ -79,7 +80,23 @@ export default function LeftNavbar() {
 	}, [isAuthenticated, composeOpen]);
 
 	return (
-		<section className="bg-baby_rich light-border custom-scrollbar shadow-platinum sticky left-0 top-0 flex h-screen flex-col justify-between overflow-y-auto border-r p-6 pt-36 dark:shadow-none max-sm:hidden lg:w-[297px]">
+		<section className="bg-baby_rich light-border custom-scrollbar shadow-platinum sticky left-0 top-0 flex h-screen flex-col justify-between overflow-y-auto border-r p-6 dark:shadow-none max-sm:hidden lg:w-[297px]">
+			{/* #408: 旧 Navbar から移設したロゴ。LeftNavbar 上部に置く (X / karotter
+			    準拠の 3 カラムレイアウト)。 */}
+			<Link
+				href="/"
+				aria-label="ホームへ"
+				className="mb-4 flex shrink-0 items-center gap-2"
+			>
+				<HomeModernIcon
+					className="size-9 text-lime-500 lg:size-10"
+					aria-hidden="true"
+				/>
+				<p className="font-robotoSlab text-veryBlack dark:text-babyPowder hidden text-lg font-bold lg:block">
+					エンジニア特化型 <span className="text-lime-500">SNS</span>
+				</p>
+			</Link>
+
 			<nav
 				aria-label="メインナビゲーション"
 				className="flex flex-1 flex-col gap-2"

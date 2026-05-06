@@ -87,7 +87,7 @@ export default function FollowButton({
 		? "処理中..."
 		: isFollowing
 			? "フォロー中"
-			: "フォローする";
+			: "フォロー"; // #408: 「フォローする」 → 「フォロー」 (X 流の短い表記)
 
 	return (
 		<div className="inline-flex flex-col items-end gap-1">

@@ -57,6 +57,14 @@ export default function WhoToFollow({ isAuthenticated }: WhoToFollowProps) {
 		};
 	}, [isAuthenticated]);
 
+	// #408: フォロー成功で対象 user を list から消す (X / FB と同じ動線)。
+	// unfollow に巻き戻った場合は復活させない (一度提示したユーザを再表示しても
+	// 操作の往復になるだけなので、追加の操作は profile 画面に任せる)。
+	const handleFollowChange = (handle: string, nowFollowing: boolean) => {
+		if (!nowFollowing) return;
+		setUsers((prev) => prev.filter((u) => u.handle !== handle));
+	};
+
 	return (
 		<section
 			aria-labelledby="sidebar-wtf-heading"
@@ -161,6 +169,9 @@ export default function WhoToFollow({ isAuthenticated }: WhoToFollowProps) {
 										targetHandle={user.handle}
 										initialIsFollowing={Boolean(user.is_following)}
 										size="sm"
+										onChange={(nowFollowing) =>
+											handleFollowChange(user.handle, nowFollowing)
+										}
 									/>
 								) : null}
 							</li>
