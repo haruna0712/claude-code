@@ -5,6 +5,8 @@ Endpoints (SPEC §8 / docs/specs/notifications-spec.md §6):
 - GET    /api/v1/notifications/unread-count/        未読件数
 - POST   /api/v1/notifications/<uuid:pk>/read/      個別既読化
 - POST   /api/v1/notifications/read-all/            一括既読化
+- GET    /api/v1/notifications/settings/            設定一覧 (#415)
+- PATCH  /api/v1/notifications/settings/            設定 upsert (#415)
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from __future__ import annotations
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from rest_framework import serializers as rf_serializers
 from rest_framework import status
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import CursorPagination
@@ -20,10 +23,11 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.notifications.models import Notification
+from apps.notifications.models import Notification, NotificationKind, NotificationSetting
 from apps.notifications.serializers import (
     NotificationSerializer,
     build_target_previews,
+    list_notification_settings_for,
 )
 
 
@@ -106,3 +110,35 @@ class NotificationReadAllView(APIView):
             read=True, read_at=now, updated_at=now
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# -------------------------------------------------------------------------
+# #415 NotificationSetting endpoints
+# -------------------------------------------------------------------------
+
+
+class _SettingPatchInput(rf_serializers.Serializer):
+    kind = rf_serializers.ChoiceField(choices=NotificationKind.choices)
+    enabled = rf_serializers.BooleanField()
+
+
+class NotificationSettingsView(APIView):
+    """GET /PATCH /api/v1/notifications/settings/ (#415)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        rows = list_notification_settings_for(request.user)
+        return Response({"settings": rows})
+
+    def patch(self, request: Request) -> Response:
+        serializer = _SettingPatchInput(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        kind = serializer.validated_data["kind"]
+        enabled = serializer.validated_data["enabled"]
+        obj, _created = NotificationSetting.objects.update_or_create(
+            user=request.user,
+            kind=kind,
+            defaults={"enabled": enabled},
+        )
+        return Response({"kind": obj.kind, "enabled": obj.enabled})
