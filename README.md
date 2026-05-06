@@ -105,7 +105,7 @@ docker compose -f local.yml exec api python manage.py createsuperuser
 |---|---|
 | Next.js (UI) | http://localhost:8080/ (nginx 経由) |
 | Django API | http://localhost:8080/api/v1/ |
-| Django Admin | http://localhost:8080/supersecret/ |
+| Django Admin | http://localhost:8080/admin/ |
 | Swagger / ReDoc | http://localhost:8080/redoc/ |
 | Mailpit (開発メール) | http://localhost:8025/ |
 | Flower (Celery) | http://localhost:5555/ |

@@ -108,7 +108,7 @@
 
 **When** 一般ユーザーが Web から `POST /api/v1/boards/` を試行する
 **Then** そのエンドポイントは存在しない（404 / 405）
-**And** Django admin の `/supersecret/boards/board/` からは管理者が CRUD できる
+**And** Django admin の `/admin/boards/board/` からは管理者が CRUD できる
 
 ## S-13: レートリミット — スレ作成 5 分に 1 件
 
