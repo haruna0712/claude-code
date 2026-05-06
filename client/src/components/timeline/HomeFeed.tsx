@@ -3,15 +3,17 @@
 /**
  * HomeFeed — main timeline feed component (P2-13 / Issue #186).
  *
- * Renders TweetComposer, TimelineTabs, and a list of TweetCards.
- * Supports optimistic prepend on new tweet, tab switching, and
+ * Renders TimelineTabs and a list of TweetCards. Supports tab switching and
  * "もっと見る" load-more (limit increment, not cursor pagination —
  * backend cursor pagination tracked in P2-08).
+ *
+ * #396: inline TweetComposer は撤去。投稿は LeftNavbar の + ボタンから開く
+ * `ComposeTweetDialog` 経由で行う。投稿成功時は dialog が `router.refresh()`
+ * を呼ぶため、ホームに居れば SSR 再フェッチで最新 TL に切り替わる。
  */
 
 import { useCallback, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import TweetComposer from "@/components/tweets/TweetComposer";
 import TimelineTabs, {
 	type TabValue,
 } from "@/components/timeline/TimelineTabs";
@@ -103,11 +105,6 @@ export default function HomeFeed({
 		}
 	}, [activeTab, limit]);
 
-	const handlePosted = useCallback((tweet: TweetSummary) => {
-		setTweets((prev) => dedupById([tweet, ...prev]));
-		setLiveMessage("新しいツイートを投稿しました");
-	}, []);
-
 	// #337: TweetCard 配下 (PostDialog reply/quote, RepostButton) で投稿された
 	// tweet を TL 上部に prepend する。reply は home TL に出さない (#334) ので
 	// type が REPLY のときは何もしない (count badge の楽観 +1 は TweetCard 内で
@@ -135,13 +132,8 @@ export default function HomeFeed({
 				{liveMessage}
 			</div>
 
-			{/* Tweet composer */}
-			<div className="px-4 py-3 border-b border-border">
-				<TweetComposer onPosted={handlePosted} />
-			</div>
-
 			{/* Tab switcher */}
-			<div className="sticky top-0 z-10 bg-background border-b border-border">
+			<div className="sticky top-0 z-10 border-b border-border bg-background">
 				<TimelineTabs activeTab={activeTab} onTabChange={handleTabChange} />
 			</div>
 
@@ -174,7 +166,7 @@ export default function HomeFeed({
 						aria-label="もっと見る"
 						onClick={handleLoadMore}
 						disabled={isLoading}
-						className="px-6 py-2 rounded-full border border-border text-sm text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						className="rounded-full border border-border px-6 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
 					>
 						{isLoading ? "読み込み中..." : "もっと見る"}
 					</button>

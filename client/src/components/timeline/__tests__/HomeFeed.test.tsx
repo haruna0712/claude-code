@@ -22,31 +22,8 @@ vi.mock("@/lib/api/timeline", () => ({
 	fetchFollowingTimeline: vi.fn(),
 }));
 
-// Mock TweetComposer
-vi.mock("@/components/tweets/TweetComposer", () => ({
-	default: ({ onPosted }: { onPosted?: (tweet: TweetSummary) => void }) => (
-		<div data-testid="tweet-composer">
-			<button
-				onClick={() =>
-					onPosted?.({
-						id: 999,
-						body: "new tweet",
-						html: "<p>new tweet</p>",
-						char_count: 9,
-						author_handle: "me",
-						tags: [],
-						images: [],
-						created_at: new Date().toISOString(),
-						updated_at: new Date().toISOString(),
-						edit_count: 0,
-					})
-				}
-			>
-				Post
-			</button>
-		</div>
-	),
-}));
+// #396: TweetComposer はホームから撤去された (LeftNavbar の + ボタン経由)。
+// HomeFeed は composer を直接 import しなくなったため mock 不要。
 
 // Mock next/navigation
 const mockPush = vi.fn();
@@ -87,11 +64,15 @@ describe("HomeFeed — initial render", () => {
 		vi.clearAllMocks();
 	});
 
-	it("renders TweetComposer", () => {
+	it("does not render an inline TweetComposer (#396 — moved to LeftNavbar dialog)", () => {
 		render(
 			<HomeFeed initialTab="recommended" initialTweets={INITIAL_TWEETS} />,
 		);
-		expect(screen.getByTestId("tweet-composer")).toBeInTheDocument();
+		// アクセシブル名で識別される投稿フォームがホーム上に存在しないこと。
+		expect(screen.queryByTestId("tweet-composer")).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("textbox", { name: /投稿|tweet/i }),
+		).not.toBeInTheDocument();
 	});
 
 	it("renders TimelineTabs", () => {
@@ -204,21 +185,10 @@ describe("HomeFeed — load more", () => {
 	});
 });
 
-describe("HomeFeed — optimistic prepend", () => {
-	it("prepends new tweet to list after TweetComposer posts", async () => {
-		render(
-			<HomeFeed initialTab="recommended" initialTweets={INITIAL_TWEETS} />,
-		);
-
-		const postButton = screen.getByRole("button", { name: /post/i });
-		await userEvent.click(postButton);
-
-		await waitFor(() => {
-			const articles = document.querySelectorAll("article");
-			expect(articles.length).toBe(4); // 3 initial + 1 new
-		});
-	});
-});
+// #396: 旧「TweetComposer 経由の楽観 prepend」は HomeFeed の責務から外れた。
+// 投稿は ComposeTweetDialog 側で router.refresh() を呼ぶため、ホーム TL は SSR
+// 再フェッチで更新される。HomeFeed 自身の prepend は TweetCard 配下からの
+// repost / quote (handleDescendantPosted) 経路のみ残っている。
 
 describe("HomeFeed — empty state", () => {
 	it("shows empty state message when no tweets", () => {
@@ -321,19 +291,14 @@ describe("HomeFeed — review fixes", () => {
 		});
 	});
 
-	it("announces optimistic prepend via aria-live region", async () => {
+	it("renders an aria-live region for descendant repost / quote announcements", () => {
+		// #396: TweetComposer 経由の prepend は撤去。aria-live region 自体は
+		// TweetCard 配下 (RepostButton / 引用) からの楽観 prepend のために残す。
 		render(
 			<HomeFeed initialTab="recommended" initialTweets={INITIAL_TWEETS} />,
 		);
-
 		const live = document.querySelector('[role="status"][aria-live="polite"]');
 		expect(live).toBeTruthy();
 		expect(live?.textContent).toBe("");
-
-		await userEvent.click(screen.getByRole("button", { name: /post/i }));
-
-		await waitFor(() => {
-			expect(live?.textContent).toMatch(/新しいツイートを投稿/);
-		});
 	});
 });
