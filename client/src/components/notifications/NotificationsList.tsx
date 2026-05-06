@@ -17,6 +17,7 @@ import {
 	fetchNotifications,
 	markAllNotificationsRead,
 	markNotificationRead,
+	type NotificationActor,
 	type NotificationItem,
 	type NotificationKind,
 } from "@/lib/api/notifications";
@@ -37,26 +38,37 @@ function buildHref(n: NotificationItem): string | null {
 	return null;
 }
 
-// TS-rev MED M5: 文言を 1 箇所に集約 (Phase 8 i18n 抽出を容易に)
-const MESSAGES: Record<NotificationKind, (actor: string) => string> = {
-	like: (a) => `${a} さんがあなたのツイートにいいねしました`,
-	repost: (a) => `${a} さんがあなたのツイートをリポストしました`,
-	quote: (a) => `${a} さんがあなたのツイートを引用しました`,
-	reply: (a) => `${a} さんがリプライしました`,
-	mention: (a) => `${a} さんがあなたをメンションしました`,
-	follow: (a) => `${a} さんがあなたをフォローしました`,
-	// 将来 (Phase 3 / 5) で有効化される kind は default fallback で吸収
-	dm_message: (a) => `${a} さんから DM が届きました`,
-	dm_invite: (a) => `${a} さんからグループ招待が届きました`,
-	article_comment: (a) => `${a} さんが記事にコメントしました`,
-	article_like: (a) => `${a} さんが記事にいいねしました`,
+// #416: 主語と動詞を分離。グループ化対応で複数 actor の表示に対応。
+// 動詞部分のみここに定義 (例: 「あなたのツイートにいいねしました」)。
+const VERBS: Record<NotificationKind, string> = {
+	like: "あなたのツイートにいいねしました",
+	repost: "あなたのツイートをリポストしました",
+	quote: "あなたのツイートを引用しました",
+	reply: "リプライしました",
+	mention: "あなたをメンションしました",
+	follow: "あなたをフォローしました",
+	dm_message: "から DM が届きました",
+	dm_invite: "からグループ招待が届きました",
+	article_comment: "が記事にコメントしました",
+	article_like: "が記事にいいねしました",
 };
 
+function actorName(actor: NotificationActor | null | undefined): string {
+	if (!actor) return "削除されたユーザー";
+	return (actor.display_name?.trim() || actor.handle) ?? "削除されたユーザー";
+}
+
 function describe(n: NotificationItem): string {
-	const actorName =
-		n.actor?.display_name?.trim() || n.actor?.handle || "削除されたユーザー";
-	const f = MESSAGES[n.kind];
-	return f ? f(actorName) : `${actorName} さんから通知`;
+	// 互換性: actors が無い古いレスポンスは actor 単独で扱う
+	const list: NotificationActor[] =
+		n.actors && n.actors.length > 0 ? n.actors : n.actor ? [n.actor] : [];
+	const visibleNames = list.slice(0, 3).map((a) => `${actorName(a)} さん`);
+	const remaining = (n.actor_count ?? list.length) - visibleNames.length;
+	const subjects =
+		remaining > 0 ? [...visibleNames, `他 ${remaining} 人`] : visibleNames;
+	const subject = subjects.join("、") || "削除されたユーザー さん";
+	const verb = VERBS[n.kind] ?? "から通知";
+	return `${subject}が${verb}`;
 }
 
 export default function NotificationsList({
@@ -198,15 +210,18 @@ export default function NotificationsList({
 						const liClass =
 							"flex items-start gap-3 p-4 transition hover:bg-muted/40";
 						const handleClick = async () => {
-							if (!n.read) {
-								try {
-									await markNotificationRead(n.id);
-									setItems((prev) =>
-										prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)),
-									);
-								} catch {
-									// silent
-								}
+							if (n.read) return;
+							// #416: グループ全 row を一括既読化 (row_ids が無い古い shape は
+							// id 単独で fallback)
+							const ids =
+								n.row_ids && n.row_ids.length > 0 ? n.row_ids : [n.id];
+							try {
+								await Promise.all(ids.map((id) => markNotificationRead(id)));
+								setItems((prev) =>
+									prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)),
+								);
+							} catch {
+								// silent
 							}
 						};
 						return (
