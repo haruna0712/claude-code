@@ -66,7 +66,7 @@ describe("ComposeTweetDialog", () => {
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
 
-	it("on successful post: closes dialog, refreshes router, shows success toast, forwards onPosted", async () => {
+	it("on successful post: closes dialog, refreshes router, forwards onPosted, does NOT fire its own toast (#398)", async () => {
 		const onOpenChange = vi.fn();
 		const onPosted = vi.fn();
 
@@ -84,7 +84,8 @@ describe("ComposeTweetDialog", () => {
 		expect(onPosted).toHaveBeenCalledTimes(1);
 		expect(onOpenChange).toHaveBeenCalledWith(false);
 		expect(mockRefresh).toHaveBeenCalledTimes(1);
-		expect(toastSuccess).toHaveBeenCalledWith("投稿しました");
+		// #398: TweetComposer 側で toast を出すので、Dialog 側は呼ばない
+		expect(toastSuccess).not.toHaveBeenCalled();
 	});
 
 	it("provides an accessible title (sr-only)", () => {

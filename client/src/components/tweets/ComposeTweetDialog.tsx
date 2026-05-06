@@ -8,7 +8,6 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { toast } from "react-toastify";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import TweetComposer from "@/components/tweets/TweetComposer";
@@ -28,8 +27,11 @@ interface ComposeTweetDialogProps {
  * ComposeTweetDialog — 左下 + ボタンから開く root tweet 投稿ダイアログ (#396)。
  *
  * 既存 `TweetComposer` を Radix Dialog でラップしているだけ。投稿成功で
- * 自動 close + toast、router.refresh で TL 再取得。文字数カウント / タグ /
- * バリデーションは TweetComposer 側に閉じている。
+ * 自動 close + router.refresh で TL 再取得。文字数カウント / タグ /
+ * バリデーション / 成功 toast は TweetComposer 側に閉じている。
+ *
+ * #398: トースト二重発火を防ぐため、本コンポーネントでは `toast.success` を
+ * 呼ばない。TweetComposer.tsx 内の `toast.success("投稿しました")` を信頼する。
  *
  * a11y:
  *  - DialogTitle (sr-only) で dialog にアクセシブル名を与える (4.1.2)
@@ -55,7 +57,7 @@ export default function ComposeTweetDialog({
 			onPosted?.(tweet);
 			setLiveMessage("ツイートを投稿しました");
 			onOpenChange(false);
-			toast.success("投稿しました");
+			// #398: toast.success は TweetComposer 側に集約 (二重発火防止)
 			router.refresh();
 		},
 		[onPosted, onOpenChange, router],
