@@ -279,11 +279,23 @@ describe("TweetCard — action buttons (placeholder)", () => {
 		).toBeInTheDocument();
 	});
 
-	it("does not show delete menu for another user's tweet", () => {
+	it("does not show delete option for another user's tweet (Phase 4B: kebab now shows for 通報)", async () => {
+		// Phase 4B (#449) で他人のツイートにも kebab を出すように変更 (通報メニュー用)。
+		// 削除メニューは出ないが kebab ボタンは表示される。
 		render(<TweetCard tweet={BASE_TWEET} currentUserHandle="bob" />);
+		const kebab = screen.getByRole("button", {
+			name: "ツイートのその他メニュー",
+		});
+		expect(kebab).toBeInTheDocument();
+		await userEvent.click(kebab);
+		// 削除 menuitem は出ない
 		expect(
-			screen.queryByRole("button", { name: "ツイートのその他メニュー" }),
+			screen.queryByRole("menuitem", { name: "削除" }),
 		).not.toBeInTheDocument();
+		// 代わりに「通報する」が出る
+		expect(
+			screen.getByRole("menuitem", { name: /通報する/ }),
+		).toBeInTheDocument();
 	});
 
 	it("deletes my own tweet and removes its timeline row", async () => {
@@ -357,7 +369,9 @@ describe("TweetCard — action buttons (placeholder)", () => {
 		});
 	});
 
-	it("does not show delete menu for my repost of another user's tweet", () => {
+	it("does not show delete option for my repost of another user's tweet (Phase 4B: kebab shows for 通報)", async () => {
+		// Phase 4B (#449): 表示対象 tweet (repost_of の元投稿) の author が他人なので
+		// kebab に「通報」が出る。削除メニューは出ない。
 		const tweet: TweetSummary = {
 			...BASE_TWEET,
 			id: 123,
@@ -379,9 +393,17 @@ describe("TweetCard — action buttons (placeholder)", () => {
 		};
 		render(<TweetCard tweet={tweet} currentUserHandle="alice" />);
 
+		const kebab = screen.getByRole("button", {
+			name: "ツイートのその他メニュー",
+		});
+		expect(kebab).toBeInTheDocument();
+		await userEvent.click(kebab);
 		expect(
-			screen.queryByRole("button", { name: "ツイートのその他メニュー" }),
+			screen.queryByRole("menuitem", { name: "削除" }),
 		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("menuitem", { name: /通報する/ }),
+		).toBeInTheDocument();
 	});
 });
 

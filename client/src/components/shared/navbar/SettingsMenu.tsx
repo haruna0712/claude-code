@@ -17,7 +17,16 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Bell, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
+import {
+	Ban,
+	Bell,
+	LogOut,
+	Monitor,
+	Moon,
+	Settings,
+	Sun,
+	VolumeX,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import type { ReactElement } from "react";
@@ -94,6 +103,19 @@ export default function SettingsMenu({
 					>
 						<Bell className="size-4" aria-hidden="true" />
 						<span>通知の設定</span>
+					</Link>
+				</DropdownMenuItem>
+				{/* Phase 4B (#450): ブロック / ミュート 一覧 */}
+				<DropdownMenuItem asChild className="cursor-pointer gap-2">
+					<Link href="/settings/blocks" className="flex items-center gap-2">
+						<Ban className="size-4" aria-hidden="true" />
+						<span>ブロック中のユーザー</span>
+					</Link>
+				</DropdownMenuItem>
+				<DropdownMenuItem asChild className="cursor-pointer gap-2">
+					<Link href="/settings/mutes" className="flex items-center gap-2">
+						<VolumeX className="size-4" aria-hidden="true" />
+						<span>ミュート中のユーザー</span>
 					</Link>
 				</DropdownMenuItem>
 				{onLogout ? (

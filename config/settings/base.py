@@ -463,6 +463,12 @@ _THROTTLE_RATES_BASE = {
     "boards_thread_create": "12/hour" if not _IS_STG else "120/hour",
     "boards_post_create": "120/hour" if not _IS_STG else "1200/hour",
     "boards_image_presign": "30/hour" if not _IS_STG else "300/hour",
+    # Phase 4B moderation (moderation-spec §4.4):
+    # - block / mute は 30/hour (通常運用想定)
+    # - report は 5/hour (スパム通報防止)
+    "moderation_block": "30/hour" if not _IS_STG else "300/hour",
+    "moderation_mute": "30/hour" if not _IS_STG else "300/hour",
+    "moderation_report": "5/hour" if not _IS_STG else "50/hour",
 }
 
 REST_FRAMEWORK = {

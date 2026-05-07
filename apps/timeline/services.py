@@ -26,6 +26,7 @@ from django.core.cache import cache
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.common.muting import get_muted_user_ids
 from apps.tweets.models import Tweet, TweetType
 
 logger = logging.getLogger(__name__)
@@ -217,12 +218,16 @@ def build_home_tl(user, limit: int = TL_DEFAULT_PAGE_SIZE) -> list[Tweet]:
     """
     start = time.monotonic()
     blocked = _exclude_blocked_users_qs(user)
+    # Phase 4B (#445): Mute (一方向) を追加。Block は双方向、Mute は muter→mutee 一方向。
+    # どちらでも非表示にしたいので set 統合する (get_muted_user_ids は lazy-import shim
+    # で Mute モデル未実装期間は空 set を返す)。
+    excluded = set(blocked) | get_muted_user_ids(user)
 
     follow_n = max(int(TL_BUFFER_SIZE * TL_RATIO_FOLLOWING), limit)
     global_n = max(int(TL_BUFFER_SIZE * TL_RATIO_GLOBAL), limit // 2)
 
-    following = _query_following(user, blocked, follow_n)
-    glob = _query_global(blocked, exclude_author_id=user.pk, limit=global_n)
+    following = _query_following(user, excluded, follow_n)
+    glob = _query_global(excluded, exclude_author_id=user.pk, limit=global_n)
 
     merged = _interleave_70_30(following, glob)
     deduped = _dedup_repost_originals(merged)
