@@ -164,14 +164,14 @@ class TestReportAPI:
             "/api/v1/moderation/reports/",
             {
                 "target_type": "tweet",
-                "target_id": str(tweet.id),
+                "target_id": str(tweet.pk),
                 "reason": "spam",
                 "note": "広告URL",
             },
             format="json",
         )
         assert res.status_code == 201, res.content
-        assert Report.objects.filter(reporter=a, target_id=str(tweet.id)).exists()
+        assert Report.objects.filter(reporter=a, target_id=str(tweet.pk)).exists()
         body = res.json()
         assert body["status"] == "pending"
 
@@ -208,7 +208,7 @@ class TestReportAPI:
         tweet = self._make_tweet(a)
         res = _client(a).post(
             "/api/v1/moderation/reports/",
-            {"target_type": "tweet", "target_id": str(tweet.id), "reason": "spam"},
+            {"target_type": "tweet", "target_id": str(tweet.pk), "reason": "spam"},
             format="json",
         )
         assert res.status_code == 400
@@ -222,7 +222,7 @@ class TestReportAPI:
             "/api/v1/moderation/reports/",
             {
                 "target_type": "tweet",
-                "target_id": str(tweet.id),
+                "target_id": str(tweet.pk),
                 "reason": "not_real",
             },
             format="json",

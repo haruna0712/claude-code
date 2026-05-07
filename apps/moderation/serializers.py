@@ -110,6 +110,8 @@ def _resolve_target(target_type: str, target_id: str) -> Any:
             return None
         return User.objects.filter(id=uid, is_active=True).first()
     if target_type == Report.Target.TWEET:
+        # Tweet は BigAutoField PK (DEFAULT_AUTO_FIELD)。User の `id`(UUID) /
+        # `pkid`(BigAuto) と異なり Tweet.pk == Tweet.id (両方 int)。
         try:
             from apps.tweets.models import Tweet
         except ImportError:
@@ -146,16 +148,17 @@ def _resolve_target(target_type: str, target_id: str) -> Any:
 
 
 def _get_target_author_id(target: Any) -> Any:
-    """通報対象 instance の author/sender pk を返す (該当なしは None)."""
+    """通報対象 instance の author/sender pk を返す (該当なしは None).
+
+    User target の自己チェックは validate() の上位 if ブロックで完結するため、
+    ここで User を扱う必要はない (python-reviewer WARN #2: dead fallback 削除)。
+    """
     if target is None:
         return None
     for attr in ("author_id", "sender_id"):
         v = getattr(target, attr, None)
         if v is not None:
             return v
-    # User target の場合は target.pk を author 扱い (自己通報チェック用)
-    if hasattr(target, "username"):
-        return target.pk
     return None
 
 
