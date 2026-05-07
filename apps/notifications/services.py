@@ -62,6 +62,19 @@ def create_notification(
     if not is_kind_enabled_for(recipient, kind):
         return None
 
+    # Phase 4B (#445): Block / Mute フィルタ。
+    # - recipient が actor を Block している (双方向) → notify しない
+    # - recipient が actor を Mute している (一方向) → notify しない
+    # actor が None (system notification) のときは skip しない。
+    if actor is not None:
+        from apps.common.blocking import is_blocked_relationship
+        from apps.common.muting import is_muted_by
+
+        if is_blocked_relationship(recipient, actor):
+            return None
+        if is_muted_by(recipient, actor):
+            return None
+
     # target_id stringify
     target_id_str = "" if target_id is None else str(target_id)
 
