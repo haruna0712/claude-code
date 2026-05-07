@@ -53,6 +53,11 @@ EXPECTED_PUBLIC_KEYS = {
     # #421: X 風プロフィールに follower / following 数を表示するため公開。
     "followers_count",
     "following_count",
+    # Phase 4B (#448 #449): ProfileKebab / ReportDialog 初期状態用。
+    # bool のみで PII 漏出無し。user_id は UUID (公開 ID、URL に既に出ている)。
+    "is_blocking",
+    "is_muting",
+    "user_id",
 }
 
 
