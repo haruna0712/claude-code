@@ -677,6 +677,12 @@ STORAGES = {
                 "bucket_name": getenv("AWS_STATIC_BUCKET_NAME", ""),
                 "custom_domain": getenv("AWS_S3_STATIC_CUSTOM_DOMAIN", "") or None,
                 "location": "static",
+                # #439: custom_domain (CloudFront) 経由で配信する場合は presigned
+                # URL ではなくクリーン URL を生成させる。querystring_auth=True
+                # (default) のままだと <link href="https://<bucket>.s3...?X-Amz-..."> と
+                # S3 直 URL を出してしまい、CloudFront の /static/* path-pattern
+                # behavior をすり抜けて OAC で 403 になる。
+                "querystring_auth": False,
             }
             if _use_s3 and getenv("AWS_STATIC_BUCKET_NAME")
             else {}
