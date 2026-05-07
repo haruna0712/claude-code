@@ -12,11 +12,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
-import { MoreHorizontal, Trash2 } from "lucide-react";
+import { Flag, MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 import ReactionBar from "@/components/reactions/ReactionBar";
 import ReactionSummary from "@/components/reactions/ReactionSummary";
 import ExpandableBody from "@/components/timeline/ExpandableBody";
+import ReportDialog from "@/components/moderation/ReportDialog";
 import PostDialog from "@/components/tweets/PostDialog";
 import RepostButton from "@/components/tweets/RepostButton";
 import {
@@ -159,12 +160,17 @@ export default function TweetCard({
 	const [replyOpen, setReplyOpen] = useState(false);
 	const [quoteOpen, setQuoteOpen] = useState(false);
 	const [deleteBusy, setDeleteBusy] = useState(false);
+	// Phase 4B (#449): 通報モーダル開閉
+	const [reportOpen, setReportOpen] = useState(false);
 	const [locallyDeleted, setLocallyDeleted] = useState(false);
 	const isRepost = tweet.type === "repost" && tweet.repost_of;
 	const displayTweet = isRepost ? tweet.repost_of! : tweet;
 	const reposterName = tweet.author_display_name ?? tweet.author_handle;
 	const canDelete =
 		!!currentUserHandle && displayTweet.author_handle === currentUserHandle;
+	// Phase 4B (#449): 自分以外のツイートに「通報」を出す。未ログイン時は出さない。
+	const canReport =
+		!!currentUserHandle && displayTweet.author_handle !== currentUserHandle;
 	const deleteTargetId = displayTweet.id;
 
 	// #340: card 全体クリックで /tweet/<id> に遷移 (X 慣習)。
@@ -412,7 +418,7 @@ export default function TweetCard({
 					>
 						{relativeTime}
 					</time>
-					{canDelete ? (
+					{canDelete || canReport ? (
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
 								<button
@@ -425,17 +431,30 @@ export default function TweetCard({
 								</button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end" className="min-w-[10rem]">
-								<DropdownMenuItem
-									className="text-destructive focus:text-destructive"
-									disabled={deleteBusy}
-									onSelect={(event) => {
-										event.preventDefault();
-										handleDelete();
-									}}
-								>
-									<Trash2 className="mr-2 size-4" aria-hidden="true" />
-									削除
-								</DropdownMenuItem>
+								{canDelete ? (
+									<DropdownMenuItem
+										className="text-destructive focus:text-destructive"
+										disabled={deleteBusy}
+										onSelect={(event) => {
+											event.preventDefault();
+											handleDelete();
+										}}
+									>
+										<Trash2 className="mr-2 size-4" aria-hidden="true" />
+										削除
+									</DropdownMenuItem>
+								) : null}
+								{canReport ? (
+									<DropdownMenuItem
+										onSelect={(event) => {
+											event.preventDefault();
+											setReportOpen(true);
+										}}
+									>
+										<Flag className="mr-2 size-4" aria-hidden="true" />
+										通報する
+									</DropdownMenuItem>
+								) : null}
 							</DropdownMenuContent>
 						</DropdownMenu>
 					) : null}
@@ -623,6 +642,16 @@ export default function TweetCard({
 					is_deleted: displayTweet.is_deleted ?? false,
 				}}
 			/>
+			{/* Phase 4B (#449): 通報モーダル (canReport が true のときのみ open=true になる) */}
+			{canReport ? (
+				<ReportDialog
+					open={reportOpen}
+					onOpenChange={setReportOpen}
+					target_type="tweet"
+					target_id={String(displayTweet.id)}
+					target_label={`@${displayTweet.author_handle} のツイート`}
+				/>
+			) : null}
 		</article>
 	);
 }

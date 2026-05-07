@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import StartDMButton from "@/components/dm/StartDMButton";
 import FollowButton from "@/components/follows/FollowButton";
+import ProfileKebab from "@/components/moderation/ProfileKebab";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
@@ -30,6 +31,11 @@ interface PublicProfile {
 	/** #421: X 風 — フォロワー数 / フォロー中数 */
 	followers_count: number;
 	following_count: number;
+	/** Phase 4B (#448): ProfileKebab の初期状態 */
+	is_blocking: boolean;
+	is_muting: boolean;
+	/** Phase 4B (#449): User UUID (ReportDialog の target_id 用) */
+	user_id: string;
 }
 
 type ProfileTab = "tweets" | "likes";
@@ -203,6 +209,13 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 								initialIsFollowing={profile.is_following}
 							/>
 							<StartDMButton targetHandle={profile.username} />
+							{/* Phase 4B (#448): X 風 kebab → ミュート / ブロック / 通報 */}
+							<ProfileKebab
+								target_handle={profile.username}
+								target_user_id={profile.user_id}
+								initial_is_blocking={profile.is_blocking}
+								initial_is_muting={profile.is_muting}
+							/>
 						</>
 					)}
 				</div>

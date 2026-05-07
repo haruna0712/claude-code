@@ -128,6 +128,12 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     # 1 query (Follow.objects.filter(...).exists()) で済むので N+1 リスク無し。
     is_following = serializers.SerializerMethodField()
 
+    # Phase 4B (#448): ProfileKebab の初期状態判定用。
+    is_blocking = serializers.SerializerMethodField()
+    is_muting = serializers.SerializerMethodField()
+    # Phase 4B (#449): ReportDialog で target_id (UUID) として送る。
+    user_id = serializers.UUIDField(source="id", read_only=True)
+
     def get_is_following(self, obj: User) -> bool:
         request = self.context.get("request")
         if not request or not getattr(request, "user", None):
@@ -139,6 +145,28 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         from apps.follows.models import Follow
 
         return Follow.objects.filter(follower=viewer, followee=obj).exists()
+
+    def get_is_blocking(self, obj: User) -> bool:
+        request = self.context.get("request")
+        viewer = getattr(request, "user", None) if request else None
+        if viewer is None or not getattr(viewer, "is_authenticated", False) or viewer.pk == obj.pk:
+            return False
+        try:
+            from apps.moderation.models import Block
+        except ImportError:
+            return False
+        return Block.objects.filter(blocker=viewer, blockee=obj).exists()
+
+    def get_is_muting(self, obj: User) -> bool:
+        request = self.context.get("request")
+        viewer = getattr(request, "user", None) if request else None
+        if viewer is None or not getattr(viewer, "is_authenticated", False) or viewer.pk == obj.pk:
+            return False
+        try:
+            from apps.moderation.models import Mute
+        except ImportError:
+            return False
+        return Mute.objects.filter(muter=viewer, mutee=obj).exists()
 
     class Meta:
         model = User
@@ -157,6 +185,10 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             "full_name",
             "date_joined",
             "is_following",
+            # Phase 4B (#448 #449): ProfileKebab / ReportDialog の初期状態
+            "is_blocking",
+            "is_muting",
+            "user_id",
             # #421: フォロー数 / フォロワー数 (X 風プロフィール表示)
             "followers_count",
             "following_count",
