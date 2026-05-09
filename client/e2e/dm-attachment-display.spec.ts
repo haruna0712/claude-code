@@ -54,7 +54,8 @@ async function loginViaApi(
 	page: import("@playwright/test").Page,
 	user: { email: string; password: string },
 ) {
-	const resp = await page.context().request.post(`${BASE}/api/v1/auth/csrf/`);
+	// CSRF cookie 種付け (GET エンドポイント)
+	const resp = await page.context().request.get(`${BASE}/api/v1/auth/csrf/`);
 	expect(resp.status()).toBeLessThan(400);
 	const cookies = await page.context().cookies(BASE);
 	const csrf = cookies.find((c) => c.name === "csrftoken")?.value ?? "";
