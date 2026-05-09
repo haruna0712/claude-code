@@ -3,6 +3,28 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import MessageComposer from "@/components/dm/MessageComposer";
+import type { ConfirmResponse } from "@/lib/dm/attachments";
+
+let nextAttachment: ConfirmResponse | null = null;
+
+vi.mock("@/components/dm/AttachmentUploader", () => ({
+	default: ({
+		onUploaded,
+		disabled,
+	}: {
+		onUploaded: (a: ConfirmResponse) => void;
+		disabled?: boolean;
+	}) => (
+		<button
+			type="button"
+			aria-label="添付ファイルを選択"
+			disabled={disabled}
+			onClick={() => {
+				if (nextAttachment) onUploaded(nextAttachment);
+			}}
+		/>
+	),
+}));
 
 describe("MessageComposer", () => {
 	it("submit で onSubmit が呼ばれ textarea がクリアされる", async () => {
@@ -74,5 +96,69 @@ describe("MessageComposer", () => {
 			screen.getByRole("button", { name: "添付ファイルを選択" }),
 		).toBeInTheDocument();
 		expect(screen.getByText(/画像\/ファイル添付/)).toBeInTheDocument();
+	});
+
+	// #469: image attachment はサムネイル表示 (Slack/Discord 標準 UX)
+	it("image MIME の attachment はサムネイル <img> として描画される", async () => {
+		nextAttachment = {
+			id: 42,
+			s3_key: "rooms/1/cat.png",
+			url: "https://cdn.example.com/cat.png",
+			filename: "cat.png",
+			mime_type: "image/png",
+			size: 1024,
+			width: 100,
+			height: 100,
+		};
+		render(<MessageComposer onSubmit={() => {}} roomId={1} />);
+		await userEvent.click(
+			screen.getByRole("button", { name: "添付ファイルを選択" }),
+		);
+		const img = await screen.findByRole("img", { name: "cat.png" });
+		expect(img).toHaveAttribute("src", "https://cdn.example.com/cat.png");
+	});
+
+	it("non-image MIME の attachment は従来通り chip 表示", async () => {
+		nextAttachment = {
+			id: 43,
+			s3_key: "rooms/1/spec.pdf",
+			url: "https://cdn.example.com/spec.pdf",
+			filename: "spec.pdf",
+			mime_type: "application/pdf",
+			size: 2048,
+			width: null,
+			height: null,
+		};
+		render(<MessageComposer onSubmit={() => {}} roomId={1} />);
+		await userEvent.click(
+			screen.getByRole("button", { name: "添付ファイルを選択" }),
+		);
+		expect(await screen.findByText("spec.pdf")).toBeInTheDocument();
+		// 画像ではないので img は出ない
+		expect(screen.queryByRole("img", { name: "spec.pdf" })).toBeNull();
+	});
+
+	it("サムネイルの × ボタンで添付が外れる", async () => {
+		nextAttachment = {
+			id: 44,
+			s3_key: "rooms/1/dog.jpg",
+			url: "https://cdn.example.com/dog.jpg",
+			filename: "dog.jpg",
+			mime_type: "image/jpeg",
+			size: 512,
+			width: 50,
+			height: 50,
+		};
+		render(<MessageComposer onSubmit={() => {}} roomId={1} />);
+		await userEvent.click(
+			screen.getByRole("button", { name: "添付ファイルを選択" }),
+		);
+		expect(
+			await screen.findByRole("img", { name: "dog.jpg" }),
+		).toBeInTheDocument();
+		await userEvent.click(
+			screen.getByRole("button", { name: "dog.jpg を添付から外す" }),
+		);
+		expect(screen.queryByRole("img", { name: "dog.jpg" })).toBeNull();
 	});
 });

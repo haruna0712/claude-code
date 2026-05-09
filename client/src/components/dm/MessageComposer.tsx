@@ -33,6 +33,8 @@ interface AttachedFile {
 	filename: string;
 	mimeType: string;
 	size: number;
+	/** Issue #469: image MIME のときバックエンド (CloudFront) URL。サムネイル <img src> に使う。 */
+	url: string;
 }
 
 function formatBytes(n: number): string {
@@ -92,6 +94,7 @@ export default function MessageComposer({
 				filename: attachment.filename,
 				mimeType: attachment.mime_type,
 				size: attachment.size,
+				url: attachment.url,
 			},
 		]);
 	}, []);
@@ -120,27 +123,59 @@ export default function MessageComposer({
 			) : null}
 			{attached.length > 0 ? (
 				<ul aria-label="添付ファイル一覧" className="flex flex-wrap gap-2 px-1">
-					{attached.map((a) => (
-						<li
-							key={a.id}
-							className="bg-baby_veryBlack border-baby_grey/30 text-baby_white flex items-center gap-2 rounded-md border px-2 py-1 text-xs"
-						>
-							<span aria-hidden="true">
-								{a.mimeType.startsWith("image/") ? "🖼️" : "📎"}
-							</span>
-							<span className="max-w-[160px] truncate">{a.filename}</span>
-							<span className="text-baby_grey">{formatBytes(a.size)}</span>
-							<button
-								type="button"
-								onClick={() => removeAttached(a.id)}
-								disabled={submitting}
-								aria-label={`${a.filename} を添付から外す`}
-								className="text-baby_grey hover:text-baby_red focus-visible:ring-baby_blue ml-1 rounded focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+					{attached.map((a) => {
+						const isImage = a.mimeType.startsWith("image/") && a.url;
+						if (isImage) {
+							// Issue #469: image はサムネイル表示 (Slack/Discord/WhatsApp 標準 UX)
+							return (
+								<li
+									key={a.id}
+									className="bg-baby_veryBlack border-baby_grey/30 text-baby_white flex w-20 flex-col gap-1 rounded-md border p-1 text-[10px]"
+								>
+									<div className="relative">
+										{/* eslint-disable-next-line @next/next/no-img-element */}
+										<img
+											src={a.url}
+											alt={a.filename}
+											className="border-baby_grey/20 size-[72px] rounded border object-cover"
+										/>
+										<button
+											type="button"
+											onClick={() => removeAttached(a.id)}
+											disabled={submitting}
+											aria-label={`${a.filename} を添付から外す`}
+											className="bg-baby_veryBlack/80 text-baby_white hover:bg-baby_red focus-visible:ring-baby_blue border-baby_grey/40 absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full border text-xs leading-none focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+										>
+											×
+										</button>
+									</div>
+									<span className="truncate" title={a.filename}>
+										{a.filename}
+									</span>
+									<span className="text-baby_grey">{formatBytes(a.size)}</span>
+								</li>
+							);
+						}
+						return (
+							<li
+								key={a.id}
+								className="bg-baby_veryBlack border-baby_grey/30 text-baby_white flex items-center gap-2 rounded-md border px-2 py-1 text-xs"
 							>
-								×
-							</button>
-						</li>
-					))}
+								<span aria-hidden="true">📎</span>
+								<span className="max-w-[160px] truncate">{a.filename}</span>
+								<span className="text-baby_grey">{formatBytes(a.size)}</span>
+								<button
+									type="button"
+									onClick={() => removeAttached(a.id)}
+									disabled={submitting}
+									aria-label={`${a.filename} を添付から外す`}
+									className="text-baby_grey hover:text-baby_red focus-visible:ring-baby_blue ml-1 rounded focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+								>
+									×
+								</button>
+							</li>
+						);
+					})}
 				</ul>
 			) : null}
 			<div className="flex items-end gap-2">
