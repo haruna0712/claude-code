@@ -63,6 +63,7 @@ from apps.dm.serializers import (
     DMRoomSerializer,
     GroupInvitationSerializer,
     MarkRoomReadInputSerializer,
+    MessageAttachmentSerializer,
     MessageSerializer,
     PresignAttachmentInputSerializer,
 )
@@ -486,13 +487,15 @@ class PresignAttachmentView(APIView):
 class ConfirmAttachmentView(APIView):
     """``POST /api/v1/dm/attachments/confirm/``: presign で PUT 完了した object の確定.
 
-    body: ``{"room_id", "s3_key", "filename", "mime_type", "size"}``
-    response (201): ``{"id": <attachment_id>, "s3_key", "filename", "mime_type", "size"}``
+    body: ``{"room_id", "s3_key", "filename", "mime_type", "size", ["width", "height"]}``
+    response (201): ``MessageAttachmentSerializer`` 全フィールド (id, s3_key, url,
+    filename, mime_type, size, width, height)
 
     フロー:
     1. room メンバー検証 (404 で probing 防止)
     2. service ``confirm_attachment`` で S3 head_object 再検証 → orphan 作成
-    3. id を返す (フロントは send_message に attachment_ids として渡す)
+    3. attachment 全フィールドを serializer で返す。frontend (compose preview の
+       サムネイル表示など) が ``url`` を直接利用する。
 
     rate limit ``dm_attachment_confirm`` 30/hour (security-reviewer HIGH H-3)
     """
@@ -524,14 +527,10 @@ class ConfirmAttachmentView(APIView):
         except DjangoPermissionDenied as exc:  # security LOW L-1: 将来の互換のため
             raise PermissionDenied(str(exc)) from exc
 
+        # Issue #473: list/WS と同じ MessageAttachmentSerializer で返し、
+        # compose preview が直接 ``url`` (CloudFront 配信) を使えるようにする
         return Response(
-            {
-                "id": attachment.pk,
-                "s3_key": attachment.s3_key,
-                "filename": attachment.filename,
-                "mime_type": attachment.mime_type,
-                "size": attachment.size,
-            },
+            MessageAttachmentSerializer(attachment).data,
             status=status.HTTP_201_CREATED,
         )
 

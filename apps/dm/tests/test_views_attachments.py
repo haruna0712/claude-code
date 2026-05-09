@@ -170,6 +170,47 @@ def test_confirm_view_creates_orphan(settings) -> None:
     assert isinstance(body["id"], int)
 
 
+# Issue #473: confirm レスポンスに url/width/height (= MessageAttachmentSerializer 全フィールド)
+# を含める。compose preview のサムネイル表示が a.url を必要とするため。
+
+
+@pytest.mark.django_db
+def test_confirm_view_returns_url_width_height(settings) -> None:
+    settings.AWS_STORAGE_BUCKET_NAME = "test-bucket"
+    settings.DM_ATTACHMENT_BASE_URL = "https://stg.codeplace.me"
+    user = make_user()
+    room = make_room()
+    make_membership(room=room, user=user)
+
+    s3_key = f"dm/{room.pk}/2026/05/cat.png"
+    with patch(
+        "apps.dm.services._presign.head_object",
+        return_value=S3ObjectInfo(content_length=512, content_type="image/png"),
+    ):
+        resp = _client_for(user).post(
+            reverse("dm:attachment-confirm"),
+            {
+                "room_id": room.pk,
+                "s3_key": s3_key,
+                "filename": "cat.png",
+                "mime_type": "image/png",
+                "size": 512,
+                "width": 100,
+                "height": 100,
+            },
+            format="json",
+        )
+
+    assert resp.status_code == 201, resp.content
+    body = resp.json()
+    # MessageAttachmentSerializer 全フィールドが返る
+    assert body["url"] == f"https://stg.codeplace.me/{s3_key}"
+    assert body["width"] == 100
+    assert body["height"] == 100
+    assert body["mime_type"] == "image/png"
+    assert body["size"] == 512
+
+
 # Issue #459: confirm view が width/height を受け付けて DB に保存する
 
 
