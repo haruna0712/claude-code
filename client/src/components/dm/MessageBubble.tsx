@@ -1,17 +1,23 @@
 "use client";
 
 /**
- * 1 メッセージ表示 (P3-09 / Issue #234).
+ * 1 メッセージ表示 (P3-09 / Issue #234, Issue #462 / #463 で添付リッチ表示).
  *
  * - 自分の送信: 右寄せ + accent カラー
  * - 相手の送信: 左寄せ + neutral カラー
- * - 添付 (画像 / ファイル) を簡易表示
+ * - 添付:
+ *   - image MIME → AttachmentImageGrid (1〜5+ 枚配置)
+ *   - non-image → AttachmentFileChip (filename + size + ダウンロード)
+ *   - 画像クリックで AttachmentLightbox (focus trap, ESC, ←→)
  * - status="sending" / "failed" を視覚的に区別
- *
- * Phase 3 はリッチプレビュー (lightbox / image lazy / markdown) は scope 外、
- * テキストと添付ファイル名のみ表示。
  */
 
+import { useState } from "react";
+
+import AttachmentFileChip from "@/components/dm/AttachmentFileChip";
+import AttachmentImageGrid from "@/components/dm/AttachmentImageGrid";
+import AttachmentLightbox from "@/components/dm/AttachmentLightbox";
+import { partitionAttachments } from "@/lib/dm/attachmentDisplay";
 import type { DMMessage } from "@/lib/redux/features/dm/types";
 import { formatRelativeTime } from "@/lib/timeline/formatTime";
 
@@ -35,6 +41,9 @@ export default function MessageBubble({
 }: MessageBubbleProps) {
 	const mine = message.sender_id === currentUserId;
 	const canDelete = mine && status === "sent" && onDelete;
+	// Issue #462 / #463: 添付分割 + lightbox 状態
+	const { images, files } = partitionAttachments(message.attachments ?? []);
+	const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 	return (
 		<div
 			data-testid="message-bubble"
@@ -75,14 +84,29 @@ export default function MessageBubble({
 				{message.body ? (
 					<p className="whitespace-pre-wrap">{message.body}</p>
 				) : null}
-				{message.attachments?.length ? (
-					<ul className="mt-2 space-y-1">
-						{message.attachments.map((att) => (
-							<li key={att.id} className="text-xs underline">
-								{att.filename || att.s3_key}
+				{images.length > 0 ? (
+					<AttachmentImageGrid
+						images={images}
+						onOpenLightbox={(i) => setLightboxIndex(i)}
+					/>
+				) : null}
+				{files.length > 0 ? (
+					<ul className="mt-2 space-y-1" aria-label="添付ファイル">
+						{files.map((att) => (
+							<li key={att.id}>
+								<AttachmentFileChip attachment={att} />
 							</li>
 						))}
 					</ul>
+				) : null}
+				{images.length > 0 ? (
+					<AttachmentLightbox
+						images={images}
+						openIndex={lightboxIndex}
+						onOpenChange={(open) =>
+							setLightboxIndex(open ? lightboxIndex : null)
+						}
+					/>
 				) : null}
 				<div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-75">
 					{status === "sending" ? (

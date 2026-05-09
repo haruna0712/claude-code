@@ -61,7 +61,8 @@ describe("MessageBubble", () => {
 		expect(screen.getByRole("button", { name: /再試行/ })).toBeInTheDocument();
 	});
 
-	it("attachments を filename で表示", () => {
+	// Issue #462: 画像 attachment は <img alt={filename}> で表示される
+	it("画像 attachment は img alt として filename を表示", () => {
 		render(
 			<MessageBubble
 				message={makeMessage({
@@ -69,8 +70,32 @@ describe("MessageBubble", () => {
 						{
 							id: 1,
 							s3_key: "dm/10/2026/05/x.jpg",
+							url: "https://stg.example/dm/10/2026/05/x.jpg",
 							filename: "photo.jpg",
 							mime_type: "image/jpeg",
+							size: 1024,
+							width: 640,
+							height: 480,
+						},
+					],
+				})}
+				currentUserId={100}
+			/>,
+		);
+		expect(screen.getByAltText("photo.jpg")).toBeInTheDocument();
+	});
+
+	it("非画像 attachment は file chip として filename テキスト表示 + ダウンロードリンク", () => {
+		render(
+			<MessageBubble
+				message={makeMessage({
+					attachments: [
+						{
+							id: 2,
+							s3_key: "dm/10/2026/05/x.pdf",
+							url: "https://stg.example/dm/10/2026/05/x.pdf",
+							filename: "doc.pdf",
+							mime_type: "application/pdf",
 							size: 1024,
 							width: null,
 							height: null,
@@ -80,6 +105,11 @@ describe("MessageBubble", () => {
 				currentUserId={100}
 			/>,
 		);
-		expect(screen.getByText("photo.jpg")).toBeInTheDocument();
+		expect(screen.getByText("doc.pdf")).toBeInTheDocument();
+		const link = screen.getByRole("link", { name: /ダウンロード: doc\.pdf/ });
+		expect(link).toHaveAttribute(
+			"href",
+			"https://stg.example/dm/10/2026/05/x.pdf",
+		);
 	});
 });

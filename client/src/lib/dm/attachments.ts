@@ -11,6 +11,7 @@
  */
 
 import { api } from "@/lib/api/client";
+import { measureImageDimensions } from "@/lib/dm/imageDimensions";
 import type { MessageAttachment } from "@/lib/redux/features/dm/types";
 
 export const ATTACHMENT_LIMITS = {
@@ -168,6 +169,9 @@ export async function confirmAttachment(input: {
 	filename: string;
 	mimeType: string;
 	size: number;
+	/** Issue #461: image MIME のとき client 計測した実寸。non-image / 計測失敗で undefined。 */
+	width?: number;
+	height?: number;
 }): Promise<ConfirmResponse> {
 	const { data } = await api.post<ConfirmResponse>("/dm/attachments/confirm/", {
 		room_id: input.roomId,
@@ -175,6 +179,8 @@ export async function confirmAttachment(input: {
 		filename: input.filename,
 		mime_type: input.mimeType,
 		size: input.size,
+		...(input.width !== undefined ? { width: input.width } : {}),
+		...(input.height !== undefined ? { height: input.height } : {}),
 	});
 	return data;
 }
@@ -182,6 +188,9 @@ export async function confirmAttachment(input: {
 /**
  * presign → S3 PUT → confirm を 1 ステップで実行する高レベル API。
  * 進捗は onProgress に渡す (S3 PUT 区間のみ、presign / confirm は瞬時)。
+ *
+ * Issue #461: image MIME のとき confirm 前に実寸を計測して payload に同梱する。
+ * 計測失敗 (壊れた画像 / timeout) でも送信は continue する。
  */
 export async function uploadAttachment(input: {
 	roomId: number;
@@ -193,6 +202,9 @@ export async function uploadAttachment(input: {
 	if (validation) {
 		throw new Error(validation.message);
 	}
+	// 画像の実寸を先に計測 (presign / S3 PUT と並列でも良いが、network 待機中の
+	// CPU 余り時間でほぼ瞬時に終わるので逐次で十分)。
+	const dimensions = await measureImageDimensions(input.file);
 	const presign = await requestPresign({
 		roomId: input.roomId,
 		filename: input.file.name,
@@ -211,5 +223,7 @@ export async function uploadAttachment(input: {
 		filename: input.file.name,
 		mimeType: input.file.type,
 		size: input.file.size,
+		width: dimensions?.width,
+		height: dimensions?.height,
 	});
 }
