@@ -52,6 +52,7 @@ describe("AttachmentUploader", () => {
 		uploadAttachmentMock.mockResolvedValue({
 			id: 7,
 			s3_key: "dm/1/2026/05/x.jpg",
+			url: "https://stg.example/dm/1/2026/05/x.jpg",
 			filename: "photo.jpg",
 			mime_type: "image/jpeg",
 			size: 1024,

@@ -99,10 +99,12 @@ export interface CreateGroupRoomInput {
 
 export type CreateRoomInput = CreateDirectRoomInput | CreateGroupRoomInput;
 
-/** Django apps/dm/serializers.MessageAttachmentSerializer と一致 (P3-09 / P3-06). */
+/** Django apps/dm/serializers.MessageAttachmentSerializer と一致 (P3-09 / P3-06 / #458). */
 export interface MessageAttachment {
 	id: number;
 	s3_key: string;
+	/** Issue #458: backend 組み立て済の絶対 URL (CloudFront 配信)。img src / a href に使う。 */
+	url: string;
 	filename: string;
 	mime_type: string;
 	size: number;

@@ -41,6 +41,10 @@ locals {
     # ドメイン。base.py の STATICFILES_STORAGE OPTIONS.custom_domain にマッピング
     # される。CloudFront 側に `/static/* → static origin` の behavior を設定済 (edge/main.tf)。
     { name = "AWS_S3_STATIC_CUSTOM_DOMAIN", value = var.app_fqdn },
+    # Issue #458: MessageAttachmentSerializer.get_url の base URL。
+    # CloudFront `/dm/*` path-pattern が S3 media origin に振っているので
+    # frontend は `https://<app_fqdn>/<s3_key>` で添付画像/ファイルを取得できる。
+    { name = "DM_ATTACHMENT_BASE_URL", value = "https://${var.app_fqdn}" },
     { name = "POSTGRES_HOST", value = var.rds_endpoint },
     { name = "POSTGRES_PORT", value = "5432" },
     { name = "POSTGRES_DB", value = var.rds_database_name },

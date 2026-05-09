@@ -170,6 +170,67 @@ def test_confirm_view_creates_orphan(settings) -> None:
     assert isinstance(body["id"], int)
 
 
+# Issue #459: confirm view が width/height を受け付けて DB に保存する
+
+
+@pytest.mark.django_db
+def test_confirm_view_saves_width_height(settings) -> None:
+    """image MIME で width/height を含めて POST → DB 保存される."""
+    settings.AWS_STORAGE_BUCKET_NAME = "test-bucket"
+    user = make_user()
+    room = make_room()
+    make_membership(room=room, user=user)
+
+    s3_key = f"dm/{room.pk}/2026/05/sized.png"
+    with patch(
+        "apps.dm.services._presign.head_object",
+        return_value=S3ObjectInfo(content_length=2048, content_type="image/png"),
+    ):
+        resp = _client_for(user).post(
+            reverse("dm:attachment-confirm"),
+            {
+                "room_id": room.pk,
+                "s3_key": s3_key,
+                "filename": "sized.png",
+                "mime_type": "image/png",
+                "size": 2048,
+                "width": 1296,
+                "height": 952,
+            },
+            format="json",
+        )
+
+    assert resp.status_code == 201, resp.content
+    from apps.dm.models import MessageAttachment
+
+    att = MessageAttachment.objects.get(s3_key=s3_key)
+    assert att.width == 1296
+    assert att.height == 952
+
+
+@pytest.mark.django_db
+def test_confirm_view_400_for_oversize_dimension(settings) -> None:
+    settings.AWS_STORAGE_BUCKET_NAME = "test-bucket"
+    user = make_user()
+    room = make_room()
+    make_membership(room=room, user=user)
+
+    resp = _client_for(user).post(
+        reverse("dm:attachment-confirm"),
+        {
+            "room_id": room.pk,
+            "s3_key": f"dm/{room.pk}/2026/05/huge.png",
+            "filename": "huge.png",
+            "mime_type": "image/png",
+            "size": 2048,
+            "width": 99999,
+            "height": 100,
+        },
+        format="json",
+    )
+    assert resp.status_code == 400
+
+
 @pytest.mark.django_db
 def test_confirm_view_404_for_non_member() -> None:
     intruder = make_user()
