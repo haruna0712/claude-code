@@ -18,6 +18,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import InviteMemberButton from "@/components/dm/InviteMemberButton";
 import MessageComposer from "@/components/dm/MessageComposer";
 import MessageList from "@/components/dm/MessageList";
 import TypingIndicator from "@/components/dm/TypingIndicator";
@@ -167,10 +168,16 @@ export default function RoomChat({ roomId, currentUserId }: RoomChatProps) {
 						{displayName}
 					</h1>
 				</div>
-				<SocketStatusBadge
-					status={socket.status}
-					onReconnect={socket.reconnect}
-				/>
+				<div className="flex items-center gap-2">
+					<InviteMemberButton
+						room={roomQuery.data}
+						currentUserId={currentUserId}
+					/>
+					<SocketStatusBadge
+						status={socket.status}
+						onReconnect={socket.reconnect}
+					/>
+				</div>
 			</header>
 			<MessageList
 				messages={merged}

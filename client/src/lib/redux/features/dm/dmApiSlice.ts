@@ -75,6 +75,23 @@ export const dmApiSlice = baseApiSlice.injectEndpoints({
 						]
 					: [{ type: "DMInvitation" as const, id: "LIST" }],
 		}),
+		// #476: 既存の group room に @handle 1 名を招待する。creator のみ。
+		// backend は POST /api/v1/dm/rooms/<id>/invitations/ (P3-04)。
+		// 成功時は invitation list と該当 room を invalidate して再 fetch させる。
+		createRoomInvitation: builder.mutation<
+			GroupInvitation,
+			{ roomId: number; invitee_handle: string }
+		>({
+			query: ({ roomId, invitee_handle }) => ({
+				url: `/dm/rooms/${roomId}/invitations/`,
+				method: "POST",
+				body: { invitee_handle },
+			}),
+			invalidatesTags: (_result, _error, { roomId }) => [
+				{ type: "DMInvitation" as const, id: "LIST" },
+				{ type: "DMRoom" as const, id: roomId },
+			],
+		}),
 		acceptInvitation: builder.mutation<GroupInvitation, number>({
 			query: (id) => ({
 				url: `/dm/invitations/${id}/accept/`,
@@ -142,6 +159,7 @@ export const {
 	useGetDMRoomQuery,
 	useCreateDMRoomMutation,
 	useListInvitationsQuery,
+	useCreateRoomInvitationMutation,
 	useAcceptInvitationMutation,
 	useDeclineInvitationMutation,
 	useListRoomMessagesQuery,
