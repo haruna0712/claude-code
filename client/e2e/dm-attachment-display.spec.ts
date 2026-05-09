@@ -92,17 +92,29 @@ test.describe("DM 添付表示 — 本物の UI E2E (Issue #464)", () => {
 		);
 		await fileInput.setInputFiles(FIXTURE_IMAGE);
 
-		// preview chip (📎 + filename) が出るまで待つ
-		const previewChip = page
-			.locator('ul[aria-label="添付ファイル一覧"] li')
-			.filter({ hasText: "sample-image.png" });
+		// preview チップ (image はサムネイル <img> 描画 / Issue #469)
+		const previewList = page.locator('ul[aria-label="添付ファイル一覧"]');
+		const previewChip = previewList.locator("li").filter({
+			hasText: "sample-image.png",
+		});
 		await expect(previewChip).toBeVisible({ timeout: 30000 });
+		// Issue #469: compose preview 内にサムネイル <img> が出る
+		const previewImg = previewList.getByRole("img", {
+			name: "sample-image.png",
+		});
+		await expect(previewImg).toBeVisible();
 
 		// 送信
 		await page.getByRole("button", { name: "送信" }).click();
 
+		// 送信後 preview が消えること (compose の img が無くなる)
+		await expect(previewList).toHaveCount(0, { timeout: 15000 });
+
 		// bubble 内に <img alt="sample-image.png"> が visible
-		const sentImg = page.getByRole("img", { name: "sample-image.png" }).first();
+		const sentImg = page
+			.locator('[data-testid="message-bubble"]')
+			.getByRole("img", { name: "sample-image.png" })
+			.first();
 		await expect(sentImg).toBeVisible({ timeout: 30000 });
 
 		// 画像クリックで lightbox 起動
