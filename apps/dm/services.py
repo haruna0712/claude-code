@@ -308,6 +308,8 @@ def confirm_attachment(
     filename: str,
     mime_type: str,
     size: int,
+    width: int | None = None,
+    height: int | None = None,
 ) -> MessageAttachment:
     """presigned PUT 完了後、S3 上の実物を head_object で再検証して orphan を作成する.
 
@@ -351,6 +353,11 @@ def confirm_attachment(
             f"S3 上の Content-Type ({info.content_type!r}) が申告 ({mime_type!r}) と一致しません"
         )
 
+    # Issue #459: width/height は image MIME のときのみ有効。
+    # non-image (pdf 等) で値が来ても None に強制し、表示時の混乱を防ぐ。
+    safe_width = width if mime_type.startswith("image/") else None
+    safe_height = height if mime_type.startswith("image/") else None
+
     return MessageAttachment.objects.create(
         message=None,
         room=room,
@@ -359,6 +366,8 @@ def confirm_attachment(
         filename=filename,
         mime_type=mime_type,
         size=size,
+        width=safe_width,
+        height=safe_height,
     )
 
 

@@ -112,6 +112,8 @@ jobs:
       DOMAIN: localhost
       # config/urls.py が `path(settings.ADMIN_URL, ...)` で参照するため空値だと URL 解決で落ちる。
       DJANGO_ADMIN_URL: "admin/"
+      # Issue #458: MessageAttachmentSerializer.get_url が参照
+      DM_ATTACHMENT_BASE_URL: "http://localhost:8080"
       # apps/common/logging.py 等で参照される可能性のある env を CI 用に埋める
       POSTGRES_DB: ci
       POSTGRES_USER: ci

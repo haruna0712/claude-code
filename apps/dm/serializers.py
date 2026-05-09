@@ -26,11 +26,16 @@ User = get_user_model()
 
 
 class MessageAttachmentSerializer(serializers.ModelSerializer):
+    """Attachment 出力用 (Issue #458 で `url` field 追加)."""
+
+    url = serializers.SerializerMethodField()
+
     class Meta:
         model = MessageAttachment
         fields = (
             "id",
             "s3_key",
+            "url",
             "filename",
             "mime_type",
             "size",
@@ -38,6 +43,19 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
             "height",
         )
         read_only_fields = fields
+
+    def get_url(self, obj: MessageAttachment) -> str:
+        """`<img src>` / `<a href download>` で frontend が直接使える絶対 URL.
+
+        `settings.DM_ATTACHMENT_BASE_URL` (= CloudFront 配信ドメイン) と
+        `s3_key` を結合する。stg/prod は ``https://<app_fqdn>``、local は
+        ``http://localhost:8080``。CloudFront の ``/dm/*`` path-pattern
+        behavior が S3 media origin に振る (既存)。
+        """
+        from django.conf import settings
+
+        base = settings.DM_ATTACHMENT_BASE_URL.rstrip("/")
+        return f"{base}/{obj.s3_key}"
 
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -208,7 +226,7 @@ class PresignAttachmentInputSerializer(serializers.Serializer):
 
 
 class ConfirmAttachmentInputSerializer(serializers.Serializer):
-    """``POST /api/v1/dm/attachments/confirm/`` の入力."""
+    """``POST /api/v1/dm/attachments/confirm/`` の入力 (Issue #459 で width/height 追加)."""
 
     room_id = serializers.IntegerField(min_value=1)
     # s3_key は presign で発行した値をそのまま戻してもらう。形式は services 層で再検証。
@@ -216,3 +234,7 @@ class ConfirmAttachmentInputSerializer(serializers.Serializer):
     filename = serializers.CharField(min_length=1, max_length=200)
     mime_type = serializers.CharField(min_length=1, max_length=100)
     size = serializers.IntegerField(min_value=1)
+    # Issue #459: 画像なら client 側で計測した実寸を保存し、表示時の CLS を防ぐ。
+    # non-image でも 400 にせず service 層で None に強制 (後方互換)。
+    width = serializers.IntegerField(min_value=1, max_value=20000, required=False, allow_null=True)
+    height = serializers.IntegerField(min_value=1, max_value=20000, required=False, allow_null=True)

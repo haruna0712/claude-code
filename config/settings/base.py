@@ -629,6 +629,15 @@ AWS_SECRET_ACCESS_KEY = getenv("AWS_SECRET_ACCESS_KEY", "")
 AWS_S3_REGION_NAME = getenv("AWS_S3_REGION_NAME", "ap-northeast-1")
 AWS_STORAGE_BUCKET_NAME = getenv("AWS_STORAGE_BUCKET_NAME", "")
 AWS_S3_CUSTOM_DOMAIN = getenv("AWS_S3_CUSTOM_DOMAIN", "")
+
+# Issue #458: DM 添付の絶対 URL を組み立てるための base (CloudFront 配信ドメイン)。
+# `MessageAttachmentSerializer.get_url` で `<base>/<s3_key>` を組む。CloudFront の
+# `/dm/*` path-pattern behavior が S3 media origin に振っている前提。
+# 例:
+#   - local: http://localhost:8080
+#   - stg:   https://stg.codeplace.me
+#   - prod:  https://<prod_domain>
+DM_ATTACHMENT_BASE_URL = getenv("DM_ATTACHMENT_BASE_URL", "")
 AWS_DEFAULT_ACL = None  # BucketOwnerEnforced と整合 (ACL 無効化)
 AWS_S3_FILE_OVERWRITE = False  # 同名ファイルは自動で suffix 付け
 AWS_S3_SIGNATURE_VERSION = "s3v4"

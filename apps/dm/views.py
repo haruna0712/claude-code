@@ -515,6 +515,9 @@ class ConfirmAttachmentView(APIView):
                 filename=data["filename"],
                 mime_type=data["mime_type"],
                 size=data["size"],
+                # Issue #459: image なら client 計測の実寸を保存
+                width=data.get("width"),
+                height=data.get("height"),
             )
         except DjangoValidationError as exc:
             raise DRFValidationError(detail=exc.messages) from exc

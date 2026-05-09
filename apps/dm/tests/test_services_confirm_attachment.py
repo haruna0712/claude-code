@@ -51,6 +51,79 @@ def test_confirm_attachment_creates_orphan() -> None:
     assert att.s3_key == s3_key
 
 
+# Issue #459: width/height を保存するテスト群
+
+
+@pytest.mark.django_db
+def test_confirm_attachment_saves_width_height_for_image() -> None:
+    """image MIME のとき client 計測の実寸を MessageAttachment に保存する."""
+    user = make_user()
+    room = make_room()
+    make_membership(room=room, user=user)
+
+    s3_key = f"dm/{room.pk}/2026/05/sized.png"
+    with _patched_head(content_length=2048, content_type="image/png"):
+        att = confirm_attachment(
+            user=user,
+            room=room,
+            s3_key=s3_key,
+            filename="sized.png",
+            mime_type="image/png",
+            size=2048,
+            width=1296,
+            height=952,
+        )
+
+    assert att.width == 1296
+    assert att.height == 952
+
+
+@pytest.mark.django_db
+def test_confirm_attachment_ignores_dimensions_for_non_image() -> None:
+    """non-image MIME (pdf 等) で width/height が来ても None に強制."""
+    user = make_user()
+    room = make_room()
+    make_membership(room=room, user=user)
+
+    s3_key = f"dm/{room.pk}/2026/05/doc.pdf"
+    with _patched_head(content_length=512, content_type="application/pdf"):
+        att = confirm_attachment(
+            user=user,
+            room=room,
+            s3_key=s3_key,
+            filename="doc.pdf",
+            mime_type="application/pdf",
+            size=512,
+            width=100,  # 来てもよいが service 層で None になる
+            height=100,
+        )
+
+    assert att.width is None
+    assert att.height is None
+
+
+@pytest.mark.django_db
+def test_confirm_attachment_without_dimensions_is_backward_compatible() -> None:
+    """既存呼び出し (width/height 未指定) も動作 (= 後方互換)."""
+    user = make_user()
+    room = make_room()
+    make_membership(room=room, user=user)
+
+    s3_key = f"dm/{room.pk}/2026/05/legacy.jpg"
+    with _patched_head(content_length=2048):
+        att = confirm_attachment(
+            user=user,
+            room=room,
+            s3_key=s3_key,
+            filename="legacy.jpg",
+            mime_type="image/jpeg",
+            size=2048,
+        )
+
+    assert att.width is None
+    assert att.height is None
+
+
 @pytest.mark.django_db
 def test_confirm_attachment_rejects_wrong_room_prefix() -> None:
     user = make_user()
