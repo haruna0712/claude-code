@@ -20,7 +20,8 @@
  *   7. メッセージ削除 (#274 待ちで skip)
  *   8. a11y: keyboard ナビ (/messages → 招待ページ)
  *
- * 添付 (P3-10) は CI 上で S3 を mock しないと再現困難なため stg 手動 E2E に回す。
+ * 添付 (P3-10) の UI E2E は #464 で `dm-attachment-display.spec.ts` に分離して
+ * setInputFiles 経由で stg を直接踏む構成に変更。本 spec では添付未踏。
  *
  * 実行手順 (local docker):
  *   docker compose -f local.yml up -d --build
