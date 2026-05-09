@@ -11,7 +11,7 @@ describe("MessageComposer", () => {
 		const textarea = screen.getByLabelText("メッセージを入力");
 		await userEvent.type(textarea, "hello");
 		await userEvent.click(screen.getByRole("button", { name: "送信" }));
-		expect(onSubmit).toHaveBeenCalledWith("hello");
+		expect(onSubmit).toHaveBeenCalledWith("hello", []);
 	});
 
 	it("Ctrl+Enter で送信される", async () => {
@@ -19,7 +19,7 @@ describe("MessageComposer", () => {
 		render(<MessageComposer onSubmit={onSubmit} />);
 		const textarea = screen.getByLabelText("メッセージを入力");
 		await userEvent.type(textarea, "hi{Control>}{Enter}{/Control}");
-		expect(onSubmit).toHaveBeenCalledWith("hi");
+		expect(onSubmit).toHaveBeenCalledWith("hi", []);
 	});
 
 	it("Cmd+Enter (metaKey) でも送信される", async () => {
@@ -27,7 +27,7 @@ describe("MessageComposer", () => {
 		render(<MessageComposer onSubmit={onSubmit} />);
 		const textarea = screen.getByLabelText("メッセージを入力");
 		await userEvent.type(textarea, "hi{Meta>}{Enter}{/Meta}");
-		expect(onSubmit).toHaveBeenCalledWith("hi");
+		expect(onSubmit).toHaveBeenCalledWith("hi", []);
 	});
 
 	it("onSubmit 失敗時は alert を表示", async () => {
@@ -58,5 +58,21 @@ describe("MessageComposer", () => {
 		render(<MessageComposer onSubmit={() => {}} onTyping={onTyping} />);
 		await userEvent.type(screen.getByLabelText("メッセージを入力"), "a");
 		expect(onTyping).toHaveBeenCalled();
+	});
+
+	// #456: 添付 UI 統合
+	it("roomId 未指定なら 📎 ボタンは非表示", () => {
+		render(<MessageComposer onSubmit={() => {}} />);
+		expect(
+			screen.queryByRole("button", { name: "添付ファイルを選択" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("roomId 指定で 📎 ボタンと『画像/ファイル添付』ヒントが出る", () => {
+		render(<MessageComposer onSubmit={() => {}} roomId={1} />);
+		expect(
+			screen.getByRole("button", { name: "添付ファイルを選択" }),
+		).toBeInTheDocument();
+		expect(screen.getByText(/画像\/ファイル添付/)).toBeInTheDocument();
 	});
 });

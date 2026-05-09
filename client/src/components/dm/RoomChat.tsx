@@ -138,9 +138,10 @@ export default function RoomChat({ roomId, currentUserId }: RoomChatProps) {
 	}, [messagesQuery.data, liveMessages, deletedIds]);
 
 	const onSubmit = useCallback(
-		async (body: string) => {
+		async (body: string, attachmentIds: number[]) => {
 			setSendError(null);
-			const sent = socket.sendMessage({ body });
+			// #456: AttachmentUploader 経由で confirm 済みの attachment id を WS に乗せる
+			const sent = socket.sendMessage({ body, attachment_ids: attachmentIds });
 			if (!sent) {
 				setSendError("接続が切れています。再接続してから送信してください。");
 			}
@@ -190,6 +191,7 @@ export default function RoomChat({ roomId, currentUserId }: RoomChatProps) {
 				onSubmit={onSubmit}
 				onTyping={socket.sendTyping}
 				disabled={socket.status !== "open"}
+				roomId={roomId}
 			/>
 		</section>
 	);
