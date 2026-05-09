@@ -67,8 +67,12 @@ describe("InviteMemberDialog", () => {
 	});
 
 	it("404 (user not found) → 専用 alert", async () => {
+		// RTK Query は FetchBaseQueryError (非 Error オブジェクト) で reject する
+		// ため、mock 側もそれに合わせる。eslint の prefer-promise-reject-errors を
+		// この箇所だけ抑制する。
 		mockCreate.mockReturnValueOnce({
 			unwrap: () =>
+				// eslint-disable-next-line prefer-promise-reject-errors
 				Promise.reject({ status: 404, data: { detail: "Not found." } }),
 		});
 		render(
@@ -82,6 +86,7 @@ describe("InviteMemberDialog", () => {
 	it("409 既メンバー / 既招待 → 専用 alert", async () => {
 		mockCreate.mockReturnValueOnce({
 			unwrap: () =>
+				// eslint-disable-next-line prefer-promise-reject-errors
 				Promise.reject({
 					status: 409,
 					data: { detail: "already_member" },
