@@ -21,6 +21,8 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from apps.articles.managers import ArticleCommentManager, ArticleManager
+
 
 class ArticleStatus(models.TextChoices):
     """記事のステータス. SPEC §12.1 通り 2 段階のみ (限定公開は MVP 除外)."""
@@ -34,17 +36,26 @@ class Article(models.Model):
 
     # UUID 主キー: GitHub 連携やプリサインド URL の path に出ても enumeration されにくい。
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # python-reviewer #541 HIGH: アカウント削除時に CASCADE で記事も hard-delete
+    # される。soft_delete の意図と整合しないため、Phase 6 完了後に SET_NULL に
+    # 切替 + pre_delete signal で先に soft_delete する Issue を別途起票予定。
+    # MVP では tweets / boards と同じ CASCADE で進める (整合性優先)。
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="articles",
     )
-    # SPEC §12.2 の URL は `/articles/<slug>` 想定。GitHub `articles/<slug>.md` にも揃う。
-    slug = models.CharField(max_length=120)
+    # SPEC §12.2 の URL は `/articles/<slug>` (グローバルに一意)。
+    # python-reviewer #541 CRITICAL: (author, slug) では URL ambiguous なので
+    # globally unique に変更。Zenn は `/<author>/articles/<slug>` 形式だが、
+    # 本プロジェクトの SPEC §12.2 は `/articles/<slug>` を採用する。
+    # SlugField で path-traversal / XSS の素材になる non-ASCII を 拒否。
+    slug = models.SlugField(max_length=120, unique=True)
     # SPEC §12.1 1〜120 字 (タイトル)
     title = models.CharField(max_length=120)
     body_markdown = models.TextField()
     # P6-02 の render_article_markdown() で sanitize 済 HTML を cache。
+    # NEVER assign body_html directly from user input — 必ずサニタイザ経由。
     body_html = models.TextField(blank=True)
     status = models.CharField(
         max_length=16,
@@ -53,6 +64,8 @@ class Article(models.Model):
     )
     # 公開時刻。draft → published 切替で自動セット (services / signals 層で実装)。
     published_at = models.DateTimeField(null=True, blank=True)
+    # python-reviewer #541 HIGH: race を避けるため必ず F("view_count") + 1 で
+    # `Article.objects.filter(pk=...).update(...)` で更新する。直接 += は禁止。
     view_count = models.PositiveIntegerField(default=0)
     # 論理削除 (apps/tweets / apps/boards と整合)。slug を欠番にしないため。
     is_deleted = models.BooleanField(default=False)
@@ -60,13 +73,15 @@ class Article(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = ArticleManager()
+    # admin / 監査用に削除済も見られる all_objects を別 manager として提供
+    # (apps/tweets/managers.py と同じ pattern)。複数 Manager 宣言のため
+    # DJ012 (field は manager より前であるべき) を無効化する。
+    all_objects = models.Manager()  # noqa: DJ012
+
     class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["author", "slug"],
-                name="uniq_article_per_author_slug",
-            ),
-        ]
+        # slug は SlugField(unique=True) で globally unique。`(author, slug)` は
+        # 重複 unique となるので削除。
         indexes = [
             # 公開済 TL の主要 query を partial index で高速化。
             models.Index(
@@ -143,7 +158,8 @@ class ArticleImage(models.Model):
         related_name="article_images",
     )
     # S3 key (例: "articles/<user_uuid>/<image_uuid>.png")
-    s3_key = models.CharField(max_length=512)
+    # python-reviewer #541 MEDIUM: 同一 key の重複 row を防ぐため unique=True。
+    s3_key = models.CharField(max_length=512, unique=True)
     # CloudFront URL。配信は CDN 経由のみ (security: bucket 直アクセス禁止)。
     url = models.URLField(max_length=1024)
     width = models.PositiveIntegerField()
@@ -223,6 +239,10 @@ class ArticleComment(models.Model):
     deleted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = ArticleCommentManager()
+    # admin / 監査用 (apps/tweets/managers.py と同じ pattern)。
+    all_objects = models.Manager()  # noqa: DJ012
 
     class Meta:
         indexes = [

@@ -28,7 +28,7 @@ class Migration(migrations.Migration):
                         serialize=False,
                     ),
                 ),
-                ("slug", models.CharField(max_length=120)),
+                ("slug", models.SlugField(max_length=120, unique=True)),
                 ("title", models.CharField(max_length=120)),
                 ("body_markdown", models.TextField()),
                 ("body_html", models.TextField(blank=True)),
@@ -71,12 +71,6 @@ class Migration(migrations.Migration):
             model_name="article",
             index=models.Index(
                 fields=["author", "-updated_at"], name="articles_a_author__a3f7b1_idx"
-            ),
-        ),
-        migrations.AddConstraint(
-            model_name="article",
-            constraint=models.UniqueConstraint(
-                fields=("author", "slug"), name="uniq_article_per_author_slug"
             ),
         ),
         migrations.CreateModel(
@@ -138,7 +132,7 @@ class Migration(migrations.Migration):
                         serialize=False,
                     ),
                 ),
-                ("s3_key", models.CharField(max_length=512)),
+                ("s3_key", models.CharField(max_length=512, unique=True)),
                 ("url", models.URLField(max_length=1024)),
                 ("width", models.PositiveIntegerField()),
                 ("height", models.PositiveIntegerField()),

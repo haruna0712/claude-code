@@ -61,24 +61,31 @@ def test_article_default_status_is_draft() -> None:
 def test_article_status_can_be_published() -> None:
     user = _user("alice")
     article = _article(user, status=ArticleStatus.PUBLISHED)
-    assert article.status == "published"
+    assert article.status == ArticleStatus.PUBLISHED
 
 
 @pytest.mark.django_db
-def test_article_unique_per_author_slug() -> None:
+def test_article_status_published_does_not_auto_set_published_at() -> None:
+    """python-reviewer #541 MEDIUM: published_at セットは services 層の責務.
+
+    モデル層で status=published を直接代入しても published_at は null のまま。
+    将来 Article.save() で auto-set を入れようとしたら本テストが落ちて気付ける。
+    """
+
     user = _user("alice")
-    _article(user, slug="dup")
-    with pytest.raises(IntegrityError):
-        _article(user, slug="dup", title="Other")
+    article = _article(user, status=ArticleStatus.PUBLISHED)
+    assert article.published_at is None
 
 
 @pytest.mark.django_db
-def test_article_other_author_can_use_same_slug() -> None:
+def test_article_slug_globally_unique() -> None:
+    """python-reviewer #541 CRITICAL: slug は globally unique."""
+
     a = _user("alice")
     b = _user("bob")
     _article(a, slug="hello")
-    _article(b, slug="hello")
-    assert Article.objects.filter(slug="hello").count() == 2
+    with pytest.raises(IntegrityError):
+        _article(b, slug="hello")
 
 
 @pytest.mark.django_db
@@ -94,6 +101,23 @@ def test_article_soft_delete_sets_flag_and_timestamp() -> None:
     article.soft_delete()
     article.refresh_from_db()
     assert article.deleted_at == deleted_at
+
+
+@pytest.mark.django_db
+def test_default_manager_excludes_soft_deleted() -> None:
+    """python-reviewer #541 CRITICAL: ArticleManager で削除済を leak しない."""
+
+    user = _user("alice")
+    a = _article(user, slug="alive")
+    b = _article(user, slug="dead")
+    b.soft_delete()
+    visible = list(Article.objects.values_list("slug", flat=True))
+    assert "alive" in visible
+    assert "dead" not in visible
+    # all_objects では見える
+    all_slugs = list(Article.all_objects.values_list("slug", flat=True))
+    assert {"alive", "dead"}.issubset(all_slugs)
+    _ = a  # silence unused lint
 
 
 # ----------------------------------------------------------------------
@@ -172,7 +196,7 @@ def test_article_comment_top_level_and_reply() -> None:
 
 
 @pytest.mark.django_db
-def test_article_comment_soft_delete() -> None:
+def test_article_comment_soft_delete_idempotent() -> None:
     user = _user("alice")
     article = _article(user)
     comment = ArticleComment.objects.create(article=article, author=user, body="x")
@@ -180,3 +204,24 @@ def test_article_comment_soft_delete() -> None:
     comment.refresh_from_db()
     assert comment.is_deleted is True
     assert comment.deleted_at is not None
+    deleted_at = comment.deleted_at
+    comment.soft_delete()
+    comment.refresh_from_db()
+    assert comment.deleted_at == deleted_at
+
+
+@pytest.mark.django_db
+def test_article_comment_default_manager_excludes_soft_deleted() -> None:
+    """python-reviewer #541 CRITICAL: コメントの soft-delete leak 防止."""
+
+    user = _user("alice")
+    article = _article(user)
+    a = ArticleComment.objects.create(article=article, author=user, body="alive")
+    b = ArticleComment.objects.create(article=article, author=user, body="dead")
+    b.soft_delete()
+    visible_bodies = list(ArticleComment.objects.values_list("body", flat=True))
+    assert "alive" in visible_bodies
+    assert "dead" not in visible_bodies
+    all_bodies = list(ArticleComment.all_objects.values_list("body", flat=True))
+    assert {"alive", "dead"}.issubset(all_bodies)
+    _ = a
