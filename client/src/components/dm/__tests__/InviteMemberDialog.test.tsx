@@ -10,19 +10,39 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import InviteMemberDialog from "@/components/dm/InviteMemberDialog";
 
+interface InvShape {
+	id: number;
+	room_id: number;
+	invitee_handle: string;
+}
 const mockCreate = vi.fn();
+const mockCancel = vi.fn();
 const mockOnOpenChange = vi.fn();
+const mockListInv = vi.fn(
+	(_args?: unknown, _opts?: unknown): { data: { results: InvShape[] } } => ({
+		data: { results: [] },
+	}),
+);
 
 vi.mock("@/lib/redux/features/dm/dmApiSlice", () => ({
 	useCreateRoomInvitationMutation: () => [
 		mockCreate,
 		{ isLoading: false, isError: false },
 	],
+	useCancelInvitationMutation: () => [
+		mockCancel,
+		{ isLoading: false, isError: false },
+	],
+	useListInvitationsQuery: (args: unknown, opts?: unknown) =>
+		mockListInv(args, opts),
 }));
 
 beforeEach(() => {
 	mockCreate.mockReset();
+	mockCancel.mockReset();
 	mockOnOpenChange.mockReset();
+	mockListInv.mockReset();
+	mockListInv.mockReturnValue({ data: { results: [] } });
 });
 
 describe("InviteMemberDialog", () => {
@@ -108,5 +128,39 @@ describe("InviteMemberDialog", () => {
 		await userEvent.click(screen.getByRole("button", { name: "招待を送る" }));
 		expect(await screen.findByRole("alert")).toHaveTextContent(/使用できない/);
 		expect(mockCreate).not.toHaveBeenCalled();
+	});
+
+	// #481: 送信中の招待 listing + 取消
+	it("送信中の招待が listing され、取消 button で cancelInvitation が呼ばれる", async () => {
+		mockListInv.mockReturnValue({
+			data: {
+				results: [
+					{ id: 7, room_id: 42, invitee_handle: "alice" },
+					{ id: 8, room_id: 99, invitee_handle: "bob" }, // 別 room なので出ない
+				],
+			},
+		});
+		mockCancel.mockReturnValueOnce({ unwrap: () => Promise.resolve() });
+		render(
+			<InviteMemberDialog open roomId={42} onOpenChange={mockOnOpenChange} />,
+		);
+		const list = await screen.findByRole("list", { name: "送信中の招待" });
+		expect(list).toBeInTheDocument();
+		// 同じ room の alice のみ表示、別 room の bob は除外
+		expect(screen.getByText("@alice")).toBeInTheDocument();
+		expect(screen.queryByText("@bob")).toBeNull();
+
+		await userEvent.click(
+			screen.getByRole("button", { name: /alice への招待を取り消す/ }),
+		);
+		expect(mockCancel).toHaveBeenCalledWith(7);
+	});
+
+	it("送信中の招待が空のときは section 自体が出ない", () => {
+		mockListInv.mockReturnValue({ data: { results: [] } });
+		render(
+			<InviteMemberDialog open roomId={42} onOpenChange={mockOnOpenChange} />,
+		);
+		expect(screen.queryByRole("list", { name: "送信中の招待" })).toBeNull();
 	});
 });

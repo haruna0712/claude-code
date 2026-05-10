@@ -53,7 +53,7 @@ export const dmApiSlice = baseApiSlice.injectEndpoints({
 		}),
 		listInvitations: builder.query<
 			InvitationListResponse,
-			{ status?: "pending" | "all" } | void
+			{ status?: "pending" | "all"; as?: "invitee" | "inviter" } | void
 		>({
 			query: (arg) => {
 				const params = new URLSearchParams();
@@ -61,6 +61,9 @@ export const dmApiSlice = baseApiSlice.injectEndpoints({
 					params.append("status", arg.status);
 				} else {
 					params.append("status", "pending");
+				}
+				if (arg && arg.as) {
+					params.append("as", arg.as);
 				}
 				return `/dm/invitations/?${params.toString()}`;
 			},
@@ -90,6 +93,17 @@ export const dmApiSlice = baseApiSlice.injectEndpoints({
 			invalidatesTags: (_result, _error, { roomId }) => [
 				{ type: "DMInvitation" as const, id: "LIST" },
 				{ type: "DMRoom" as const, id: roomId },
+			],
+		}),
+		// #481: inviter による pending 招待の取消 (DELETE)
+		cancelInvitation: builder.mutation<void, number>({
+			query: (id) => ({
+				url: `/dm/invitations/${id}/`,
+				method: "DELETE",
+			}),
+			invalidatesTags: (_result, _error, id) => [
+				{ type: "DMInvitation" as const, id },
+				{ type: "DMInvitation" as const, id: "LIST" },
 			],
 		}),
 		acceptInvitation: builder.mutation<GroupInvitation, number>({
@@ -160,6 +174,7 @@ export const {
 	useCreateDMRoomMutation,
 	useListInvitationsQuery,
 	useCreateRoomInvitationMutation,
+	useCancelInvitationMutation,
 	useAcceptInvitationMutation,
 	useDeclineInvitationMutation,
 	useListRoomMessagesQuery,
