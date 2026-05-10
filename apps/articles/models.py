@@ -56,7 +56,10 @@ class Article(models.Model):
     body_markdown = models.TextField()
     # P6-02 の render_article_markdown() で sanitize 済 HTML を cache。
     # NEVER assign body_html directly from user input — 必ずサニタイザ経由。
-    body_html = models.TextField(blank=True)
+    # security-reviewer #542 HIGH H-2: editable=False で DRF ModelSerializer /
+    # admin form の writable field から自動除外。`Article.objects.update()` の
+    # bypass は防げないが、API / admin 経由の事故を排除。
+    body_html = models.TextField(blank=True, editable=False)
     status = models.CharField(
         max_length=16,
         choices=ArticleStatus.choices,
@@ -96,6 +99,18 @@ class Article(models.Model):
 
     def __str__(self) -> str:
         return f"{self.title} (@{self.author_id} / {self.slug})"
+
+    def save(self, *args, **kwargs):
+        """body_html を body_markdown から自動生成 (P6-02 サニタイザ).
+
+        P6-01 review HIGH-1: body_html を view 層から直接代入する footgun を
+        防ぐため、save() 時に必ずサニタイザ経由で再生成する。
+        """
+
+        from apps.articles.services.markdown import render_article_markdown
+
+        self.body_html = render_article_markdown(self.body_markdown or "")
+        super().save(*args, **kwargs)
 
     def soft_delete(self) -> None:
         """論理削除 (apps/tweets と同じ pattern).
@@ -241,8 +256,9 @@ class ArticleComment(models.Model):
         blank=True,
     )
     body = models.TextField()
-    # P6-02 で render 済 HTML を cache。
-    body_html = models.TextField(blank=True)
+    # P6-02 で render 済 HTML を cache。security-reviewer #542 HIGH H-2:
+    # editable=False で DRF / admin の writable から自動除外。
+    body_html = models.TextField(blank=True, editable=False)
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -261,6 +277,14 @@ class ArticleComment(models.Model):
 
     def __str__(self) -> str:
         return f"comment:{self.id} on {self.article_id}"
+
+    def save(self, *args, **kwargs):
+        """body_html を body から自動生成 (P6-02 サニタイザ)."""
+
+        from apps.articles.services.markdown import render_article_markdown
+
+        self.body_html = render_article_markdown(self.body or "")
+        super().save(*args, **kwargs)
 
     def soft_delete(self) -> None:
         """論理削除 (Article と同じく atomic UPDATE、冪等)."""

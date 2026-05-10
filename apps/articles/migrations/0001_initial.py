@@ -31,7 +31,7 @@ class Migration(migrations.Migration):
                 ("slug", models.SlugField(max_length=120, unique=True)),
                 ("title", models.CharField(max_length=120)),
                 ("body_markdown", models.TextField()),
-                ("body_html", models.TextField(blank=True)),
+                ("body_html", models.TextField(blank=True, editable=False)),
                 (
                     "status",
                     models.CharField(
@@ -240,7 +240,7 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("body", models.TextField()),
-                ("body_html", models.TextField(blank=True)),
+                ("body_html", models.TextField(blank=True, editable=False)),
                 ("is_deleted", models.BooleanField(default=False)),
                 ("deleted_at", models.DateTimeField(blank=True, null=True)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
