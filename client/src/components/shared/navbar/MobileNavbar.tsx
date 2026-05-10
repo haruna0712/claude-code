@@ -14,6 +14,7 @@ import { HomeModernIcon } from "@heroicons/react/24/solid";
 import {
 	Bell,
 	Compass,
+	FileText,
 	Home,
 	MessageSquare,
 	MessagesSquare,
@@ -36,6 +37,7 @@ const ICON_MAP: Record<
 	User,
 	Bell,
 	MessagesSquare,
+	FileText,
 };
 
 function resolveLinkPath(
