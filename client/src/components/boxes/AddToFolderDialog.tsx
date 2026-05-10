@@ -11,7 +11,7 @@
  * - 失敗時は role=alert で通知
  */
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import {
 	Dialog,
@@ -26,7 +26,6 @@ import {
 	deleteBookmark,
 	getTweetBookmarkStatus,
 	listFolders,
-	listFolderBookmarks,
 	type Folder,
 } from "@/lib/api/boxes";
 
@@ -103,7 +102,7 @@ export default function AddToFolderDialog({
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [createName, setCreateName] = useState("");
-	const [createParent, setCreateParent] = useState<number | "">("");
+	const [createParent, setCreateParent] = useState<number | null>(null);
 	const [creating, setCreating] = useState(false);
 
 	useEffect(() => {
@@ -119,23 +118,13 @@ export default function AddToFolderDialog({
 				]);
 				if (cancelled) return;
 				const savedIds = new Set(status.folder_ids);
-				// bookmark id を引くため、saved folder についてだけ list を取って tweet に絞る
+				// #503 で backend が bookmark_ids を返すようになった。1 query で
+				// folder_id → bookmark_id を取れるので、旧実装の N+1 list は不要。
 				const bookmarkByFolder = new Map<number, number>();
-				await Promise.all(
-					Array.from(savedIds).map(async (fid) => {
-						try {
-							const bms = await listFolderBookmarks(fid);
-							for (const bm of bms) {
-								if (bm.tweet_id === Number(tweetId)) {
-									bookmarkByFolder.set(fid, bm.id);
-									break;
-								}
-							}
-						} catch {
-							/* 個別 folder の取得失敗は致命的でない */
-						}
-					}),
-				);
+				const fromStatus = status.bookmark_ids ?? {};
+				for (const [fidStr, bmId] of Object.entries(fromStatus)) {
+					bookmarkByFolder.set(Number(fidStr), bmId);
+				}
 				const ordered = buildOrderedRows(folders);
 				setRows(
 					ordered.map(({ folder, depth }) => ({
@@ -160,15 +149,24 @@ export default function AddToFolderDialog({
 		};
 	}, [open, tweetId, onStatusChanged]);
 
-	const savedFolderIds = useMemo(
-		() => rows.filter((r) => r.isSaved).map((r) => r.folder.id),
-		[rows],
-	);
-
 	const setRowBusy = (folderId: number, busy: boolean) => {
 		setRows((prev) =>
 			prev.map((r) => (r.folder.id === folderId ? { ...r, isBusy: busy } : r)),
 		);
+	};
+
+	// #502 review H2: stale closure を避けるため、`next` は setRows の prev
+	// から導出し、その結果を onStatusChanged へ渡す。
+	const applyToggle = (
+		folderId: number,
+		updater: (row: FolderRowState) => FolderRowState,
+	) => {
+		setRows((prev) => {
+			const next = prev.map((r) => (r.folder.id === folderId ? updater(r) : r));
+			const folderIds = next.filter((r) => r.isSaved).map((r) => r.folder.id);
+			onStatusChanged?.(folderIds);
+			return next;
+		});
 	};
 
 	const handleToggle = async (row: FolderRowState) => {
@@ -177,48 +175,31 @@ export default function AddToFolderDialog({
 		try {
 			if (row.isSaved && row.bookmarkId !== null) {
 				await deleteBookmark(row.bookmarkId);
-				setRows((prev) =>
-					prev.map((r) =>
-						r.folder.id === row.folder.id
-							? {
-									...r,
-									isSaved: false,
-									bookmarkId: null,
-									isBusy: false,
-									folder: {
-										...r.folder,
-										bookmark_count: Math.max(0, r.folder.bookmark_count - 1),
-									},
-								}
-							: r,
-					),
-				);
-				const next = savedFolderIds.filter((id) => id !== row.folder.id);
-				onStatusChanged?.(next);
+				applyToggle(row.folder.id, (r) => ({
+					...r,
+					isSaved: false,
+					bookmarkId: null,
+					isBusy: false,
+					folder: {
+						...r.folder,
+						bookmark_count: Math.max(0, r.folder.bookmark_count - 1),
+					},
+				}));
 			} else {
 				const result = await createBookmark({
 					folder_id: row.folder.id,
 					tweet_id: Number(tweetId),
 				});
-				setRows((prev) =>
-					prev.map((r) =>
-						r.folder.id === row.folder.id
-							? {
-									...r,
-									isSaved: true,
-									bookmarkId: result.bookmark.id,
-									isBusy: false,
-									folder: {
-										...r.folder,
-										bookmark_count:
-											r.folder.bookmark_count + (result.created ? 1 : 0),
-									},
-								}
-							: r,
-					),
-				);
-				const next = Array.from(new Set([...savedFolderIds, row.folder.id]));
-				onStatusChanged?.(next);
+				applyToggle(row.folder.id, (r) => ({
+					...r,
+					isSaved: true,
+					bookmarkId: result.bookmark.id,
+					isBusy: false,
+					folder: {
+						...r.folder,
+						bookmark_count: r.folder.bookmark_count + (result.created ? 1 : 0),
+					},
+				}));
 			}
 		} catch (err) {
 			setError(describeApiError(err, "保存状態の更新に失敗しました"));
@@ -242,7 +223,7 @@ export default function AddToFolderDialog({
 		try {
 			const folder = await createFolder({
 				name,
-				parent_id: createParent === "" ? null : createParent,
+				parent_id: createParent,
 			});
 			setRows((prev) => {
 				const merged = [...prev.map((r) => r.folder), folder];
@@ -250,10 +231,14 @@ export default function AddToFolderDialog({
 				const savedSet = new Set(
 					prev.filter((r) => r.isSaved).map((r) => r.folder.id),
 				);
-				const bmById = new Map(
+				// type guard で `bookmarkId: number | null` から null を除外
+				const bmById = new Map<number, number>(
 					prev
-						.filter((r) => r.bookmarkId !== null)
-						.map((r) => [r.folder.id, r.bookmarkId!]),
+						.filter(
+							(r): r is FolderRowState & { bookmarkId: number } =>
+								r.bookmarkId !== null,
+						)
+						.map((r) => [r.folder.id, r.bookmarkId]),
 				);
 				return ordered.map(({ folder: f, depth }) => ({
 					folder: f,
@@ -264,7 +249,7 @@ export default function AddToFolderDialog({
 				}));
 			});
 			setCreateName("");
-			setCreateParent("");
+			setCreateParent(null);
 		} catch (err) {
 			setError(describeApiError(err, "フォルダの作成に失敗しました"));
 		} finally {
@@ -308,8 +293,9 @@ export default function AddToFolderDialog({
 							{rows.map((row) => (
 								<li key={row.folder.id}>
 									<label
-										className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-muted/40"
+										className="flex cursor-pointer items-center gap-2 pr-3 py-2 hover:bg-muted/40"
 										style={{ paddingLeft: `${0.75 + row.depth * 1}rem` }}
+										aria-label={`${row.folder.name} (ブックマーク ${row.folder.bookmark_count} 件)`}
 									>
 										<input
 											type="checkbox"
@@ -344,10 +330,10 @@ export default function AddToFolderDialog({
 					<label className="block text-sm">
 						親フォルダ (任意)
 						<select
-							value={createParent}
+							value={createParent ?? ""}
 							onChange={(e) =>
 								setCreateParent(
-									e.target.value === "" ? "" : Number(e.target.value),
+									e.target.value === "" ? null : Number(e.target.value),
 								)
 							}
 							className="mt-1 w-full rounded border border-border bg-background px-2 py-1 text-sm"

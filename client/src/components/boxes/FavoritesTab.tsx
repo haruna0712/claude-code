@@ -64,11 +64,12 @@ export default function FavoritesTab({ currentUserHandle }: FavoritesTabProps) {
 				const list = await listFolders();
 				if (cancelled) return;
 				setFolders(list);
-				if (list.length > 0 && selectedFolderId === null) {
-					// ルート (parent_id=null) を優先、無ければ先頭
-					const root = list.find((f) => f.parent_id === null) ?? list[0];
-					setSelectedFolderId(root.id);
-				}
+				// 初期選択は functional updater で導出する。`selectedFolderId` を
+				// dep に入れずに済むので exhaustive-deps の disable も不要。
+				setSelectedFolderId((prev) => {
+					if (prev !== null || list.length === 0) return prev;
+					return (list.find((f) => f.parent_id === null) ?? list[0]).id;
+				});
 			} catch (err) {
 				if (!cancelled) {
 					setFolderError(
@@ -82,8 +83,6 @@ export default function FavoritesTab({ currentUserHandle }: FavoritesTabProps) {
 		return () => {
 			cancelled = true;
 		};
-		// 初回のみ folder 取得 — 以降は AddToFolderDialog 等から再取得不要 (MVP)
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	useEffect(() => {
@@ -162,8 +161,9 @@ export default function FavoritesTab({ currentUserHandle }: FavoritesTabProps) {
 								<button
 									type="button"
 									onClick={() => setSelectedFolderId(folder.id)}
-									aria-current={isActive ? "true" : undefined}
-									className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors ${
+									aria-current={isActive || undefined}
+									aria-label={`${folder.name} (ブックマーク ${folder.bookmark_count} 件)`}
+									className={`flex w-full items-center justify-between pr-3 py-2 text-left text-sm transition-colors ${
 										isActive
 											? "bg-primary/10 text-foreground"
 											: "hover:bg-muted/40 text-muted-foreground"

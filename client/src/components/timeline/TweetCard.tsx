@@ -605,16 +605,12 @@ export default function TweetCard({
 				/>
 
 				{/* #499: お気に入り (Google ブックマーク風 folder 階層) を開く.
-				    displayTweet が TweetMini (repost 参照先) のときは
-				    bookmark_folder_ids を持たないので空配列で初期化、Dialog open 時に
+				    isRepost のとき displayTweet は TweetMini (bookmark_folder_ids
+				    を持たない) ので空配列で初期化し、Dialog open 時に
 				    `/boxes/tweets/<id>/status/` から正しい状態を取得する。 */}
 				<BookmarkButton
 					tweetId={displayTweet.id}
-					initialFolderIds={
-						"bookmark_folder_ids" in displayTweet
-							? (displayTweet.bookmark_folder_ids ?? [])
-							: []
-					}
+					initialFolderIds={isRepost ? [] : (tweet.bookmark_folder_ids ?? [])}
 				/>
 			</footer>
 

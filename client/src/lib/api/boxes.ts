@@ -38,6 +38,12 @@ export interface Bookmark {
 
 export interface BookmarkStatus {
 	folder_ids: number[];
+	/**
+	 * #502 H4 対応: 削除時の N+1 listFolderBookmarks を不要化するため、
+	 * folder_id (string) → bookmark_id (number) を一緒に返す。
+	 * 旧 backend (PR #503 前) は未付与 → undefined → 旧パスへフォールバック。
+	 */
+	bookmark_ids?: Record<string, number>;
 }
 
 interface FolderListResponse {

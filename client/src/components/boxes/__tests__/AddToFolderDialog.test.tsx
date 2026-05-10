@@ -21,7 +21,6 @@ vi.mock("@/lib/api/boxes", async () => {
 	return {
 		...actual,
 		listFolders: vi.fn(),
-		listFolderBookmarks: vi.fn(),
 		getTweetBookmarkStatus: vi.fn(),
 		createBookmark: vi.fn(),
 		deleteBookmark: vi.fn(),
@@ -57,12 +56,11 @@ describe("AddToFolderDialog", () => {
 				updated_at: NOW,
 			},
 		]);
+		// #503 status endpoint で folder_id → bookmark_id の dict を 1 query で取得。
 		vi.mocked(boxesApi.getTweetBookmarkStatus).mockResolvedValue({
 			folder_ids: [2],
+			bookmark_ids: { "2": 99 },
 		});
-		vi.mocked(boxesApi.listFolderBookmarks).mockResolvedValue([
-			{ id: 99, tweet_id: 42, folder_id: 2, created_at: NOW },
-		]);
 
 		render(
 			<AddToFolderDialog tweetId={42} open onOpenChange={() => undefined} />,
@@ -94,6 +92,7 @@ describe("AddToFolderDialog", () => {
 		]);
 		vi.mocked(boxesApi.getTweetBookmarkStatus).mockResolvedValue({
 			folder_ids: [],
+			bookmark_ids: {},
 		});
 		vi.mocked(boxesApi.createBookmark).mockResolvedValue({
 			bookmark: { id: 11, tweet_id: 42, folder_id: 1, created_at: NOW },
@@ -136,10 +135,8 @@ describe("AddToFolderDialog", () => {
 		]);
 		vi.mocked(boxesApi.getTweetBookmarkStatus).mockResolvedValue({
 			folder_ids: [1],
+			bookmark_ids: { "1": 99 },
 		});
-		vi.mocked(boxesApi.listFolderBookmarks).mockResolvedValue([
-			{ id: 99, tweet_id: 42, folder_id: 1, created_at: NOW },
-		]);
 		vi.mocked(boxesApi.deleteBookmark).mockResolvedValue();
 
 		render(
@@ -159,6 +156,7 @@ describe("AddToFolderDialog", () => {
 		vi.mocked(boxesApi.listFolders).mockResolvedValue([]);
 		vi.mocked(boxesApi.getTweetBookmarkStatus).mockResolvedValue({
 			folder_ids: [],
+			bookmark_ids: {},
 		});
 
 		render(
@@ -178,6 +176,7 @@ describe("AddToFolderDialog", () => {
 		vi.mocked(boxesApi.listFolders).mockResolvedValue([]);
 		vi.mocked(boxesApi.getTweetBookmarkStatus).mockResolvedValue({
 			folder_ids: [],
+			bookmark_ids: {},
 		});
 		vi.mocked(boxesApi.createFolder).mockResolvedValue({
 			id: 5,
