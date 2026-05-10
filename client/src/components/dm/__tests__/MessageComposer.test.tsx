@@ -1,11 +1,28 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import MessageComposer from "@/components/dm/MessageComposer";
+import * as attachments from "@/lib/dm/attachments";
 import type { ConfirmResponse } from "@/lib/dm/attachments";
 
 let nextAttachment: ConfirmResponse | null = null;
+
+vi.mock("@/lib/dm/attachments", async () => {
+	const actual = await vi.importActual<typeof import("@/lib/dm/attachments")>(
+		"@/lib/dm/attachments",
+	);
+	return {
+		...actual,
+		uploadAttachment: vi.fn(),
+	};
+});
+
+const uploadAttachmentMock = vi.mocked(attachments.uploadAttachment);
+
+beforeEach(() => {
+	uploadAttachmentMock.mockReset();
+});
 
 vi.mock("@/components/dm/AttachmentUploader", () => ({
 	default: ({
@@ -136,6 +153,92 @@ describe("MessageComposer", () => {
 		expect(await screen.findByText("spec.pdf")).toBeInTheDocument();
 		// 画像ではないので img は出ない
 		expect(screen.queryByRole("img", { name: "spec.pdf" })).toBeNull();
+	});
+
+	// #470: Ctrl+V paste で画像を直接添付できる
+	function makeImageFile(name = "", type = "image/png", size = 1024): File {
+		const bytes = new Uint8Array(size).fill(0);
+		const f = new File([bytes], name, { type });
+		Object.defineProperty(f, "size", { value: size });
+		return f;
+	}
+
+	function pasteImage(textarea: HTMLElement, file: File) {
+		const dataTransfer = {
+			items: [
+				{
+					kind: "file",
+					type: file.type,
+					getAsFile: () => file,
+				},
+			],
+			files: [file],
+			types: ["Files"],
+		};
+		fireEvent.paste(textarea, { clipboardData: dataTransfer });
+	}
+
+	it("Ctrl+V で画像 paste → uploadAttachment 呼び出し → attachment 追加", async () => {
+		uploadAttachmentMock.mockResolvedValueOnce({
+			id: 100,
+			s3_key: "k",
+			url: "https://cdn.example.com/pasted.png",
+			filename: "pasted-1.png",
+			mime_type: "image/png",
+			size: 1024,
+			width: null,
+			height: null,
+		});
+		render(<MessageComposer onSubmit={() => {}} roomId={1} />);
+		const textarea = screen.getByLabelText("メッセージを入力");
+		pasteImage(textarea, makeImageFile("", "image/png", 1024));
+		// 進行中 status
+		expect(await screen.findByRole("status")).toHaveTextContent(
+			/アップロード中/,
+		);
+		await waitFor(() =>
+			expect(uploadAttachmentMock).toHaveBeenCalledWith(
+				expect.objectContaining({
+					roomId: 1,
+					file: expect.objectContaining({
+						type: "image/png",
+						name: expect.stringMatching(/^pasted-\d+\.png$/),
+					}),
+				}),
+			),
+		);
+		// 成功後 attachment が thumbnail として渲染
+		expect(
+			await screen.findByRole("img", { name: "pasted-1.png" }),
+		).toBeInTheDocument();
+	});
+
+	it("Ctrl+V でテキスト paste → upload は呼ばれず textarea にテキストが入る", async () => {
+		render(<MessageComposer onSubmit={() => {}} roomId={1} />);
+		const textarea = screen.getByLabelText(
+			"メッセージを入力",
+		) as HTMLTextAreaElement;
+		fireEvent.paste(textarea, {
+			clipboardData: { items: [], files: [], types: ["text/plain"] },
+		});
+		expect(uploadAttachmentMock).not.toHaveBeenCalled();
+	});
+
+	it("paste image で uploadAttachment が reject → role=alert", async () => {
+		uploadAttachmentMock.mockRejectedValueOnce(
+			new Error("ファイルが大きすぎます"),
+		);
+		render(<MessageComposer onSubmit={() => {}} roomId={1} />);
+		const textarea = screen.getByLabelText("メッセージを入力");
+		pasteImage(textarea, makeImageFile("", "image/png", 1024));
+		expect(await screen.findByRole("alert")).toHaveTextContent(/大きすぎます/);
+	});
+
+	it("roomId 未指定の paste image: upload は呼ばれない", async () => {
+		render(<MessageComposer onSubmit={() => {}} />);
+		const textarea = screen.getByLabelText("メッセージを入力");
+		pasteImage(textarea, makeImageFile("", "image/png", 1024));
+		expect(uploadAttachmentMock).not.toHaveBeenCalled();
 	});
 
 	it("サムネイルの × ボタンで添付が外れる", async () => {
