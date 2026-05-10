@@ -49,6 +49,26 @@ export const usersApiSlice = baseApiSlice.injectEndpoints({
 			query: () => "/users/me/",
 			providesTags: ["User"],
 		}),
+		// Issue #480: handle 前方一致検索 (autocomplete 用、最大 50 件)。
+		searchUsers: builder.query<
+			{
+				results: {
+					user_id: string;
+					username: string;
+					first_name: string;
+					last_name: string;
+					avatar_url: string | null;
+				}[];
+			},
+			{ q: string; limit?: number }
+		>({
+			query: ({ q, limit = 10 }) => {
+				const params = new URLSearchParams();
+				params.set("q", q);
+				params.set("limit", String(limit));
+				return `/users/?${params.toString()}`;
+			},
+		}),
 		updateUserProfile: builder.mutation<ProfileData, ProfileData>({
 			query: (formData) => ({
 				url: "/profiles/user/update/",
@@ -65,4 +85,5 @@ export const {
 	useGetUserProfileQuery,
 	useUpdateUserProfileMutation,
 	useGetAllTechniciansQuery,
+	useSearchUsersQuery,
 } = usersApiSlice;

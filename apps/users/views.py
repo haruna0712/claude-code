@@ -637,3 +637,61 @@ class HeaderUploadUrlView(_BaseUploadUrlView):
     """``POST /api/v1/users/me/header-upload-url/``: header 用 presigned URL 発行."""
 
     kind = "header"
+
+
+# ---------------------------------------------------------------------------
+# Issue #480: ユーザー検索 (handle 前方一致)
+# ---------------------------------------------------------------------------
+
+
+class UserSearchSerializer(serializers.ModelSerializer):
+    """検索結果用 — PII を漏らさない最小フィールドのみ."""
+
+    user_id = serializers.UUIDField(source="id", read_only=True)
+
+    class Meta:
+        model = User
+        fields = ("user_id", "username", "first_name", "last_name", "avatar_url")
+        read_only_fields = fields
+
+
+class UserSearchView(APIView):
+    """``GET /api/v1/users/?q=<prefix>&limit=N``: handle (username) 前方一致検索.
+
+    SPEC §2 / Issue #480 — InviteMemberDialog 等の handle autocomplete 用。
+
+    - 認証必須 (anonymous には harvest を許さない)
+    - case-insensitive 前方一致 (``istartswith``)
+    - 自分自身を除外 (招待自己宛て不可と整合)
+    - is_active=False を除外 (PublicProfileView と整合)
+    - 既定 limit=10、上限 50
+    - 空 q は空配列 (lookup 空打ちさせない)
+    """
+
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [
+        CSRFEnforcingAuthentication,
+        CookieAuthentication,
+    ]
+
+    DEFAULT_LIMIT = 10
+    MAX_LIMIT = 50
+
+    def get(self, request: Request) -> Response:
+        q = (request.query_params.get("q") or "").strip()
+        try:
+            limit = int(request.query_params.get("limit", self.DEFAULT_LIMIT))
+        except ValueError:
+            limit = self.DEFAULT_LIMIT
+        limit = max(0, min(limit, self.MAX_LIMIT))
+
+        if not q or limit == 0:
+            return Response({"results": []}, status=status.HTTP_200_OK)
+
+        qs = (
+            User.objects.filter(is_active=True, username__istartswith=q)
+            .exclude(pk=request.user.pk)
+            .order_by("username")[:limit]
+        )
+        results = UserSearchSerializer(qs, many=True).data
+        return Response({"results": results}, status=status.HTTP_200_OK)

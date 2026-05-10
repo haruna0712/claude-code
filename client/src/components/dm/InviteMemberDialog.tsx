@@ -1,18 +1,27 @@
 "use client";
 
 /**
- * グループ room 内から招待を送る Dialog (#476).
+ * グループ room 内から招待を送る Dialog (#476 / #480 で autocomplete 追加).
  *
  * SPEC §7.2 / docs/specs/dm-room-invite-spec.md。
  *
  * - @handle 1 名を入力 → POST /api/v1/dm/rooms/<id>/invitations/
+ * - 入力中は GET /api/v1/users/?q=... (debounce 250ms) で前方一致 dropdown
  * - 成功時は role=status で通知 → ~1.2s 後 onOpenChange(false)
  * - 失敗時は role=alert (404 / 409 / 429 / 403 / その他)
  * - クライアント側 validation: 空 / 不正文字 / 空白
- * - a11y: ESC / × button / overlay click で close (Radix デフォルト)
+ * - a11y: ESC / × button / overlay click で close (Radix デフォルト)、
+ *   combobox + listbox + 矢印 / Enter キー操作
  */
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type FormEvent,
+	type KeyboardEvent,
+} from "react";
 
 import {
 	Dialog,
@@ -25,6 +34,16 @@ import {
 	useCreateRoomInvitationMutation,
 	useListInvitationsQuery,
 } from "@/lib/redux/features/dm/dmApiSlice";
+import { useSearchUsersQuery } from "@/lib/redux/features/users/usersApiSlice";
+
+function useDebounced<T>(value: T, delayMs: number): T {
+	const [debounced, setDebounced] = useState(value);
+	useEffect(() => {
+		const t = setTimeout(() => setDebounced(value), delayMs);
+		return () => clearTimeout(t);
+	}, [value, delayMs]);
+	return debounced;
+}
 
 const HANDLE_REGEX = /^[a-zA-Z0-9_]{3,30}$/;
 
@@ -76,7 +95,22 @@ export default function InviteMemberDialog({
 	const [handle, setHandle] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [successMsg, setSuccessMsg] = useState<string | null>(null);
+	const [activeIdx, setActiveIdx] = useState(-1); // -1 = 何も選択していない (plain input)
+	const [showSuggestions, setShowSuggestions] = useState(false);
 	const inputRef = useRef<HTMLInputElement | null>(null);
+
+	// Issue #480: 検索クエリ (handle の `@` を取り除いた前方一致用)
+	const normalizedQuery = useMemo(
+		() => handle.trim().replace(/^@/, ""),
+		[handle],
+	);
+	const debouncedQuery = useDebounced(normalizedQuery, 250);
+	// 2 文字以上 + suggestions visible なときだけ fetch (skip で query 抑制)
+	const { data: searchData } = useSearchUsersQuery(
+		{ q: debouncedQuery, limit: 10 },
+		{ skip: !showSuggestions || debouncedQuery.length < 2 },
+	);
+	const suggestions = searchData?.results ?? [];
 
 	// open に切り替わったら state リセット (前回の error / success を消す)
 	useEffect(() => {
@@ -84,6 +118,8 @@ export default function InviteMemberDialog({
 			setError(null);
 			setSuccessMsg(null);
 			setHandle("");
+			setActiveIdx(-1);
+			setShowSuggestions(false);
 		}
 	}, [open]);
 
@@ -114,8 +150,33 @@ export default function InviteMemberDialog({
 		try {
 			await createInvite({ roomId, invitee_handle: normalized }).unwrap();
 			setSuccessMsg(`@${normalized} に招待を送信しました`);
+			setShowSuggestions(false);
 		} catch (err: unknown) {
 			setError(mapApiError(err, normalized));
+		}
+	};
+
+	const pickSuggestion = (username: string) => {
+		setHandle(username);
+		setActiveIdx(-1);
+		setShowSuggestions(false);
+		inputRef.current?.focus();
+	};
+
+	const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+		if (!showSuggestions || suggestions.length === 0) return;
+		if (e.key === "ArrowDown") {
+			e.preventDefault();
+			setActiveIdx((i) => (i + 1) % suggestions.length);
+		} else if (e.key === "ArrowUp") {
+			e.preventDefault();
+			setActiveIdx((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
+		} else if (e.key === "Enter" && activeIdx >= 0) {
+			e.preventDefault();
+			pickSuggestion(suggestions[activeIdx].username);
+		} else if (e.key === "Escape") {
+			setShowSuggestions(false);
+			setActiveIdx(-1);
 		}
 	};
 
@@ -144,7 +205,7 @@ export default function InviteMemberDialog({
 							{successMsg}
 						</div>
 					) : null}
-					<div className="flex flex-col gap-1">
+					<div className="relative flex flex-col gap-1">
 						<label
 							htmlFor="invite-handle"
 							className="text-baby_white text-sm font-semibold"
@@ -156,15 +217,66 @@ export default function InviteMemberDialog({
 							id="invite-handle"
 							type="text"
 							value={handle}
-							onChange={(e) => setHandle(e.target.value)}
+							onChange={(e) => {
+								setHandle(e.target.value);
+								setShowSuggestions(true);
+								setActiveIdx(-1);
+							}}
+							onFocus={() => setShowSuggestions(true)}
+							onBlur={() =>
+								// suggestion click が blur 後に来てしまうので 100ms 遅延
+								setTimeout(() => setShowSuggestions(false), 100)
+							}
+							onKeyDown={onKeyDown}
 							placeholder="alice"
 							autoFocus
+							role="combobox"
+							aria-autocomplete="list"
+							aria-expanded={showSuggestions && suggestions.length > 0}
+							aria-controls="invite-suggestions-list"
+							aria-activedescendant={
+								activeIdx >= 0 ? `invite-suggest-${activeIdx}` : undefined
+							}
 							aria-invalid={Boolean(error)}
 							aria-describedby={error ? "invite-handle-error" : undefined}
 							className="bg-baby_veryBlack text-baby_white focus-visible:ring-baby_blue rounded-md px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2"
 						/>
+						{showSuggestions && suggestions.length > 0 ? (
+							<ul
+								id="invite-suggestions-list"
+								role="listbox"
+								aria-label="ユーザー候補"
+								className="bg-baby_veryBlack border-baby_grey/30 absolute inset-x-0 top-full z-10 mt-1 max-h-60 overflow-y-auto rounded-md border shadow-lg"
+							>
+								{suggestions.map((u, i) => (
+									<li
+										key={u.user_id}
+										id={`invite-suggest-${i}`}
+										role="option"
+										aria-selected={i === activeIdx}
+										onMouseDown={(e) => {
+											e.preventDefault(); // blur を防いで click 可能に
+											pickSuggestion(u.username);
+										}}
+										className={`text-baby_white flex cursor-pointer flex-col px-3 py-2 text-sm ${
+											i === activeIdx
+												? "bg-baby_blue/30"
+												: "hover:bg-baby_grey/10"
+										}`}
+									>
+										<span className="font-semibold">@{u.username}</span>
+										{u.first_name || u.last_name ? (
+											<span className="text-baby_grey text-xs">
+												{u.first_name} {u.last_name}
+											</span>
+										) : null}
+									</li>
+								))}
+							</ul>
+						) : null}
 						<p className="text-baby_grey text-xs">
-							例: alice (英数字とアンダースコア 3-30 字、@ プレフィックス可)
+							例: alice (英数字とアンダースコア 3-30 字、@ プレフィックス可)。2
+							文字以上で候補表示。
 						</p>
 					</div>
 					<div className="flex justify-end gap-2">

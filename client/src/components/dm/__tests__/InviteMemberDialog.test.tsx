@@ -37,10 +37,31 @@ vi.mock("@/lib/redux/features/dm/dmApiSlice", () => ({
 		mockListInv(args, opts),
 }));
 
+interface SearchData {
+	results: {
+		user_id: string;
+		username: string;
+		first_name: string;
+		last_name: string;
+		avatar_url: string | null;
+	}[];
+}
+const mockSearchUsers = vi.fn(
+	(_args?: unknown, _opts?: unknown): { data: SearchData | undefined } => ({
+		data: undefined,
+	}),
+);
+vi.mock("@/lib/redux/features/users/usersApiSlice", () => ({
+	useSearchUsersQuery: (args: unknown, opts?: unknown) =>
+		mockSearchUsers(args, opts),
+}));
+
 beforeEach(() => {
 	mockCreate.mockReset();
 	mockCancel.mockReset();
 	mockOnOpenChange.mockReset();
+	mockSearchUsers.mockReset();
+	mockSearchUsers.mockReturnValue({ data: undefined });
 	mockListInv.mockReset();
 	mockListInv.mockReturnValue({ data: { results: [] } });
 });
@@ -130,6 +151,71 @@ describe("InviteMemberDialog", () => {
 		expect(mockCreate).not.toHaveBeenCalled();
 	});
 
+	// #480: handle autocomplete dropdown
+	it("入力中に suggestions dropdown が出て click で input に補完される", async () => {
+		mockSearchUsers.mockReturnValue({
+			data: {
+				results: [
+					{
+						user_id: "u1",
+						username: "alice",
+						first_name: "Alice",
+						last_name: "Smith",
+						avatar_url: null,
+					},
+					{
+						user_id: "u2",
+						username: "alfred",
+						first_name: "",
+						last_name: "",
+						avatar_url: null,
+					},
+				],
+			},
+		});
+		render(
+			<InviteMemberDialog open roomId={42} onOpenChange={mockOnOpenChange} />,
+		);
+		await userEvent.type(screen.getByLabelText(/handle/i), "al");
+		const list = await screen.findByRole("listbox", { name: "ユーザー候補" });
+		expect(list).toBeInTheDocument();
+		const opts = screen.getAllByRole("option");
+		expect(opts).toHaveLength(2);
+		// click で input に値が入る (mousedown で picked)
+		await userEvent.click(opts[1]);
+		expect(screen.getByLabelText(/handle/i)).toHaveValue("alfred");
+	});
+
+	it("矢印 + Enter で suggestion を選択できる", async () => {
+		mockSearchUsers.mockReturnValue({
+			data: {
+				results: [
+					{
+						user_id: "u1",
+						username: "alice",
+						first_name: "",
+						last_name: "",
+						avatar_url: null,
+					},
+					{
+						user_id: "u2",
+						username: "alfred",
+						first_name: "",
+						last_name: "",
+						avatar_url: null,
+					},
+				],
+			},
+		});
+		render(
+			<InviteMemberDialog open roomId={42} onOpenChange={mockOnOpenChange} />,
+		);
+		const input = screen.getByLabelText(/handle/i);
+		await userEvent.type(input, "al");
+		await userEvent.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+		expect(input).toHaveValue("alfred");
+	});
+
 	// #481: 送信中の招待 listing + 取消
 	it("送信中の招待が listing され、取消 button で cancelInvitation が呼ばれる", async () => {
 		mockListInv.mockReturnValue({
@@ -146,7 +232,6 @@ describe("InviteMemberDialog", () => {
 		);
 		const list = await screen.findByRole("list", { name: "送信中の招待" });
 		expect(list).toBeInTheDocument();
-		// 同じ room の alice のみ表示、別 room の bob は除外
 		expect(screen.getByText("@alice")).toBeInTheDocument();
 		expect(screen.queryByText("@bob")).toBeNull();
 
