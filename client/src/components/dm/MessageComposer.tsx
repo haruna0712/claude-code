@@ -10,12 +10,19 @@
  * - 添付 UI (#456): roomId が渡されると `<AttachmentUploader>` を表示。
  *   アップロード済み attachment を preview + 送信時に attachment_ids として親へ。
  *   body 空でも attachment が 1 件以上あれば送信可能。
+ * - Ctrl+V paste (#470): textarea に画像を貼り付けると presign → S3 → confirm を
+ *   自動実行して attachment 一覧に追加する。テキスト paste には介入しない。
  */
 
-import { useCallback, useState, type KeyboardEvent } from "react";
+import {
+	useCallback,
+	useState,
+	type ClipboardEvent,
+	type KeyboardEvent,
+} from "react";
 
 import AttachmentUploader from "@/components/dm/AttachmentUploader";
-import type { ConfirmResponse } from "@/lib/dm/attachments";
+import { uploadAttachment, type ConfirmResponse } from "@/lib/dm/attachments";
 
 interface MessageComposerProps {
 	onSubmit(body: string, attachmentIds: number[]): void | Promise<void>;
@@ -54,6 +61,9 @@ export default function MessageComposer({
 	const [submitting, setSubmitting] = useState(false);
 	const [submitError, setSubmitError] = useState<string | null>(null);
 	const [attached, setAttached] = useState<AttachedFile[]>([]);
+	// Issue #470: paste 中の進捗 / エラー
+	const [pasting, setPasting] = useState(false);
+	const [pasteError, setPasteError] = useState<string | null>(null);
 
 	const submit = useCallback(async () => {
 		const trimmed = value.trim();
@@ -103,6 +113,55 @@ export default function MessageComposer({
 		setAttached((prev) => prev.filter((a) => a.id !== id));
 	}, []);
 
+	// Issue #470: clipboard に image item があれば自動アップロードして attached に追加。
+	// テキスト paste には介入しない (preventDefault せず textarea のデフォルト動作)。
+	const onPaste = useCallback(
+		async (event: ClipboardEvent<HTMLTextAreaElement>) => {
+			if (roomId === undefined) return;
+			const items = event.clipboardData?.items;
+			if (!items) return;
+			const imageItem = Array.from(items).find((it) =>
+				it.type.startsWith("image/"),
+			);
+			if (!imageItem) return;
+			event.preventDefault();
+			const raw = imageItem.getAsFile();
+			if (!raw) return;
+			// pasted file は filename が空なので合成する (server validation 用)
+			const ext = (raw.type.split("/")[1] ?? "png").replace(/[^a-z0-9]/gi, "");
+			const named =
+				raw.name && raw.name.length > 0
+					? raw
+					: new File([raw], `pasted-${Date.now()}.${ext}`, {
+							type: raw.type,
+						});
+			setPasting(true);
+			setPasteError(null);
+			try {
+				const attachment = await uploadAttachment({ roomId, file: named });
+				setAttached((prev) => [
+					...prev,
+					{
+						id: attachment.id,
+						filename: attachment.filename,
+						mimeType: attachment.mime_type,
+						size: attachment.size,
+						url: attachment.url,
+					},
+				]);
+			} catch (err: unknown) {
+				const msg =
+					err instanceof Error
+						? err.message
+						: "貼り付けたファイルのアップロードに失敗しました";
+				setPasteError(msg);
+			} finally {
+				setPasting(false);
+			}
+		},
+		[roomId],
+	);
+
 	const sendDisabled =
 		disabled ||
 		(value.trim().length === 0 && attached.length === 0) ||
@@ -119,6 +178,20 @@ export default function MessageComposer({
 			{submitError ? (
 				<div role="alert" className="text-baby_red px-1 text-xs">
 					{submitError}
+				</div>
+			) : null}
+			{pasteError ? (
+				<div role="alert" className="text-baby_red px-1 text-xs">
+					{pasteError}
+				</div>
+			) : null}
+			{pasting ? (
+				<div
+					role="status"
+					aria-live="polite"
+					className="text-baby_grey px-1 text-xs"
+				>
+					貼り付け画像をアップロード中...
 				</div>
 			) : null}
 			{attached.length > 0 ? (
@@ -198,6 +271,7 @@ export default function MessageComposer({
 						onTyping?.();
 					}}
 					onKeyDown={onKeyDown}
+					onPaste={onPaste}
 					disabled={disabled}
 					placeholder={placeholder}
 					aria-keyshortcuts="Control+Enter Meta+Enter"
@@ -215,7 +289,9 @@ export default function MessageComposer({
 			</div>
 			<p id="message-composer-hint" className="text-baby_grey px-1 text-[11px]">
 				Ctrl/Cmd+Enter で送信、Enter で改行
-				{roomId !== undefined ? "、📎 で画像/ファイル添付" : ""}
+				{roomId !== undefined
+					? "、📎 で画像/ファイル添付、Ctrl+V で画像貼り付け"
+					: ""}
 			</p>
 		</form>
 	);
