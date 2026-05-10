@@ -394,17 +394,198 @@ Phase 1 以降で必要となる Python 依存を一括導入する。
 
 ## 8. よくある失敗と回避
 
-| 失敗                                           | 回避策                                    |
-| ---------------------------------------------- | ----------------------------------------- |
-| Issue が大きすぎて PR も巨大化                 | 発行時に Estimate が L 以上なら分割を検討 |
-| 並列 worktree でマイグレーション番号衝突       | 先にマージされた worktree 基準で rebase   |
-| settings.py の同時編集で conflict              | 共有設定変更は 1 Issue に集約             |
-| サブエージェントの Critical 指摘で PR が詰まる | 最初の段階でセキュリティ観点を盛り込む    |
-| stg デプロイで IAM 権限不足発覚                | Phase 0.5 で最小権限設計を検証            |
+| 失敗                                                                                                 | 回避策                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Issue が大きすぎて PR も巨大化                                                                       | 発行時に Estimate が L 以上なら分割を検討                                                                                                                              |
+| 並列 worktree でマイグレーション番号衝突                                                             | 先にマージされた worktree 基準で rebase                                                                                                                                |
+| settings.py の同時編集で conflict                                                                    | 共有設定変更は 1 Issue に集約                                                                                                                                          |
+| サブエージェントの Critical 指摘で PR が詰まる                                                       | 最初の段階でセキュリティ観点を盛り込む                                                                                                                                 |
+| stg デプロイで IAM 権限不足発覚                                                                      | Phase 0.5 で最小権限設計を検証                                                                                                                                         |
+| 同じファイルを触る複数 PR で rebase が壊れる                                                         | rebase ではなく `git merge origin/main` で 1 回に集約                                                                                                                  |
+| pytest のテストパスワード文字列が pre-commit で reject                                               | 文字列に `# pragma: allowlist secret` コメントを付ける                                                                                                                 |
+| `git worktree add` 後に node_modules が無くて vitest 失敗                                            | `ln -s /workspace/client/node_modules <worktree>/client/node_modules` で symlink                                                                                       |
+| API curl 直叩きで「E2E pass」と主張                                                                  | Playwright で **UI クリック / fill** を踏むまで E2E と呼ばない (#455 反省)                                                                                             |
+| pytest が `assert 401 == 403` で fail                                                                | DRF Cookie 認証は WWW-Authenticate header を出さず 403 を返す。test は `(401, 403)` 両方許容                                                                           |
+| backend は実装済だが Phase 4A bridge (`apps/notifications/signals.py`) 未実装で通知が `silent no-op` | bridge を resolve できないと dispatch がサイレント no-op になる。新規 dispatch 追加時は **bridge module の存在確認**まで責務に含める (#487 教訓)                       |
+| **DOM 上に button 存在 = ユーザに見える、ではない**                                                  | `text-baby_grey + border-baby_grey` のような薄色は dark 背景に溶け込んで視覚的に消える。stg で **目視 visual capture** + 色コントラスト確認まで責務 (#492 → #496 教訓) |
+| 使い捨て tsx スクリプトで「E2E 完了」と主張                                                          | `client/e2e/<feature>.spec.ts` にコミット必須。CI/regression に再利用可能でなければ E2E と呼ばない (#492 → #495 教訓)                                                  |
 
 ---
 
-## 9. 参考: 初期 Phase の Issue 発行例
+## 10. 機能フォロー追加 (follow-up Issue) のフロー — 本セッション (#469-#496) で標準化
+
+新規機能を追加するときの **9 ステップ** を、本セッション (DM 招待まわり 11 PR) で実証した順番で記載する。各ステップを飛ばさない。
+
+### 10.1 ステップ概要
+
+```
+0. 「同じ機能が他のチャットアプリにある？」を最初に調査
+1. Issue 起票 (UX 仕様 + やる/やらない + 切り分け表 + テスト方針 + 関連 PR)
+2. 仕様書 (docs/specs/<feature>-spec.md) に章を追記 / 新規作成
+3. worktree 切る (.worktrees/issue-<N>-<slug>)
+4. RED テスト先 (vitest RTL / pytest)
+5. GREEN 実装 (backend → frontend → 統合)
+6. tsc + eslint + prettier (pre-commit hook が止める)
+7. PR 起票 → CI 全 green まで監視 → squash merge
+8. CD stg deploy 完了まで監視
+9. **stg 実機で UI 操作 + visual capture** (← これを飛ばすと #492 の "削除 button が見えない" 事案を再発する)
+10. ROADMAP.md / 仕様書を docs PR で更新 (別 PR で履歴クリーン)
+```
+
+### 10.2 「他チャットアプリ調査」 を最初にやる理由
+
+ハルナさんから「他のチャットサービスを参考に」と言われることが多い。先に調査しておけば spec doc に **「他社調査表」** を入れられて、UX 判断の根拠 (なぜこの button が必要か) が PR review で揺れない。
+
+例 (本セッションの #489 / #492 / #470):
+
+| アプリ          | 招待通知 UX                               | kick UX                             | leave UX                      | clipboard paste  |
+| --------------- | ----------------------------------------- | ----------------------------------- | ----------------------------- | ---------------- |
+| Slack           | 受信箱「Join」 (別画面)                   | Channel admin が member 行 → Remove | Sidebar context menu「Leave」 | preview chip     |
+| Discord         | 通知に **inline** Accept/Reject、即時参加 | Server owner / mod → Kick           | Server menu「Leave Server」   | inline thumbnail |
+| Microsoft Teams | 通知に「Join」、即時参加                  | Team owner が member 行 → Remove    | Team menu「Leave team」       | inline thumbnail |
+| LINE            | 通知に「参加」「拒否」、即時参加          | Admin が member 長押し → 削除       | グループ画面「退会」          | inline thumbnail |
+
+**4 アプリ中 3 アプリで同じパターンなら、それが標準** と判定して spec に書く。1 アプリだけ違っても少数派意見として注釈に留める。
+
+### 10.3 仕様書を **実装より先に** 書く理由
+
+実装してから「ここの動作どうしよう」と判断するのは弱い。先に spec を書けば:
+
+- 「やる / やらない」が明示されて scope creep を防げる
+- a11y / 状態遷移 / API 仕様 / テスト方針が PR review 開始時点で揃っている
+- 後続 PR (例: #487 通知 bridge → #489 inline action) が同じ doc を編集して章を追加できる
+- ハルナさんが「これは仕様で決まってるの？」と聞いたときに即答できる
+
+### 10.4 RED → GREEN は妥協しない
+
+vitest RTL / pytest を **先に書いて fail を確認する** こと。GREEN から始めると "テストが実装に合わせてしまう" 罠を踏む。
+
+```bash
+# RED 確認 (component が無い → transform fail で OK)
+cd /workspace/.worktrees/<feature>/client && npx vitest run src/components/.../<New>.test.tsx
+# 期待: "Test Files 1 failed, Tests no tests" or "element not found"
+
+# 実装後 GREEN
+npx vitest run src/components/.../<New>.test.tsx
+# 期待: "Test Files 1 passed, Tests <N> passed"
+```
+
+### 10.5 stg 実機検証 (最重要、絶対飛ばさない)
+
+CI green + vitest pass + tsc pass **だけ** で機能完成と思わない。本セッションで:
+
+- **#487**: pytest GREEN, code merged。でも `apps/notifications/signals.py` が無くて dm_invite 通知が silent no-op だった。stg で test3 の `/notifications/` を curl 直叩きしたら 0 件で気づいた。
+- **#492**: kick 機能の API + UI + vitest 全 GREEN。でも CSS が `text-baby_grey` で button が dark 背景に溶け込んで **視覚的に見えなかった**。ハルナさんから「どこ？削除ボタン」と質問されて発覚 → #496 で `bg-baby_red/10 + text-baby_red` に修正。
+
+実機検証チェックリスト:
+
+- [ ] stg URL を browser でアクセスし、目で UI を確認する (Playwright headless でもよいが、screenshot を `picture/` に保存)
+- [ ] destructive action は **赤系**、primary は **青系** など、色コントラストが背景に対して十分か
+- [ ] aria-label / role が正しく振られているか (DOM dump で確認)
+- [ ] entry point (button / link / shortcut) が **発見できるか** — 自分が初見ユーザだったら見つけられるか
+- [ ] エラー系 (4xx / 5xx) を意図的に発生させてみて適切なメッセージが出るか
+- [ ] Playwright で UI クリック (setInputFiles / fill / click) を踏むテストを書く。**API curl 直叩きは E2E ではない**
+
+### 10.6 Playwright spec はリポにコミット (使い捨てスクリプト ≠ E2E)
+
+検証の最初の段階で `_verify-foo.ts` のような使い捨て tsx スクリプトを書いてもいいが、機能のリリース時は **必ず `client/e2e/<feature>.spec.ts` にコミット**する。
+
+- リポ内 spec = CI / regression テストとして再利用可能
+- 使い捨てスクリプト = 誰も再現できない、検証されたことの証跡が残らない
+
+`ensureMember` / `loginViaApi` のような事前準備 helper を spec 内に書いて、stg DB の状態に依存しない再現性を持たせる (#492 の `dm-kick-leave.spec.ts` 参照)。
+
+### 10.7 PR チェーン管理 (並列で同じファイルを触る場合)
+
+同じファイル (例: `InviteMemberDialog.tsx`) を複数 PR で並列に触ると merge conflict が起きる。
+
+**ベストプラクティス**:
+
+1. 大きな機能を分解した PR は **直列に merge** する。前の PR が merge されるまで次の PR の rebase はしない
+2. それでも conflict が起きたら **`git rebase` ではなく `git merge origin/main`** で 1 回で解消 (rebase は commit 単位で順番に適用するため、同じ conflict マーカーを何度も解消する羽目になる)
+3. conflict マーカー (`<<<<<<<` / `=======` / `>>>>>>>`) を grep で全件確認してから add / commit
+
+```bash
+git fetch origin main
+git merge origin/main
+# conflict 出たらマーカーを resolve
+grep -nE '<<<<<<<|=======|>>>>>>>' <files>  # 全件確認
+git add . && git commit -m "merge: main を取り込む"
+git push
+```
+
+### 10.8 docs PR は別出しにする
+
+機能実装 PR と ROADMAP / spec 更新 PR は **別 PR** で分ける:
+
+- 機能 PR: コード変更 + 該当 spec doc の追加章 (機能の仕様を書く)
+- docs PR: ROADMAP の完了チェック反映 + 切り分け表更新 (進捗を反映)
+
+この分け方で git history が「機能追加」「進捗反映」 で読み分けられる。本セッションでは feat PR (#477, #482, #483, ...) と docs PR (#486, #491, #494) で分けた。
+
+### 10.9 命名規約まとめ
+
+- ブランチ: `feature/issue-<N>-<slug>` (新機能) / `fix/issue-<N>-<slug>` (バグ修正) / `chore/<slug>` (テスト追加など) / `docs/<slug>` (ドキュメントのみ)
+- worktree: `.worktrees/issue-<N>-<slug>`
+- spec doc: `docs/specs/<feature-name>-spec.md` (kebab-case)
+- E2E spec: `client/e2e/<feature-name>.spec.ts`
+- pytest: `apps/<app>/tests/test_<feature>.py`
+- vitest: `client/src/components/<area>/__tests__/<Component>.test.tsx`
+
+### 10.10 worktree セットアップ snippet
+
+```bash
+# 切る + node_modules を symlink して vitest を即実行可能に
+git worktree add /workspace/.worktrees/issue-<N>-<slug> -b feature/issue-<N>-<slug>
+ln -s /workspace/client/node_modules /workspace/.worktrees/issue-<N>-<slug>/client/node_modules
+
+# 後始末
+cd /workspace
+git worktree remove /workspace/.worktrees/issue-<N>-<slug>
+git branch -D feature/issue-<N>-<slug>
+```
+
+### 10.11 stg 検証 snippet (Playwright で UI クリック + screenshot)
+
+```typescript
+// _verify-<feature>.ts (使い捨て、検証後 rm)
+import { chromium } from "@playwright/test";
+const BASE = "https://stg.codeplace.me";
+const USER = { email: "test2@gmail.com", password: "Sirius01" }; // pragma: allowlist secret -- docs/local/e2e-stg.md 参照
+
+async function login(ctx, user) {
+	const r = await ctx.request.get(`${BASE}/api/v1/auth/csrf/`);
+	const csrf =
+		/csrftoken=([^;]+)/.exec(r.headers()["set-cookie"] ?? "")?.[1] ?? "";
+	await ctx.request.post(`${BASE}/api/v1/auth/cookie/create/`, {
+		headers: {
+			"Content-Type": "application/json",
+			"X-CSRFToken": csrf,
+			Referer: `${BASE}/login`,
+		},
+		data: { email: user.email, password: user.password },
+	});
+}
+
+(async () => {
+	const browser = await chromium.launch({ headless: true });
+	const ctx = await browser.newContext({
+		viewport: { width: 1440, height: 900 },
+	});
+	const page = await ctx.newPage();
+	await login(ctx, USER);
+	await page.goto(`${BASE}/messages/<ROOM_ID>`);
+	// UI 操作 + screenshot
+	await page.screenshot({ path: "/workspace/picture/<feature>-shot.png" });
+	await browser.close();
+})();
+```
+
+実行後 `picture/<feature>-shot.png` を Read tool で開いて目視確認 → 検証完了したら使い捨てスクリプトを削除し、本番 spec を `client/e2e/` にコミットする。
+
+---
+
+## 11. 参考: 初期 Phase の Issue 発行例
 
 Phase 0 + 0.5 の Issue 発行コマンド例（`scripts/create-issues.sh` 内で実行される内容）:
 
