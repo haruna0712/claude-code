@@ -209,4 +209,31 @@ describe("AddToFolderDialog", () => {
 		});
 		expect(within(list).getByText("新規")).toBeInTheDocument();
 	});
+
+	it("Google/Edge 風: 『完了』 button click で onOpenChange(false) が呼ばれる (#507)", async () => {
+		vi.mocked(boxesApi.listFolders).mockResolvedValue([
+			{
+				id: 1,
+				name: "技術",
+				parent_id: null,
+				bookmark_count: 0,
+				child_count: 0,
+				created_at: NOW,
+				updated_at: NOW,
+			},
+		]);
+		vi.mocked(boxesApi.getTweetBookmarkStatus).mockResolvedValue({
+			folder_ids: [],
+			bookmark_ids: {},
+		});
+
+		const onOpenChange = vi.fn();
+		render(<AddToFolderDialog tweetId={42} open onOpenChange={onOpenChange} />);
+
+		await screen.findByRole("list", { name: "お気に入りフォルダ" });
+		const doneBtn = screen.getByRole("button", { name: "完了" });
+		expect(doneBtn).toBeInTheDocument();
+		await userEvent.click(doneBtn);
+		expect(onOpenChange).toHaveBeenCalledWith(false);
+	});
 });
