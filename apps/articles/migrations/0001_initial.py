@@ -62,7 +62,10 @@ class Migration(migrations.Migration):
         migrations.AddIndex(
             model_name="article",
             index=models.Index(
-                condition=models.Q(("status", "published"), ("is_deleted", False)),
+                # database-reviewer #541 CRITICAL: Q() の positional tuple は内部
+                # 形式で fragile (key/value typo を sanity-check してくれない)。
+                # canonical な keyword 形式で書く。
+                condition=models.Q(status="published", is_deleted=False),
                 fields=["-published_at"],
                 name="articles_published_idx",
             ),

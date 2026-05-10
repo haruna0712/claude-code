@@ -98,13 +98,21 @@ class Article(models.Model):
         return f"{self.title} (@{self.author_id} / {self.slug})"
 
     def soft_delete(self) -> None:
-        """論理削除 (apps/tweets と同じ pattern)."""
+        """論理削除 (apps/tweets と同じ pattern).
 
-        if self.is_deleted:
-            return
-        self.is_deleted = True
-        self.deleted_at = timezone.now()
-        self.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
+        database-reviewer #541 HIGH: 2 並行 call で both が guard を抜けないよう、
+        UPDATE を SQL レベルで原子実行する (filter + update)。冪等。
+        """
+
+        now = timezone.now()
+        updated = (
+            type(self)
+            .all_objects.filter(pk=self.pk, is_deleted=False)
+            .update(is_deleted=True, deleted_at=now)
+        )
+        if updated:
+            self.is_deleted = True
+            self.deleted_at = now
 
 
 class ArticleTag(models.Model):
@@ -255,8 +263,14 @@ class ArticleComment(models.Model):
         return f"comment:{self.id} on {self.article_id}"
 
     def soft_delete(self) -> None:
-        if self.is_deleted:
-            return
-        self.is_deleted = True
-        self.deleted_at = timezone.now()
-        self.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
+        """論理削除 (Article と同じく atomic UPDATE、冪等)."""
+
+        now = timezone.now()
+        updated = (
+            type(self)
+            .all_objects.filter(pk=self.pk, is_deleted=False)
+            .update(is_deleted=True, deleted_at=now)
+        )
+        if updated:
+            self.is_deleted = True
+            self.deleted_at = now
