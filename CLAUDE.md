@@ -68,7 +68,7 @@ gh issue list --milestone "<現 Phase のマイルストーン名>" --state open
 3. worktree 作成     → git worktree add .worktrees/issue-<N>-<slug> -b feature/issue-<N>-<slug>
 4. TDD 実装          → tdd-guide エージェント を呼ぶ (Red → Green → Refactor、カバレッジ 80%+)
 5. UI なら実機確認   → docker compose の dev サーバ + Playwright / browser MCP で golden path とエッジケース
-6. レビュー並列起動  → 下記マトリクスに従って複数エージェントを 1 メッセージ内 parallel call
+6. レビュー直列起動  → 下記マトリクスに従って **エージェントは 1 つずつ呼ぶ** (PC 制約、§4.5 参照)
 7. CRITICAL/HIGH 修正
 8. ドキュメント更新  → doc-updater エージェント または該当 docs/* を直接編集
 9. Conventional Commit → squash merge 前提で 1 PR = 意味のある 1 機能
@@ -98,7 +98,7 @@ gh issue list --milestone "<現 Phase のマイルストーン名>" --state open
 | 大きな機能 / リファクタ          | + `code-architect` で設計レビュー       |
 | サイレント失敗が混入しそう       | + `silent-failure-hunter`               |
 
-→ 独立して読めるレビューは **必ず 1 メッセージ内で parallel に並列起動**。逐次起動禁止。
+→ レビューエージェントは **1 つずつ直列に呼ぶ** (§4.5 の並列禁止ルールに従う、PC スペック制約)。
 
 ### 4.3 Phase 開始時の Issue 起票完備（planner エージェント）
 
@@ -121,65 +121,34 @@ gh issue list --milestone "<現 Phase のマイルストーン名>" --state open
 - ブランチ命名: `feature/issue-<N>-<slug>` / `fix/...` / `infra/...` / `docs/...` / `chore/...`
 - PR タイトル例: `[feature][tweets] Tweet モデルの基本 CRUD API を実装 (#12)`
 
-### 4.5 機能フォロー追加 (follow-up Issue) のフロー
+### 4.5 新規機能 / バグ修正のときに **必ず守る** こと
 
-新規機能を追加するときは [WORKFLOW.md §10](./docs/WORKFLOW.md) の 9 ステップを毎回踏む。要点:
+ハルナさんの指示。逐一聞かない。
 
-1. **「他チャットアプリ調査」 を最初に実施** — Slack / Discord / Teams / LINE 等の標準 UX を spec に表でまとめる (UX 判断の根拠が PR review で揺れない)
-2. **仕様書 `docs/specs/<feature>-spec.md` を実装より先に書く** — やる/やらない / a11y / API / 状態遷移 / テスト方針 / 切り分け表
-3. **RED → GREEN 妥協なし** — vitest / pytest を先に書いて fail を確認してから実装
-4. **stg 実機検証 (絶対飛ばさない)** — CI green は機能完成の証明にならない。stg 上で **目視 visual capture** + 色コントラスト確認まで責務 (#492 / #487 教訓)
-5. **Playwright spec はリポにコミット** — 使い捨て `_verify-foo.ts` ≠ E2E。`client/e2e/<feature>.spec.ts` 必須 (#492 → #495 教訓)
-6. **docs PR は別出し** — 機能実装 PR とは別の docs/<slug> ブランチで ROADMAP / 切り分け表を更新 (git history がきれい)
+1. **GitHub Issue を起票する** (機能 / バグ問わず最初に必ず)。タイトル / 背景 / やる・やらない / 受け入れ基準を書く。
+2. **仕様を `/workspace/docs/specs/<feature>-spec.md` に詳細に書く** (実装より先)。バグ修正でも「再現手順 / 期待動作 / 直し方の方針」を残す。
+3. 仕様に従って **frontend / backend を実装**する。設計判断が必要なら **`planner`** / **`architect`** / **`code-architect`** エージェントを呼ぶ。
+4. 実装は **TDD**。`tdd-guide` エージェントを呼んで Red → Green → Refactor を強制する。
+5. 実装 / レビューでは言語別エージェントを呼ぶ:
+   - Python / Django → `python-reviewer`
+   - TypeScript / Next.js → `typescript-reviewer`
+   - DB マイグレ / クエリ → `database-reviewer`
+   - 認証 / 認可 / 入力 / 課金 → `security-reviewer`
+   - UI コンポーネント → `a11y-architect`
+6. 実装が終わったら **仕様に沿っているかを E2E テストで確認**する。手順:
+   - **テストシナリオを `docs/specs/<feature>-spec.md` の「テスト」 章に書く** (誰が / 何をする / 何が見える)
+   - **そのシナリオを実行するコマンド** (例: `PLAYWRIGHT_BASE_URL=... npx playwright test e2e/<feature>.spec.ts`) を spec doc に併記
+   - 実行する。問題があれば **新しい Issue を起票して修正** (1 PR に詰めない)
+7. 挙動が完璧になったら **`/workspace/docs/ROADMAP.md` の該当行にチェック** ✅ を付ける (docs PR で別出し)
 
-### 4.6 UX 視認性チェックリスト (#492 → #496 教訓)
+#### 並列実行の禁止
 
-UI を追加したら:
+ハルナさんの PC スペック上、**並列で複数 Bash / Agent / Playwright を走らせるとターミナルが落ちる**。守ること:
 
-- [ ] DOM 上に存在する ≠ ユーザに見える。**stg で screenshot** を撮って必ず目視
-- [ ] destructive action (削除/退出) は **赤系**: `bg-baby_red/10 + text-baby_red + border-baby_red/60`
-- [ ] primary action (送信/承諾) は **青系**: `bg-baby_blue + text-baby_white`
-- [ ] secondary は枠だけ (`border-baby_grey + text-baby_grey`) で OK だが、**重要 button を灰色にしない** (背景に溶け込む)
-- [ ] button label は action 内容を明示 (例: 「削除」 → 「メンバーから削除」)
-- [ ] hover state で色反転して視覚フィードバック
-- [ ] entry point (header の button、kebab menu 等) が **発見できるか** を初見ユーザ視点で確認
-
-### 4.7 stg 実機検証 snippet
-
-```typescript
-// client/_verify-<feature>.ts (使い捨て、検証後 rm)
-import { chromium } from "@playwright/test";
-const BASE = "https://stg.codeplace.me";
-
-async function login(ctx, user) {
-	const r = await ctx.request.get(`${BASE}/api/v1/auth/csrf/`);
-	const csrf =
-		/csrftoken=([^;]+)/.exec(r.headers()["set-cookie"] ?? "")?.[1] ?? "";
-	await ctx.request.post(`${BASE}/api/v1/auth/cookie/create/`, {
-		headers: {
-			"Content-Type": "application/json",
-			"X-CSRFToken": csrf,
-			Referer: `${BASE}/login`,
-		},
-		data: { email: user.email, password: user.password },
-	});
-}
-
-(async () => {
-	const browser = await chromium.launch({ headless: true });
-	const ctx = await browser.newContext({
-		viewport: { width: 1440, height: 900 },
-	});
-	const page = await ctx.newPage();
-	await login(ctx, { email: "test2@gmail.com", password: "Sirius01" }); // pragma: allowlist secret -- docs/local/e2e-stg.md
-	await page.goto(`${BASE}/messages/<ROOM_ID>`);
-	// UI 操作 + screenshot → picture/<feature>-shot.png
-	await page.screenshot({ path: "/workspace/picture/<feature>-shot.png" });
-	await browser.close();
-})();
-```
-
-検証後、必ず `client/e2e/<feature>.spec.ts` に **正規化された Playwright spec をコミット** すること。
+- Bash の `run_in_background` は **1 個まで**。完了通知を待ってから次を起こす
+- Agent (Task tool) の **同時起動禁止** — 1 つ完了してから次を呼ぶ
+- worktree は切ってよいが **同時に複数 worktree で `pnpm` / `pytest` / `playwright` を実行しない**
+- 「parallel に並列起動」 は本プロジェクトでは **NG**。レビューエージェントも 1 つずつ直列で呼ぶ
 
 ---
 
@@ -252,7 +221,7 @@ cd client && npm run lint && npx tsc --noEmit
 - [ ] 既存の **open issue / open PR と被っていない**ことを `gh issue list` / `gh pr list` で確認した
 - [ ] 並列実行可なら **`.worktrees/` で worktree を切る**、共有設定（settings.py / package.json / local.yml）を触る Issue は単独で進める
 - [ ] **テストを先に書く**（TDD）
-- [ ] PR 作成時は **サブエージェントレビューを並列起動**
+- [ ] PR 作成時は **サブエージェントレビューを直列に呼ぶ** (PC 制約、§4.5)
 - [ ] `/workspace` の main ブランチへ直接 commit しない（PR 経由）
 
 ---
@@ -265,12 +234,7 @@ cd client && npm run lint && npx tsc --noEmit
 - **マイグレーション番号**は worktree 並列で衝突しがち。先にマージされた worktree 基準で rebase する。
 - 上流 Claude Code 由来のファイル（`plugins/`, `examples/`, `Script/`, `.claude-plugin/`, `CHANGELOG.md` 等）は **SNS 本体とは無関係**。改変しない。
 - ライセンスは現状 Anthropic Commercial Terms（fork 経緯）。Phase 9 以降で MIT / Apache-2.0 化検討予定。
-- **DOM 上に button 存在 = ユーザに見える、ではない** (#492 → #496)。CSS が薄い灰色だと dark 背景に溶け込んで視覚的に消える。重要 button は赤系/青系で色付け、stg で目視確認まで責務。
-- **使い捨て tsx スクリプトで「E2E 完了」と主張しない** (#492 → #495)。`client/e2e/<feature>.spec.ts` にコミット必須。
-- **`apps/notifications/signals.py` (Phase 4A bridge) 経由の通知 dispatch** は resolve できないと silent no-op (#487)。新 dispatch を追加するときは bridge module の存在 + emit_notification 呼び出しが届くことを stg で curl 確認まで責務。
-- **同じファイルを触る複数 PR で conflict** が起きたら `git rebase` ではなく `git merge origin/main` で 1 回で解消。rebase は commit 単位で同じ conflict を何度も解消する羽目になる。
-- **pytest のテストパスワード文字列**は pre-commit `detect-secrets` で reject される。文字列の末尾に `# pragma: allowlist secret` コメントを追加して suppress。
-- **`git worktree add` 直後に node_modules が無い**: vitest が動かない。`ln -s /workspace/client/node_modules <worktree>/client/node_modules` で symlink して workaround。
+- **PC スペック制約**: Bash background / Agent / Playwright を **同時並列で走らせない**。詳細は §4.5。
 
 ---
 
