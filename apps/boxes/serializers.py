@@ -70,6 +70,13 @@ class BookmarkCreateInputSerializer(serializers.Serializer):
 
 
 class BookmarkStatusSerializer(serializers.Serializer):
-    """``GET /tweets/<id>/bookmark-status/`` の出力."""
+    """``GET /tweets/<id>/status/`` の出力.
+
+    folder_ids は後方互換のため残しつつ、bookmark_ids は
+    ``{folder_id: bookmark_id}`` 形式で frontend が削除時に N+1 listFolderBookmarks
+    せずに bookmark_id を引けるようにする (typescript-reviewer #502 H4 対応)。
+    """
 
     folder_ids = serializers.ListField(child=serializers.IntegerField())
+    # DictField の key は str に丸まるが、value も IntegerField で型を担保。
+    bookmark_ids = serializers.DictField(child=serializers.IntegerField())

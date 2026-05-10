@@ -335,14 +335,17 @@ def test_bookmark_status_returns_folder_ids(status_url) -> None:
     f1 = Folder.objects.create(user=me, name="A")
     f2 = Folder.objects.create(user=me, name="B")
     t = _tweet(me)
-    Bookmark.objects.create(user=me, folder=f1, tweet=t)
-    Bookmark.objects.create(user=me, folder=f2, tweet=t)
+    bm1 = Bookmark.objects.create(user=me, folder=f1, tweet=t)
+    bm2 = Bookmark.objects.create(user=me, folder=f2, tweet=t)
     client = APIClient()
     client.force_authenticate(user=me)
     resp = client.get(status_url(t.pk))
     assert resp.status_code == 200
-    folder_ids = sorted(resp.json()["folder_ids"])
+    body = resp.json()
+    folder_ids = sorted(body["folder_ids"])
     assert folder_ids == sorted([f1.pk, f2.pk])
+    # bookmark_ids は {folder_id (str): bookmark_id (int)} (#502 H4 対応)
+    assert body["bookmark_ids"] == {str(f1.pk): bm1.pk, str(f2.pk): bm2.pk}
 
 
 @pytest.mark.django_db
@@ -353,7 +356,9 @@ def test_bookmark_status_empty_when_not_saved(status_url) -> None:
     client.force_authenticate(user=me)
     resp = client.get(status_url(t.pk))
     assert resp.status_code == 200
-    assert resp.json()["folder_ids"] == []
+    body = resp.json()
+    assert body["folder_ids"] == []
+    assert body["bookmark_ids"] == {}
 
 
 # ------------------------------------------------------------------------
