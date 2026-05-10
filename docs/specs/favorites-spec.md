@@ -97,17 +97,17 @@ class Bookmark(models.Model):
 
 ## 4. API 設計
 
-prefix: `/api/v1/`
+prefix: `/api/v1/boxes/` (既存 `apps.boxes` の URL include に乗る、`apps.tweets` の `/tweets/<id>/...` との衝突回避)。
 
 ### 4.1 Folder CRUD
 
-| Method | Path             | 概要                                                         |
-| ------ | ---------------- | ------------------------------------------------------------ |
-| GET    | `/folders/`      | 自分のフォルダ全件をフラットリストで返す (tree は FE で構築) |
-| POST   | `/folders/`      | 新規作成 `{name, parent_id?}`                                |
-| GET    | `/folders/<id>/` | 単一フォルダ取得 (children + bookmark count)                 |
-| PATCH  | `/folders/<id>/` | rename / 親変更 (move) `{name?, parent_id?}`                 |
-| DELETE | `/folders/<id>/` | フォルダ削除 (CASCADE で子フォルダ + 配下 bookmark も削除)   |
+| Method | Path                          | 概要                                                         |
+| ------ | ----------------------------- | ------------------------------------------------------------ |
+| GET    | `/api/v1/boxes/folders/`      | 自分のフォルダ全件をフラットリストで返す (tree は FE で構築) |
+| POST   | `/api/v1/boxes/folders/`      | 新規作成 `{name, parent_id?}`                                |
+| GET    | `/api/v1/boxes/folders/<id>/` | 単一フォルダ取得 (children + bookmark count)                 |
+| PATCH  | `/api/v1/boxes/folders/<id>/` | rename / 親変更 (move) `{name?, parent_id?}`                 |
+| DELETE | `/api/v1/boxes/folders/<id>/` | フォルダ削除 (CASCADE で子フォルダ + 配下 bookmark も削除)   |
 
 レスポンス例 (`GET /folders/`):
 
@@ -141,12 +141,12 @@ prefix: `/api/v1/`
 
 ### 4.2 Bookmark CRUD
 
-| Method | Path                            | 概要                                                          |
-| ------ | ------------------------------- | ------------------------------------------------------------- |
-| GET    | `/folders/<id>/bookmarks/`      | フォルダ内 bookmark 一覧 (新しい順、cursor pagination)        |
-| POST   | `/bookmarks/`                   | 追加 `{tweet_id, folder_id}`                                  |
-| DELETE | `/bookmarks/<id>/`              | 削除                                                          |
-| GET    | `/tweets/<id>/bookmark-status/` | 該当ツイートが自分のどの folder に保存されてるか array で返す |
+| Method | Path                                    | 概要                                                          |
+| ------ | --------------------------------------- | ------------------------------------------------------------- |
+| GET    | `/api/v1/boxes/folders/<id>/bookmarks/` | フォルダ内 bookmark 一覧 (新しい順、cursor pagination)        |
+| POST   | `/api/v1/boxes/bookmarks/`              | 追加 `{tweet_id, folder_id}`                                  |
+| DELETE | `/api/v1/boxes/bookmarks/<id>/`         | 削除                                                          |
+| GET    | `/api/v1/boxes/tweets/<id>/status/`     | 該当ツイートが自分のどの folder に保存されてるか array で返す |
 
 `bookmark-status` は TweetCard の icon 色付け (saved / not saved) のため必要。
 1 query で済む (`Bookmark.objects.filter(user, tweet=tweet_id).values_list('folder_id', flat=True)`)。
