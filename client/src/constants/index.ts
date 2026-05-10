@@ -46,6 +46,13 @@ export const leftNavLinks: LeftNavLink[] = [
 		iconName: "MessagesSquare",
 	},
 	{
+		// Phase 6 (#546): 記事 (Zenn ライク)。匿名閲覧可。FileText icon は
+		// SPEC §12.4 の「記事マーク 📄」 と同じ Lucide icon。
+		path: "/articles",
+		label: "記事",
+		iconName: "FileText",
+	},
+	{
 		// path は LeftNavbar 側で `/u/<self.handle>` に動的に組み替える
 		path: "",
 		label: "プロフィール",
