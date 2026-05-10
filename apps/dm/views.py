@@ -70,6 +70,7 @@ from apps.dm.serializers import (
 from apps.dm.services import (
     accept_invitation,
     annotate_rooms_with_unread_count,
+    cancel_invitation,
     confirm_attachment,
     create_group_room,
     decline_invitation,
@@ -369,18 +370,25 @@ class DMRoomReadView(APIView):
 
 
 class InvitationListView(generics.ListAPIView):
-    """``GET /api/v1/dm/invitations/?status=pending|all``."""
+    """``GET /api/v1/dm/invitations/?status=pending|all&as=invitee|inviter``.
+
+    既定 ``as=invitee`` (受信箱)。Issue #481 で ``as=inviter`` を追加し、
+    creator が自分の発信中招待を見られるようにする。
+    """
 
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = GroupInvitationSerializer
 
     def get_queryset(self):
         status_param = self.request.query_params.get("status", "pending")
+        as_param = self.request.query_params.get("as", "invitee")
         # serializer が inviter / invitee の username を読むため select_related で
         # N+1 を防ぐ (review HIGH 反映)。
-        qs = GroupInvitation.objects.filter(invitee=self.request.user).select_related(
-            "inviter", "invitee"
-        )
+        if as_param == "inviter":
+            qs = GroupInvitation.objects.filter(inviter=self.request.user)
+        else:
+            qs = GroupInvitation.objects.filter(invitee=self.request.user)
+        qs = qs.select_related("inviter", "invitee")
         if status_param == "pending":
             qs = qs.filter(accepted__isnull=True)
         return qs.order_by("-created_at")
@@ -421,6 +429,29 @@ class InvitationAcceptView(InvitationActionView):
 
 class InvitationDeclineView(InvitationActionView):
     action = "decline"
+
+
+class InvitationCancelView(APIView):
+    """``DELETE /api/v1/dm/invitations/<id>/``: inviter が pending を取消す (#481).
+
+    認可: invitation.inviter のみ。それ以外 / 認証無し は 404 で隠蔽。
+    状態: ``accepted is None`` のみ削除可、応答済みは 409。
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request: Request, pk: int) -> Response:
+        # 自分が送信したもの以外は存在しないかのように 404
+        invitation = GroupInvitation.objects.filter(pk=pk, inviter=request.user).first()
+        if invitation is None:
+            raise NotFound("invitation not found")
+        try:
+            cancel_invitation(invitation=invitation, user=request.user)
+        except DjangoValidationError as exc:
+            raise DRFValidationError(detail=exc.messages) from exc
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(str(exc)) from exc
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # ----------------------------------------------------------------------------

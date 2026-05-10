@@ -752,3 +752,29 @@ def annotate_rooms_with_unread_count(
     return rooms_with_last_read.annotate(
         unread_count=Coalesce(Subquery(unread_sq, output_field=IntegerField()), 0),
     )
+
+
+# ---------------------------------------------------------------------------
+# Issue #481: 招待取消 (creator が pending invitation を取り消す)
+# ---------------------------------------------------------------------------
+
+
+def cancel_invitation(
+    *,
+    invitation: GroupInvitation,
+    user: AbstractBaseUser,
+) -> None:
+    """pending の招待を inviter が取り消す.
+
+    ルール:
+    - inviter のみ取消可能 (それ以外は PermissionDenied → 403)
+    - accepted is None (pending) のみ削除可。accepted=True/False の場合は
+      ValidationError → 409 (応答済みの招待は履歴として残す)
+    - 物理削除 (履歴を残さない、再招待は新規 invitation で可能)
+    """
+
+    if invitation.inviter_id != user.pk:
+        raise PermissionDenied("自分が送信した招待のみ取消できます")
+    if invitation.accepted is not None:
+        raise ValidationError("既に応答済みの招待は取消できません")
+    invitation.delete()

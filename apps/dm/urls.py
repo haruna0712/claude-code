@@ -21,6 +21,7 @@ from apps.dm.views import (
     DMRoomMessagesView,
     DMRoomReadView,
     InvitationAcceptView,
+    InvitationCancelView,
     InvitationDeclineView,
     InvitationListView,
     MessageDestroyView,
@@ -74,6 +75,12 @@ urlpatterns = [
         "invitations/<int:pk>/decline/",
         InvitationDeclineView.as_view(),
         name="invitation-decline",
+    ),
+    # Issue #481: inviter による取消 (DELETE)
+    path(
+        "invitations/<int:pk>/",
+        InvitationCancelView.as_view(),
+        name="invitation-cancel",
     ),
     # 添付 (P3-06)
     path(
