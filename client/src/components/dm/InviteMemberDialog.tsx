@@ -29,7 +29,11 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { useCreateRoomInvitationMutation } from "@/lib/redux/features/dm/dmApiSlice";
+import {
+	useCancelInvitationMutation,
+	useCreateRoomInvitationMutation,
+	useListInvitationsQuery,
+} from "@/lib/redux/features/dm/dmApiSlice";
 import { useSearchUsersQuery } from "@/lib/redux/features/users/usersApiSlice";
 
 function useDebounced<T>(value: T, delayMs: number): T {
@@ -78,6 +82,16 @@ export default function InviteMemberDialog({
 	roomId,
 }: InviteMemberDialogProps) {
 	const [createInvite, { isLoading }] = useCreateRoomInvitationMutation();
+	const [cancelInvite] = useCancelInvitationMutation();
+	// #481: 自分が当該 room へ送信中の pending 招待を listing
+	const sentQuery = useListInvitationsQuery(
+		{ status: "pending", as: "inviter" },
+		{ skip: !open },
+	);
+	const sentForRoom = (sentQuery.data?.results ?? []).filter(
+		(inv) => inv.room_id === roomId,
+	);
+	const [pendingCancelId, setPendingCancelId] = useState<number | null>(null);
 	const [handle, setHandle] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -283,6 +297,46 @@ export default function InviteMemberDialog({
 						</button>
 					</div>
 				</form>
+				{sentForRoom.length > 0 ? (
+					<div className="border-baby_grey/20 mt-4 border-t pt-4">
+						<h3 className="text-baby_white mb-2 text-sm font-semibold">
+							送信中の招待 ({sentForRoom.length})
+						</h3>
+						<ul
+							role="list"
+							aria-label="送信中の招待"
+							className="flex flex-col gap-2"
+						>
+							{sentForRoom.map((inv) => (
+								<li
+									key={inv.id}
+									role="listitem"
+									className="bg-baby_veryBlack border-baby_grey/30 text-baby_white flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+								>
+									<span>@{inv.invitee_handle}</span>
+									<button
+										type="button"
+										onClick={async () => {
+											setPendingCancelId(inv.id);
+											try {
+												await cancelInvite(inv.id).unwrap();
+											} catch {
+												// リスト無効化で消えなければ何もしない (silent failure)
+											} finally {
+												setPendingCancelId(null);
+											}
+										}}
+										disabled={pendingCancelId === inv.id}
+										aria-label={`@${inv.invitee_handle} への招待を取り消す`}
+										className="border-baby_grey text-baby_grey hover:border-baby_red hover:text-baby_red focus-visible:ring-baby_blue rounded-md border px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+									>
+										{pendingCancelId === inv.id ? "取消中..." : "取消"}
+									</button>
+								</li>
+							))}
+						</ul>
+					</div>
+				) : null}
 			</DialogContent>
 		</Dialog>
 	);
