@@ -321,7 +321,7 @@ def test_folder_bookmarks_list(folder_bookmarks_url) -> None:
     resp = client.get(folder_bookmarks_url(f.pk))
     assert resp.status_code == 200
     body = resp.json()
-    assert len(body["results"]) == 2 if isinstance(body, dict) else len(body) == 2
+    assert len(body["results"]) == 2
 
 
 # ------------------------------------------------------------------------
@@ -354,3 +354,50 @@ def test_bookmark_status_empty_when_not_saved(status_url) -> None:
     resp = client.get(status_url(t.pk))
     assert resp.status_code == 200
     assert resp.json()["folder_ids"] == []
+
+
+# ------------------------------------------------------------------------
+# 追加: review HIGH 修正の回帰テスト
+# ------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_folder_patch_rename_and_move_dup_in_destination(folder_detail_url) -> None:
+    """rename + move を同 PATCH で送ったとき、移動先で同名衝突が 400 を返すこと.
+
+    review HIGH: 旧実装では parent_id 更新前に sibling_check が走り、
+    DB 制約 IntegrityError → 500 になる経路があった。
+    """
+
+    me = _user("alice")
+    src_parent = Folder.objects.create(user=me, name="src")
+    dst_parent = Folder.objects.create(user=me, name="dst")
+    moving = Folder.objects.create(user=me, parent=src_parent, name="X")
+    # 移動先には既に同名 "X" が存在する
+    Folder.objects.create(user=me, parent=dst_parent, name="X")
+    client = APIClient()
+    client.force_authenticate(user=me)
+    resp = client.patch(
+        folder_detail_url(moving.pk),
+        {"name": "X", "parent_id": dst_parent.pk},
+        format="json",
+    )
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+def test_bookmark_create_for_soft_deleted_tweet_400(bookmarks_url) -> None:
+    """論理削除済 tweet (is_deleted=True) は bookmark できない.
+
+    review HIGH: tweet は soft-delete モデルなのに既存実装は `pk のみ` で
+    存在チェックしていた。
+    """
+
+    me = _user("alice")
+    f = Folder.objects.create(user=me, name="f")
+    t = _tweet(me)
+    t.soft_delete()
+    client = APIClient()
+    client.force_authenticate(user=me)
+    resp = client.post(bookmarks_url, {"tweet_id": t.pk, "folder_id": f.pk}, format="json")
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST

@@ -61,22 +61,31 @@ class Folder(models.Model):
         if self.parent_id is None:
             return
 
-        # 親と user が同じこと
-        if self.parent.user_id != self.user_id:
+        # parent_id 経由で 1 回だけ取得 (full_clean 経由で並行削除されているケースも考慮)
+        parent_obj = Folder.objects.filter(pk=self.parent_id).first()
+        if parent_obj is None:
+            raise ValidationError({"parent": "親フォルダが見つかりません"})
+
+        if parent_obj.user_id != self.user_id:
             raise ValidationError({"parent": "他のユーザーのフォルダは親に指定できません"})
-        # 自分自身を親にできない
         if self.parent_id == self.pk:
             raise ValidationError({"parent": "自分自身を親に指定できません"})
+
         # 深さチェック: parent から root までの段数 + 1 が MAX を超えてはいけない
         depth = 1
-        cursor = self.parent
+        cursor: Folder | None = parent_obj
         while cursor is not None:
             depth += 1
             if depth > MAX_FOLDER_DEPTH:
                 raise ValidationError(
                     {"parent": (f"フォルダの深さ上限 ({MAX_FOLDER_DEPTH}) を超えています")}
                 )
-            cursor = cursor.parent
+            cursor = (
+                Folder.objects.filter(pk=cursor.parent_id).first()
+                if cursor.parent_id is not None
+                else None
+            )
+
         # 子孫を親にしようとしている (循環)
         descendant_ids = self._collect_descendant_ids()
         if self.parent_id in descendant_ids:
@@ -119,6 +128,8 @@ class Bookmark(models.Model):
 
     class Meta:
         constraints = [
+            # (folder, tweet) で一意 (同一フォルダ内重複禁止)。
+            # user は folder.user と整合する想定だが、view 層で必ず request.user を渡す。
             models.UniqueConstraint(
                 fields=["folder", "tweet"],
                 name="uniq_bookmark_per_folder",

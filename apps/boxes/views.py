@@ -17,6 +17,7 @@ docs/specs/favorites-spec.md §4 を実装する。本人以外は 404 隠蔽 (S
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, transaction
 from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
@@ -77,10 +78,11 @@ class FolderListCreateView(APIView):
 
         folder = Folder(user=request.user, parent=parent, name=data["name"])
         try:
-            folder.clean()
+            with transaction.atomic():
+                folder.clean()
+                folder.save()
         except DjangoValidationError as exc:
             raise DRFValidationError(detail=exc.message_dict) from exc
-        folder.save()
 
         # 直作成だと count annotation が無いので 0 で埋める
         folder.bookmark_count = 0  # type: ignore[attr-defined]
@@ -110,16 +112,8 @@ class FolderDetailView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        if "name" in data:
-            new_name = data["name"]
-            # 同一親で同名禁止 (自分自身を除外)
-            sibling_qs = Folder.objects.filter(
-                user=request.user, parent_id=folder.parent_id, name=new_name
-            ).exclude(pk=folder.pk)
-            if sibling_qs.exists():
-                raise DRFValidationError({"name": "同名フォルダが存在します"})
-            folder.name = new_name
-
+        # parent_id を先に解決して effective parent を確定させてから
+        # sibling 同名チェックを走らせる (rename + move 同時 PATCH の整合性)。
         if "parent_id" in data:
             new_parent_id = data["parent_id"]
             if new_parent_id is None:
@@ -130,13 +124,22 @@ class FolderDetailView(APIView):
                     raise DRFValidationError({"parent_id": "無効な parent_id"})
                 folder.parent = new_parent
 
+        if "name" in data:
+            new_name = data["name"]
+            sibling_qs = Folder.objects.filter(
+                user=request.user, parent_id=folder.parent_id, name=new_name
+            ).exclude(pk=folder.pk)
+            if sibling_qs.exists():
+                raise DRFValidationError({"name": "同名フォルダが存在します"})
+            folder.name = new_name
+
         try:
-            folder.clean()
+            with transaction.atomic():
+                folder.clean()
+                folder.save()
         except DjangoValidationError as exc:
             raise DRFValidationError(detail=exc.message_dict) from exc
-        folder.save()
 
-        # 再取得して annotation を埋める
         return Response(FolderSerializer(self._get_folder(request, pk)).data)
 
     def delete(self, request: Request, pk: int) -> Response:
@@ -153,10 +156,14 @@ class FolderBookmarksView(generics.ListAPIView):
 
     def get_queryset(self):
         pk = self.kwargs["pk"]
-        # 本人の folder か確認 (他人は 404 隠蔽)
+        # 1 query で folder の本人所有を兼ねた絞り込み (他人 / 存在しない folder は 404)
         if not Folder.objects.filter(pk=pk, user=self.request.user).exists():
             raise NotFound("folder not found")
-        return Bookmark.objects.filter(folder_id=pk).order_by("-created_at")
+        return (
+            Bookmark.objects.filter(folder_id=pk, folder__user=self.request.user)
+            .select_related("tweet")
+            .order_by("-created_at")
+        )
 
 
 class BookmarkCreateView(APIView):
@@ -169,22 +176,31 @@ class BookmarkCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # folder の所有者チェック
         folder = Folder.objects.filter(pk=data["folder_id"], user=request.user).first()
         if folder is None:
             raise DRFValidationError({"folder_id": "無効な folder_id"})
 
-        # tweet 存在チェック
         from apps.tweets.models import Tweet  # 遅延 import で循環回避
 
-        if not Tweet.objects.filter(pk=data["tweet_id"]).exists():
+        # 論理削除済 tweet (is_deleted=True) は bookmark 不可。
+        if not Tweet.objects.filter(pk=data["tweet_id"], is_deleted=False).exists():
             raise DRFValidationError({"tweet_id": "ツイートが見つかりません"})
 
-        bookmark, created = Bookmark.objects.get_or_create(
-            user=request.user,
-            folder=folder,
-            tweet_id=data["tweet_id"],
-        )
+        # `get_or_create` は完全並行下で IntegrityError を投げ得るので
+        # transaction.atomic + IntegrityError 拾いでフォールバックして idempotent を維持。
+        try:
+            with transaction.atomic():
+                bookmark, created = Bookmark.objects.get_or_create(
+                    user=request.user,
+                    folder=folder,
+                    tweet_id=data["tweet_id"],
+                )
+        except IntegrityError:
+            bookmark = Bookmark.objects.get(
+                user=request.user, folder=folder, tweet_id=data["tweet_id"]
+            )
+            created = False
+
         return Response(
             BookmarkSerializer(bookmark).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
