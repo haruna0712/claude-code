@@ -153,9 +153,11 @@ export default function RoomMembersDialog({
 												onClick={() => onKick(m)}
 												disabled={pendingKickId === m.user_id}
 												aria-label={`@${m.handle} を削除`}
-												className="border-baby_grey text-baby_grey hover:border-baby_red hover:text-baby_red focus-visible:ring-baby_blue rounded-md border px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+												className="border-baby_red/60 bg-baby_red/10 text-baby_red hover:bg-baby_red hover:text-baby_white focus-visible:ring-baby_red rounded-md border px-3 py-1.5 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
 											>
-												{pendingKickId === m.user_id ? "削除中..." : "削除"}
+												{pendingKickId === m.user_id
+													? "削除中..."
+													: "メンバーから削除"}
 											</button>
 										) : null}
 									</div>
