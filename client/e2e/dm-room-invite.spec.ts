@@ -135,6 +135,25 @@ test.describe("DM ルーム内 招待 UI E2E (#476)", () => {
 		const ctx2 = await browser.newContext();
 		const page2 = await ctx2.newPage();
 		await loginViaApi(ctx2.request, USER2);
+
+		// #487: 通知 dispatch 検証 — invite 送信後 1〜2 秒で
+		// transaction.on_commit → emit_dm_invite → create_notification が
+		// 動くため、USER2 の /api/v1/notifications/ に dm_invite kind の
+		// エントリが現れているはず。SPEC §7.5 / §8.1 担保。
+		const notifResp = await ctx2.request.get(
+			`${BASE}/api/v1/notifications/?limit=10`,
+		);
+		expect(notifResp.status()).toBe(200);
+		const notifData = (await notifResp.json()) as {
+			results: { kind: string; actor?: { handle?: string } | null }[];
+		};
+		const dmInvite = notifData.results.find(
+			(n) =>
+				n.kind === "dm_invite" &&
+				(n.actor?.handle === USER1.handle || USER1.handle === ""),
+		);
+		expect(dmInvite, "dm_invite 通知が test3 に届いていること").toBeTruthy();
+
 		await page2.goto(`${BASE}/messages/invitations`);
 
 		// invitation listing に該当 room (= GROUP_ROOM_ID) のエントリ
