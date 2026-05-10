@@ -469,6 +469,9 @@ _THROTTLE_RATES_BASE = {
     "moderation_block": "30/hour" if not _IS_STG else "300/hour",
     "moderation_mute": "30/hour" if not _IS_STG else "300/hour",
     "moderation_report": "5/hour" if not _IS_STG else "50/hour",
+    # Phase 6 articles (P6-03):
+    # 30/hour = 2 分に 1 本ペース。長文記事の保存頻度を考えると十分余裕あり。
+    "article_write": "30/hour" if not _IS_STG else "300/hour",
 }
 
 REST_FRAMEWORK = {
