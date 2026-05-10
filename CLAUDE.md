@@ -88,17 +88,20 @@ gh issue list --milestone "<現 Phase のマイルストーン名>" --state open
 
 ### 4.2 レビューエージェント選択マトリクス
 
-| 触ったもの                       | 必ず呼ぶ                                |
-| -------------------------------- | --------------------------------------- |
-| Python / Django (apps/, config/) | `python-reviewer` + `code-reviewer`     |
-| TypeScript / Next.js (client/)   | `typescript-reviewer` + `code-reviewer` |
-| UI コンポーネント                | + `a11y-architect`                      |
-| 認証 / 認可 / 入力 / 課金        | + `security-reviewer`                   |
-| DB マイグレ / クエリ / モデル    | + `database-reviewer`                   |
-| 大きな機能 / リファクタ          | + `code-architect` で設計レビュー       |
-| サイレント失敗が混入しそう       | + `silent-failure-hunter`               |
+| 触ったもの                       | 必ず呼ぶ                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------- |
+| Python / Django (apps/, config/) | `python-reviewer` + `code-reviewer`                                       |
+| TypeScript / Next.js (client/)   | `typescript-reviewer` + `code-reviewer`                                   |
+| **UI / frontend ルート追加**     | + `a11y-architect` + **`gan-evaluator`** (実画面 UX 採点、§4.5 step 6 で) |
+| 認証 / 認可 / 入力 / 課金        | + `security-reviewer`                                                     |
+| DB マイグレ / クエリ / モデル    | + `database-reviewer`                                                     |
+| 大きな機能 / リファクタ          | + `code-architect` で設計レビュー                                         |
+| サイレント失敗が混入しそう       | + `silent-failure-hunter`                                                 |
 
 → レビューエージェントは **1 つずつ直列に呼ぶ** (§4.5 の並列禁止ルールに従う、PC スペック制約)。
+
+**`gan-evaluator` の必須化** (#499 / #545 / #547 で 3 回踏んだ轍への対応):
+新ページ / 新ルート / 大きな UI 変更を frontend で行ったら、stg 反映後に **必ず** `gan-evaluator` agent を呼んで「ホームから入口を辿れるか」「未ログインで壊れないか」「『これで完了』のシグナルが画面上にあるか」 を採点させる。Claude 単独だと実装者バイアスで「URL 直叩きで動いた = OK」 と判定しがちなので、第三者の目で UX 視点を確保する保険。
 
 ### 4.3 Phase 開始時の Issue 起票完備（planner エージェント）
 
@@ -135,14 +138,21 @@ gh issue list --milestone "<現 Phase のマイルストーン名>" --state open
    - DB マイグレ / クエリ → `database-reviewer`
    - 認証 / 認可 / 入力 / 課金 → `security-reviewer`
    - UI コンポーネント → `a11y-architect`
-6. 実装が終わったら **必ず実機の画面で操作して** 仕様書通りの振る舞いになっているか **Claude 自身が検証**する。手順:
-   - **テストシナリオを `docs/specs/<feature>-spec.md` の「テスト」 章に書く** (誰が / 何をする / 何が見える)
-   - **そのシナリオを実行するコード** (例: `client/e2e/<feature>.spec.ts`) と **実行コマンド** (例: `PLAYWRIGHT_BASE_URL=... npx playwright test e2e/<feature>.spec.ts`) を spec doc に併記
-   - **必ず実行して全 step が pass することを確認**する:
-     - **第一選択 — Playwright (stg)**: `client/e2e/<feature>.spec.ts` を `PLAYWRIGHT_BASE_URL=https://stg.codeplace.me` + USER1/USER2 env で run。stg は main merge → CD で自動デプロイされる。**env (test2/test3 の email/password/handle、curl での login 例、Playwright run コマンドのテンプレ) は [docs/local/e2e-stg.md](./docs/local/e2e-stg.md) にすべて書いてある**ので最初にそこを見る。それでも未掲載なら ハルナさんに尋ねる (`#499` の反省: spec doc を書いただけ / コードを書いただけで「stg で実行する想定」と切り上げてはいけない)。
-     - **第二選択 — Playwright MCP / Chrome 手動**: 認証情報や stg 反映待ちで Playwright を即時 run できないとき、**Playwright MCP (`mcp__playwright__*`) や Chrome の手動操作** で代替検証する。spec シナリオ通りに 画面操作 → 期待結果を確認し、結果を会話で報告する (スクリーンショット推奨)。
-     - **どちらの場合も** 「golden path + 主要エッジケース」 を画面上で実際に踏むこと。コード上の単体テスト / 統合テストだけ pass している状態で「完了」 と宣言しない (CLAUDE.md 冒頭の "If you can't test the UI, say so explicitly" を厳守)。
-   - 失敗 / 期待外れの挙動を見つけたら **新しい Issue を起票して修正** (1 PR に詰めない)。
+6. 実装が終わったら **必ず実機の画面で操作して** 仕様書通りの振る舞いになっているか **Claude 自身が検証**する。
+
+   **完了判定チェックリスト** (`#499` / `#545` / `#547` で繰り返し踏んだ轍への対応。一項目でも未消化なら PR を出さない / 完了と宣言しない):
+
+   - [ ] **Playwright spec ファイルを書いた**: `client/e2e/<feature>.spec.ts` を新設し、シナリオがコード化されて再現可能になっている。「Playwright MCP で踏んだ」 だけは spec ファイル無しなので NG。
+   - [ ] **テストシナリオを spec doc に書いた**: `docs/specs/<feature>-spec.md` の「テスト」章に「誰が / 何をする / 何が見える」 を箇条書きにして、Playwright 実行コマンド (`PLAYWRIGHT_BASE_URL=... npx playwright test e2e/<feature>.spec.ts`) を併記。
+   - [ ] **ホーム画面から「3 click 以内」 で入口に到達できる**: 新ルート (`/<route>`) を作ったら、グローバルナビ (`client/src/constants/index.ts` の `leftNavLinks`) や該当 hub ページに link が追加されているか **必ず実画面で踏んで確認**。URL 直叩きで動作確認したつもりは NG (`#546` で踏んだ反省)。
+   - [ ] **未ログイン / 別ユーザーで踏んでも壊れない**: 匿名閲覧可なら 200、auth 必須なら login redirect、他人 draft なら 404 隠蔽 — 仕様通りの境界が動くか実画面で確認。
+   - [ ] **画面上に「終わり / 保存できた」 の明示シグナルがある**: 完了 button、role=status の通知、icon 状態変化、color 変化など、「ユーザーがこれで終わったか分かるか」 をエスパー無しで判定。動いた = OK では不十分 (`#507` で踏んだ反省)。
+   - [ ] **第一選択は stg Playwright**: `client/e2e/<feature>.spec.ts` を `PLAYWRIGHT_BASE_URL=https://stg.codeplace.me` + env で run。stg は main merge → CD で自動デプロイ。env (test2/test3 の credential / login curl 例 / run コマンドテンプレ) は [docs/local/e2e-stg.md](./docs/local/e2e-stg.md) に書いてあるので最初にそこを見る。
+   - [ ] **第二選択は Playwright MCP / Chrome 手動**: stg 反映待ち / 認証 env 不足のとき。spec のシナリオ通りに `mcp__playwright__*` で実画面を踏み、結果を会話で報告 (スクリーンショット推奨)。**MCP で踏んだら必ず spec ファイルにも反映** (片方だけは NG)。
+   - [ ] **frontend ルート追加 / UI 大変更なら `gan-evaluator` agent を呼んで採点させる**: §4.2 のマトリクス通り、Claude の実装者バイアスを第三者の目で打ち消す保険。CRITICAL / HIGH があれば修正 or 別 issue 起票。
+
+   **失敗 / 期待外れの挙動を見つけたら新しい Issue を起票して修正** (1 PR に詰めない)。
+
 7. 挙動が完璧になったら **`/workspace/docs/ROADMAP.md` の該当行にチェック** ✅ を付ける (docs PR で別出し)
 
 #### 並列実行の禁止
@@ -240,6 +250,8 @@ cd client && npm run lint && npx tsc --noEmit
 - ライセンスは現状 Anthropic Commercial Terms（fork 経緯）。Phase 9 以降で MIT / Apache-2.0 化検討予定。
 - **PC スペック制約**: Bash background / Agent / Playwright を **同時並列で走らせない**。詳細は §4.5。
 - **「実機検証はユーザー側で」と勝手に切り上げない**: spec doc にシナリオを書き、E2E spec ファイルを書いただけでは **未検証**。stg Playwright か Playwright MCP / Chrome 手動で **Claude 自身が画面を踏む** までが完了条件 (§4.5 step 6)。env (test2/test3 の credential、stg URL、login curl 例、Playwright run コマンド) は [docs/local/e2e-stg.md](./docs/local/e2e-stg.md) に書いてあるので最初にそこを見る。`#499` で踏み抜いた反省。
+- **新ルート / 新ページを作ったら必ずナビ導線を確認**: `client/src/app/(template)/<route>/page.tsx` を作ったら、`client/src/constants/index.ts` の `leftNavLinks` (左サイドバー) または該当 hub ページに link を追加すること。URL 直叩きで動作確認したつもりは NG。実画面で「ホームから 3 click 以内で到達できるか」 を必ず踏んで確認する (`#546` で踏み抜いた反省)。
+- **frontend / UI 大変更後は `gan-evaluator` agent を必須**: Claude 単独だと実装者バイアスで「URL 直叩きで動いた = OK」 と判定しがち。§4.2 マトリクス通り、第三者の目 (gan-evaluator) で「ホーム導線」「未ログイン挙動」「終わりのシグナル」 を採点させる二重防御 (`#499` / `#545` / `#547` 計 3 回踏んだ轍)。
 
 ---
 
