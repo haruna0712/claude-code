@@ -16,6 +16,7 @@ from apps.dm.views import (
     ConfirmAttachmentView,
     DMRoomDetailView,
     DMRoomInvitationsCreateView,
+    DMRoomKickMemberView,
     DMRoomListCreateView,
     DMRoomMembershipDeleteView,
     DMRoomMessagesView,
@@ -54,6 +55,12 @@ urlpatterns = [
         "rooms/<int:pk>/membership/",
         DMRoomMembershipDeleteView.as_view(),
         name="room-membership-delete",
+    ),
+    # Issue #492: creator が他メンバーを kick
+    path(
+        "rooms/<int:pk>/members/<int:user_id>/",
+        DMRoomKickMemberView.as_view(),
+        name="room-member-kick",
     ),
     path(
         "rooms/<int:pk>/read/",

@@ -76,6 +76,7 @@ from apps.dm.services import (
     decline_invitation,
     get_or_create_direct_room,
     invite_user_to_room,
+    kick_member,
     leave_room,
     mark_room_read,
 )
@@ -303,6 +304,32 @@ class DMRoomMembershipDeleteView(APIView):
             leave_room(room=room, user=request.user)
         except DjangoValidationError as exc:
             raise DRFValidationError(detail=exc.messages) from exc
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class DMRoomKickMemberView(APIView):
+    """``DELETE /api/v1/dm/rooms/<id>/members/<user_id>/`` (#492):
+    creator が他メンバーを kick する。
+
+    認可: room creator のみ。それ以外は 404 で隠蔽 (sec)。
+    `_get_room_for_member` で room 存在 + kicker membership を確認。
+    creator 判定 / target=creator 不可 / target が member でない の三段は
+    `kick_member` service 内で ValidationError → 400 / PermissionDenied → 403。
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request: Request, pk: int, user_id: int) -> Response:
+        room = _get_room_for_member(room_id=pk, user=request.user)
+        target = User.objects.filter(pk=user_id, is_active=True).first()
+        if target is None:
+            raise NotFound("対象ユーザーが見つかりません")
+        try:
+            kick_member(room=room, kicker=request.user, target=target)
+        except DjangoValidationError as exc:
+            raise DRFValidationError(detail=exc.messages) from exc
+        except DjangoPermissionDenied as exc:
+            raise PermissionDenied(str(exc)) from exc
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

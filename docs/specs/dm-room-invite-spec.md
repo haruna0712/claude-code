@@ -210,29 +210,85 @@ backend は招待作成時に `apps/dm/services.py:invite_user_to_room` 内で
 
 ヘッダのベルアイコン dropdown (Phase 4A 末で追加予定) も同 component を流用するが、サイズが小さいため inline button 表示有無は別仕様。本 spec は `/notifications` ページに限定する。
 
-## 8. UI 不足 / 既出来 切り分け表
+## 8. メンバー削除 / 退室 (#492)
 
-| 機能                                                       | backend | frontend | 本 PR          |
-| ---------------------------------------------------------- | ------- | -------- | -------------- |
-| 新規 group 作成時に招待 (`POST /rooms/` `invitee_handles`) | ✅      | ✅       | ―              |
-| 既存 room に後から招待 (`POST /rooms/<id>/invitations/`)   | ✅      | ✅       | ✅ (#476 完了) |
-| 自分宛て pending 招待一覧 (`GET /invitations/`)            | ✅      | ✅       | ―              |
-| 招待を承諾 (`POST /invitations/<id>/accept/`)              | ✅      | ✅       | ―              |
-| 招待を拒否 (`POST /invitations/<id>/decline/`)             | ✅      | ✅       | ―              |
-| **通知 inline action (#489)**                              | ✅      | ❌→✅    | ✅ (本 spec)   |
-| handle autocomplete (user search)                          | ✅      | ✅       | ✅ (#480 完了) |
-| room メンバー一覧表示                                      | ✅      | ✅       | ✅ (#479 完了) |
-| 招待を取り消す (`DELETE /invitations/<id>/`)               | ✅      | ✅       | ✅ (#481 完了) |
+### 8.1 UX 仕様
 
-## 9. 想定スケジュール
+他チャットサービス調査:
 
-#476 (room 内招待 button) は 1 PR で完結予定 (<200 行)。後続 follow-up (#479-#481, #489) は各 1 PR。
+| アプリ          | kick UX                             | leave UX                      |
+| --------------- | ----------------------------------- | ----------------------------- |
+| Slack           | Channel admin が member 行 → Remove | Sidebar context menu「Leave」 |
+| Discord         | Server owner / mod が member → Kick | Server menu「Leave Server」   |
+| Microsoft Teams | Team owner が member 行 → Remove    | Team menu「Leave team」       |
+| LINE            | Admin が member 長押し → 削除       | グループ画面「退会」          |
 
-## 10. 関連 Issue / PR
+= 標準は **「member 一覧から削除/退会」**。本アプリも `RoomMembersDialog` 内で完結。
+
+### 8.2 描画条件
+
+- **kick (削除) button**: 各 member 行の右側
+  - 表示条件: `currentUser === room.creator_id` AND `member.user_id !== room.creator_id` AND `member.user_id !== currentUser`
+  - direct room では Dialog 自体が出ないため考慮不要
+- **leave (退室) button**: ダイアログ最下部
+  - 表示条件: 全メンバー (group のみ、direct は Dialog 自体出ない)
+  - creator も leave 可能 (backend `leave_room` 内で残メンバー最古から自動 ownership transfer)
+
+### 8.3 動作
+
+- 削除 → `window.confirm("@<handle> をこのグループから削除しますか？")` → OK で `DELETE /api/v1/dm/rooms/<id>/members/<user_id>/`
+  - 成功: row 自動消去 (RTK Query invalidate で再 fetch)
+  - 失敗: `role=alert` で「@<handle> の削除に失敗しました」
+- 退室 → `window.confirm("このグループを退室しますか？...")` → OK で `DELETE /api/v1/dm/rooms/<id>/membership/`
+  - 成功: Dialog close + `/messages` に redirect (`onLeftRoom` callback)
+  - 失敗: `role=alert` で「退室に失敗しました」
+- 送信中は両 button `disabled + aria-busy`
+
+### 8.4 a11y
+
+- button は `aria-label` に handle / 操作 を含む (例: `@bob を削除`、`このグループを退室`)
+- 確認 dialog はネイティブ `window.confirm` (キーボード操作対応 / SR 対応)
+- 将来的には Radix `AlertDialog` への置き換えを検討 (本 spec 範囲外)
+
+### 8.5 backend API
+
+#### `DELETE /api/v1/dm/rooms/<id>/members/<user_id>/` (新規)
+
+- 認可: room creator のみ。kicker が membership 持たない場合は 404 で room 隠蔽
+- target=creator は 400「creator 自身は削除できません」
+- target が member でない場合は 400「対象ユーザーはこのルームのメンバーではありません」
+- direct room は 400「1:1 room ではメンバー削除はできません」
+- 成功: 204 No Content、`DMRoomMembership` 物理削除
+
+#### `DELETE /api/v1/dm/rooms/<id>/membership/` (既存、P3-04)
+
+- self-leave。creator が leave すると残メンバー最古に ownership transfer
+
+## 9. UI 不足 / 既出来 切り分け表
+
+| 機能                                                       | backend | frontend | 状態       |
+| ---------------------------------------------------------- | ------- | -------- | ---------- |
+| 新規 group 作成時に招待 (`POST /rooms/` `invitee_handles`) | ✅      | ✅       | ―          |
+| 既存 room に後から招待 (`POST /rooms/<id>/invitations/`)   | ✅      | ✅       | #476 完了  |
+| 自分宛て pending 招待一覧 (`GET /invitations/`)            | ✅      | ✅       | ―          |
+| 招待を承諾 (`POST /invitations/<id>/accept/`)              | ✅      | ✅       | ―          |
+| 招待を拒否 (`POST /invitations/<id>/decline/`)             | ✅      | ✅       | ―          |
+| 通知 inline action                                         | ✅      | ✅       | #489 完了  |
+| handle autocomplete (user search)                          | ✅      | ✅       | #480 完了  |
+| room メンバー一覧表示                                      | ✅      | ✅       | #479 完了  |
+| 招待を取り消す (`DELETE /invitations/<id>/`)               | ✅      | ✅       | #481 完了  |
+| **kick (member 削除) / leave (退室) UI (#492)**            | ✅      | ✅       | ✅ (本 PR) |
+
+## 10. 想定スケジュール
+
+#476 (room 内招待 button) は 1 PR で完結予定 (<200 行)。後続 follow-up (#479-#481, #489, #492) は各 1 PR。
+
+## 11. 関連 Issue / PR
 
 - room 内招待 UI: #476 / PR #477
 - backend 招待 API: PR #258 (Issue #229) で実装済
 - 1:1 / グループ作成 UI: PR #239 (Issue #233) / PR #248 (Issue #236)
 - 招待リスト UI: PR #248 (Issue #237)
 - 通知 bridge: #487 / PR #488 (dm_invite 通知が永続化されるよう修正)
-- 通知 inline action: **#489 / 本 PR**
+- 通知 inline action: #489 / PR #490
+- メンバー削除 / 退室: **#492 / 本 PR**

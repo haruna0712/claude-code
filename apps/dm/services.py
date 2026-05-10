@@ -778,3 +778,37 @@ def cancel_invitation(
     if invitation.accepted is not None:
         raise ValidationError("既に応答済みの招待は取消できません")
     invitation.delete()
+
+
+# ----------------------------------------------------------------------------
+# Issue #492: メンバー削除 (kick) — creator が他メンバーを除名
+# ----------------------------------------------------------------------------
+
+
+def kick_member(
+    *,
+    room: DMRoom,
+    kicker: AbstractBaseUser,
+    target: AbstractBaseUser,
+) -> None:
+    """``kicker`` が ``target`` を ``room`` から削除する.
+
+    ルール:
+    - room.kind=group のみ (direct は kick 不可、archive 経路で対応)
+    - kicker は room.creator のみ (それ以外は PermissionDenied → 403)
+    - target は creator 自身ではない (ownership transfer は leave_room 経由のみ)
+    - target が member でない場合は ValidationError → 400 (404 ではなく 400 で
+      "削除する対象がいない" を素直に返す。membership 直接照合)
+    """
+
+    if room.kind == DMRoom.Kind.DIRECT:
+        raise ValidationError("1:1 room ではメンバー削除はできません")
+    if room.creator_id != kicker.pk:
+        raise PermissionDenied("creator のみメンバーを削除できます")
+    if target.pk == room.creator_id:
+        raise ValidationError("creator 自身は削除できません (退室経由)")
+
+    with transaction.atomic():
+        deleted, _ = DMRoomMembership.objects.filter(room=room, user=target).delete()
+        if deleted == 0:
+            raise ValidationError("対象ユーザーはこのルームのメンバーではありません")

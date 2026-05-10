@@ -1,9 +1,10 @@
 "use client";
 
 /**
- * RoomChat header に置く「メンバー」 button + RoomMembersDialog wrapper (#479).
+ * RoomChat header に置く「メンバー」 button + RoomMembersDialog wrapper (#479 / #492).
  *
  * 表示条件: `room.kind === "group"` (direct は peer header で十分なので非表示)。
+ * #492 で kick / leave のため currentUserId と onLeftRoom を渡せるよう拡張。
  */
 
 import { useState } from "react";
@@ -13,9 +14,18 @@ import type { DMRoom } from "@/lib/redux/features/dm/types";
 
 interface RoomMembersButtonProps {
 	room: DMRoom | undefined;
+	currentUserId: number;
+	/**
+	 * 自分が退室成功したときに呼ばれる。RoomChat 側で `/messages` に navigate するなど。
+	 */
+	onLeftRoom?: () => void;
 }
 
-export default function RoomMembersButton({ room }: RoomMembersButtonProps) {
+export default function RoomMembersButton({
+	room,
+	currentUserId,
+	onLeftRoom,
+}: RoomMembersButtonProps) {
 	const [open, setOpen] = useState(false);
 
 	if (!room) return null;
@@ -32,7 +42,16 @@ export default function RoomMembersButton({ room }: RoomMembersButtonProps) {
 			>
 				メンバー {count > 0 ? count : ""}
 			</button>
-			<RoomMembersDialog open={open} onOpenChange={setOpen} room={room} />
+			<RoomMembersDialog
+				open={open}
+				onOpenChange={setOpen}
+				room={room}
+				currentUserId={currentUserId}
+				onLeftRoom={() => {
+					setOpen(false);
+					onLeftRoom?.();
+				}}
+			/>
 		</>
 	);
 }
