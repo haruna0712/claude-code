@@ -1,5 +1,22 @@
-from django.urls import URLPattern, URLResolver
+"""URL patterns for articles (#526 / Phase 6 P6-03).
 
-# URL patterns are added in the phase that implements this feature.
-# See docs/ROADMAP.md for ownership.
-urlpatterns: list[URLPattern | URLResolver] = []
+Mounted at `/api/v1/articles/` (config/urls.py)。
+"""
+
+from __future__ import annotations
+
+from django.urls import path
+
+from apps.articles.views import (
+    ArticleDetailView,
+    ArticleListCreateView,
+    MyDraftListView,
+)
+
+app_name = "articles"
+
+urlpatterns = [
+    path("", ArticleListCreateView.as_view(), name="list-create"),
+    path("me/drafts/", MyDraftListView.as_view(), name="my-drafts"),
+    path("<slug:slug>/", ArticleDetailView.as_view(), name="detail"),
+]
