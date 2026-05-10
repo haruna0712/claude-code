@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import InviteMemberButton from "@/components/dm/InviteMemberButton";
 import MessageComposer from "@/components/dm/MessageComposer";
+import RoomMembersButton from "@/components/dm/RoomMembersButton";
 import MessageList from "@/components/dm/MessageList";
 import TypingIndicator from "@/components/dm/TypingIndicator";
 import { useDMSocket } from "@/hooks/useDMSocket";
@@ -169,6 +170,7 @@ export default function RoomChat({ roomId, currentUserId }: RoomChatProps) {
 					</h1>
 				</div>
 				<div className="flex items-center gap-2">
+					<RoomMembersButton room={roomQuery.data} />
 					<InviteMemberButton
 						room={roomQuery.data}
 						currentUserId={currentUserId}
