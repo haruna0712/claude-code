@@ -127,6 +127,29 @@ export const dmApiSlice = baseApiSlice.injectEndpoints({
 				{ type: "DMInvitation" as const, id: "LIST" },
 			],
 		}),
+		// #492: creator が他メンバーを kick する。
+		// backend は DELETE /api/v1/dm/rooms/<id>/members/<user_id>/。
+		kickMember: builder.mutation<void, { roomId: number; userId: number }>({
+			query: ({ roomId, userId }) => ({
+				url: `/dm/rooms/${roomId}/members/${userId}/`,
+				method: "DELETE",
+			}),
+			invalidatesTags: (_result, _error, { roomId }) => [
+				{ type: "DMRoom" as const, id: roomId },
+				{ type: "DMRoom" as const, id: "LIST" },
+			],
+		}),
+		// #492: 自分の退室。backend (P3-04) は DELETE /api/v1/dm/rooms/<id>/membership/。
+		leaveRoom: builder.mutation<void, number>({
+			query: (roomId) => ({
+				url: `/dm/rooms/${roomId}/membership/`,
+				method: "DELETE",
+			}),
+			invalidatesTags: (_result, _error, roomId) => [
+				{ type: "DMRoom" as const, id: roomId },
+				{ type: "DMRoom" as const, id: "LIST" },
+			],
+		}),
 		// P3-09: 履歴取得 (新しい順で limit 件、画面側で reverse して下から表示)
 		listRoomMessages: builder.query<
 			RoomMessagesResponse,
@@ -177,6 +200,8 @@ export const {
 	useCancelInvitationMutation,
 	useAcceptInvitationMutation,
 	useDeclineInvitationMutation,
+	useKickMemberMutation,
+	useLeaveRoomMutation,
 	useListRoomMessagesQuery,
 	useMarkRoomReadMutation,
 	useDeleteMessageMutation,

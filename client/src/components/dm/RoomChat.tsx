@@ -16,6 +16,7 @@
  */
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import InviteMemberButton from "@/components/dm/InviteMemberButton";
@@ -39,6 +40,7 @@ interface RoomChatProps {
 }
 
 export default function RoomChat({ roomId, currentUserId }: RoomChatProps) {
+	const router = useRouter();
 	const roomQuery = useGetDMRoomQuery(roomId);
 	const messagesQuery = useListRoomMessagesQuery({ roomId });
 	const [markRoomRead] = useMarkRoomReadMutation();
@@ -170,7 +172,11 @@ export default function RoomChat({ roomId, currentUserId }: RoomChatProps) {
 					</h1>
 				</div>
 				<div className="flex items-center gap-2">
-					<RoomMembersButton room={roomQuery.data} />
+					<RoomMembersButton
+						room={roomQuery.data}
+						currentUserId={currentUserId}
+						onLeftRoom={() => router.push("/messages")}
+					/>
 					<InviteMemberButton
 						room={roomQuery.data}
 						currentUserId={currentUserId}
