@@ -135,10 +135,14 @@ gh issue list --milestone "<現 Phase のマイルストーン名>" --state open
    - DB マイグレ / クエリ → `database-reviewer`
    - 認証 / 認可 / 入力 / 課金 → `security-reviewer`
    - UI コンポーネント → `a11y-architect`
-6. 実装が終わったら **仕様に沿っているかを E2E テストで確認**する。手順:
+6. 実装が終わったら **必ず実機の画面で操作して** 仕様書通りの振る舞いになっているか **Claude 自身が検証**する。手順:
    - **テストシナリオを `docs/specs/<feature>-spec.md` の「テスト」 章に書く** (誰が / 何をする / 何が見える)
-   - **そのシナリオを実行するコマンド** (例: `PLAYWRIGHT_BASE_URL=... npx playwright test e2e/<feature>.spec.ts`) を spec doc に併記
-   - 実行する。問題があれば **新しい Issue を起票して修正** (1 PR に詰めない)
+   - **そのシナリオを実行するコード** (例: `client/e2e/<feature>.spec.ts`) と **実行コマンド** (例: `PLAYWRIGHT_BASE_URL=... npx playwright test e2e/<feature>.spec.ts`) を spec doc に併記
+   - **必ず実行して全 step が pass することを確認**する:
+     - **第一選択 — Playwright (stg)**: `client/e2e/<feature>.spec.ts` を `PLAYWRIGHT_BASE_URL=https://stg.codeplace.me` + USER1/USER2 env で run。stg は main merge → CD で自動デプロイされる。**env (test2/test3 の email/password/handle、curl での login 例、Playwright run コマンドのテンプレ) は [docs/local/e2e-stg.md](./docs/local/e2e-stg.md) にすべて書いてある**ので最初にそこを見る。それでも未掲載なら ハルナさんに尋ねる (`#499` の反省: spec doc を書いただけ / コードを書いただけで「stg で実行する想定」と切り上げてはいけない)。
+     - **第二選択 — Playwright MCP / Chrome 手動**: 認証情報や stg 反映待ちで Playwright を即時 run できないとき、**Playwright MCP (`mcp__playwright__*`) や Chrome の手動操作** で代替検証する。spec シナリオ通りに 画面操作 → 期待結果を確認し、結果を会話で報告する (スクリーンショット推奨)。
+     - **どちらの場合も** 「golden path + 主要エッジケース」 を画面上で実際に踏むこと。コード上の単体テスト / 統合テストだけ pass している状態で「完了」 と宣言しない (CLAUDE.md 冒頭の "If you can't test the UI, say so explicitly" を厳守)。
+   - 失敗 / 期待外れの挙動を見つけたら **新しい Issue を起票して修正** (1 PR に詰めない)。
 7. 挙動が完璧になったら **`/workspace/docs/ROADMAP.md` の該当行にチェック** ✅ を付ける (docs PR で別出し)
 
 #### 並列実行の禁止
@@ -235,6 +239,7 @@ cd client && npm run lint && npx tsc --noEmit
 - 上流 Claude Code 由来のファイル（`plugins/`, `examples/`, `Script/`, `.claude-plugin/`, `CHANGELOG.md` 等）は **SNS 本体とは無関係**。改変しない。
 - ライセンスは現状 Anthropic Commercial Terms（fork 経緯）。Phase 9 以降で MIT / Apache-2.0 化検討予定。
 - **PC スペック制約**: Bash background / Agent / Playwright を **同時並列で走らせない**。詳細は §4.5。
+- **「実機検証はユーザー側で」と勝手に切り上げない**: spec doc にシナリオを書き、E2E spec ファイルを書いただけでは **未検証**。stg Playwright か Playwright MCP / Chrome 手動で **Claude 自身が画面を踏む** までが完了条件 (§4.5 step 6)。env (test2/test3 の credential、stg URL、login curl 例、Playwright run コマンド) は [docs/local/e2e-stg.md](./docs/local/e2e-stg.md) に書いてあるので最初にそこを見る。`#499` で踏み抜いた反省。
 
 ---
 
