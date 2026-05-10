@@ -121,6 +121,66 @@ gh issue list --milestone "<現 Phase のマイルストーン名>" --state open
 - ブランチ命名: `feature/issue-<N>-<slug>` / `fix/...` / `infra/...` / `docs/...` / `chore/...`
 - PR タイトル例: `[feature][tweets] Tweet モデルの基本 CRUD API を実装 (#12)`
 
+### 4.5 機能フォロー追加 (follow-up Issue) のフロー
+
+新規機能を追加するときは [WORKFLOW.md §10](./docs/WORKFLOW.md) の 9 ステップを毎回踏む。要点:
+
+1. **「他チャットアプリ調査」 を最初に実施** — Slack / Discord / Teams / LINE 等の標準 UX を spec に表でまとめる (UX 判断の根拠が PR review で揺れない)
+2. **仕様書 `docs/specs/<feature>-spec.md` を実装より先に書く** — やる/やらない / a11y / API / 状態遷移 / テスト方針 / 切り分け表
+3. **RED → GREEN 妥協なし** — vitest / pytest を先に書いて fail を確認してから実装
+4. **stg 実機検証 (絶対飛ばさない)** — CI green は機能完成の証明にならない。stg 上で **目視 visual capture** + 色コントラスト確認まで責務 (#492 / #487 教訓)
+5. **Playwright spec はリポにコミット** — 使い捨て `_verify-foo.ts` ≠ E2E。`client/e2e/<feature>.spec.ts` 必須 (#492 → #495 教訓)
+6. **docs PR は別出し** — 機能実装 PR とは別の docs/<slug> ブランチで ROADMAP / 切り分け表を更新 (git history がきれい)
+
+### 4.6 UX 視認性チェックリスト (#492 → #496 教訓)
+
+UI を追加したら:
+
+- [ ] DOM 上に存在する ≠ ユーザに見える。**stg で screenshot** を撮って必ず目視
+- [ ] destructive action (削除/退出) は **赤系**: `bg-baby_red/10 + text-baby_red + border-baby_red/60`
+- [ ] primary action (送信/承諾) は **青系**: `bg-baby_blue + text-baby_white`
+- [ ] secondary は枠だけ (`border-baby_grey + text-baby_grey`) で OK だが、**重要 button を灰色にしない** (背景に溶け込む)
+- [ ] button label は action 内容を明示 (例: 「削除」 → 「メンバーから削除」)
+- [ ] hover state で色反転して視覚フィードバック
+- [ ] entry point (header の button、kebab menu 等) が **発見できるか** を初見ユーザ視点で確認
+
+### 4.7 stg 実機検証 snippet
+
+```typescript
+// client/_verify-<feature>.ts (使い捨て、検証後 rm)
+import { chromium } from "@playwright/test";
+const BASE = "https://stg.codeplace.me";
+
+async function login(ctx, user) {
+	const r = await ctx.request.get(`${BASE}/api/v1/auth/csrf/`);
+	const csrf =
+		/csrftoken=([^;]+)/.exec(r.headers()["set-cookie"] ?? "")?.[1] ?? "";
+	await ctx.request.post(`${BASE}/api/v1/auth/cookie/create/`, {
+		headers: {
+			"Content-Type": "application/json",
+			"X-CSRFToken": csrf,
+			Referer: `${BASE}/login`,
+		},
+		data: { email: user.email, password: user.password },
+	});
+}
+
+(async () => {
+	const browser = await chromium.launch({ headless: true });
+	const ctx = await browser.newContext({
+		viewport: { width: 1440, height: 900 },
+	});
+	const page = await ctx.newPage();
+	await login(ctx, { email: "test2@gmail.com", password: "Sirius01" }); // pragma: allowlist secret -- docs/local/e2e-stg.md
+	await page.goto(`${BASE}/messages/<ROOM_ID>`);
+	// UI 操作 + screenshot → picture/<feature>-shot.png
+	await page.screenshot({ path: "/workspace/picture/<feature>-shot.png" });
+	await browser.close();
+})();
+```
+
+検証後、必ず `client/e2e/<feature>.spec.ts` に **正規化された Playwright spec をコミット** すること。
+
 ---
 
 ## 5. GitHub 運用
@@ -205,6 +265,12 @@ cd client && npm run lint && npx tsc --noEmit
 - **マイグレーション番号**は worktree 並列で衝突しがち。先にマージされた worktree 基準で rebase する。
 - 上流 Claude Code 由来のファイル（`plugins/`, `examples/`, `Script/`, `.claude-plugin/`, `CHANGELOG.md` 等）は **SNS 本体とは無関係**。改変しない。
 - ライセンスは現状 Anthropic Commercial Terms（fork 経緯）。Phase 9 以降で MIT / Apache-2.0 化検討予定。
+- **DOM 上に button 存在 = ユーザに見える、ではない** (#492 → #496)。CSS が薄い灰色だと dark 背景に溶け込んで視覚的に消える。重要 button は赤系/青系で色付け、stg で目視確認まで責務。
+- **使い捨て tsx スクリプトで「E2E 完了」と主張しない** (#492 → #495)。`client/e2e/<feature>.spec.ts` にコミット必須。
+- **`apps/notifications/signals.py` (Phase 4A bridge) 経由の通知 dispatch** は resolve できないと silent no-op (#487)。新 dispatch を追加するときは bridge module の存在 + emit_notification 呼び出しが届くことを stg で curl 確認まで責務。
+- **同じファイルを触る複数 PR で conflict** が起きたら `git rebase` ではなく `git merge origin/main` で 1 回で解消。rebase は commit 単位で同じ conflict を何度も解消する羽目になる。
+- **pytest のテストパスワード文字列**は pre-commit `detect-secrets` で reject される。文字列の末尾に `# pragma: allowlist secret` コメントを追加して suppress。
+- **`git worktree add` 直後に node_modules が無い**: vitest が動かない。`ln -s /workspace/client/node_modules <worktree>/client/node_modules` で symlink して workaround。
 
 ---
 
