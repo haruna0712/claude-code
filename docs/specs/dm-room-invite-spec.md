@@ -264,6 +264,30 @@ backend は招待作成時に `apps/dm/services.py:invite_user_to_room` 内で
 
 - self-leave。creator が leave すると残メンバー最古に ownership transfer
 
+### 8.6 E2E spec (`client/e2e/dm-kick-leave.spec.ts`)
+
+stg 上で 2 シナリオを 1 spec で踏破:
+
+- **KICK-FLOW**: USER1 (creator) が UI 経由でメンバー dialog → 削除 button → confirm → kick → memberships から USER2 が消えていることを API で assert
+- **LEAVE-FLOW**: USER2 が UI 経由でメンバー dialog → 退室 button → confirm → leave → `/messages` redirect + room access が 404 化していることを assert
+
+導線:
+
+```
+/messages/<group_room_id>
+ → header の「メンバー <count>」 button click  ← 📍 entry point
+ → RoomMembersDialog
+   → 各 member 行 (creator 視点 + 非 creator member) に「削除」 button
+   → ダイアログ最下部に「このグループを退室」 button
+```
+
+env:
+
+- `PLAYWRIGHT_GROUP_ROOM_ID` — kick 用 (USER1 = creator の group room)
+- `PLAYWRIGHT_LEAVE_ROOM_ID` — leave 用 (USER2 が member の別 group room、kick と同じだと leave 後再 invite が必要になり面倒)
+
+stg 実行で 2/2 GREEN (10.2s) 確認済 (2026-05-10)。
+
 ## 9. UI 不足 / 既出来 切り分け表
 
 | 機能                                                       | backend | frontend | 状態       |
