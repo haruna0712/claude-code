@@ -141,15 +141,25 @@ prefix: `/api/v1/boxes/` (既存 `apps.boxes` の URL include に乗る、`apps.
 
 ### 4.2 Bookmark CRUD
 
-| Method | Path                                    | 概要                                                          |
-| ------ | --------------------------------------- | ------------------------------------------------------------- |
-| GET    | `/api/v1/boxes/folders/<id>/bookmarks/` | フォルダ内 bookmark 一覧 (新しい順、cursor pagination)        |
-| POST   | `/api/v1/boxes/bookmarks/`              | 追加 `{tweet_id, folder_id}`                                  |
-| DELETE | `/api/v1/boxes/bookmarks/<id>/`         | 削除                                                          |
-| GET    | `/api/v1/boxes/tweets/<id>/status/`     | 該当ツイートが自分のどの folder に保存されてるか array で返す |
+| Method | Path                                    | 概要                                                                     |
+| ------ | --------------------------------------- | ------------------------------------------------------------------------ |
+| GET    | `/api/v1/boxes/folders/<id>/bookmarks/` | フォルダ内 bookmark 一覧 (新しい順、cursor pagination)                   |
+| POST   | `/api/v1/boxes/bookmarks/`              | 追加 `{tweet_id, folder_id}`                                             |
+| DELETE | `/api/v1/boxes/bookmarks/<id>/`         | 削除                                                                     |
+| GET    | `/api/v1/boxes/tweets/<id>/status/`     | 該当ツイートが自分のどの folder に保存されてるか + 各 bookmark_id を返す |
 
-`bookmark-status` は TweetCard の icon 色付け (saved / not saved) のため必要。
-1 query で済む (`Bookmark.objects.filter(user, tweet=tweet_id).values_list('folder_id', flat=True)`)。
+`tweets/<id>/status/` のレスポンス例:
+
+```json
+{
+	"folder_ids": [1, 3],
+	"bookmark_ids": { "1": 100, "3": 102 }
+}
+```
+
+`bookmark_ids` は `{folder_id (str): bookmark_id (int)}` の dict。
+frontend が削除時に N+1 で list を引かずに済むよう、bookmark_id を直接公開する
+(typescript-reviewer #502 H4 対応)。
 
 ### 4.3 認可 / エラー
 

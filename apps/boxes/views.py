@@ -224,9 +224,13 @@ class TweetBookmarkStatusView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request: Request, tweet_id: int) -> Response:
-        folder_ids = list(
-            Bookmark.objects.filter(user=request.user, tweet_id=tweet_id).values_list(
-                "folder_id", flat=True
-            )
+        # frontend が削除時に bookmark_id を直接引けるよう、folder_id → bookmark_id
+        # を返す (typescript-reviewer #502 H4 対応で N+1 listFolderBookmarks を不要化)。
+        rows = Bookmark.objects.filter(user=request.user, tweet_id=tweet_id).values_list(
+            "folder_id", "id"
         )
-        return Response(BookmarkStatusSerializer({"folder_ids": folder_ids}).data)
+        bookmark_ids = {str(folder_id): bookmark_id for folder_id, bookmark_id in rows}
+        folder_ids = sorted(int(k) for k in bookmark_ids)
+        return Response(
+            BookmarkStatusSerializer({"folder_ids": folder_ids, "bookmark_ids": bookmark_ids}).data
+        )
