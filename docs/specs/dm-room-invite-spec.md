@@ -144,11 +144,28 @@ stg 上で 2 ユーザー (USER1=test2 = creator、USER2=test3 = invitee) を使
 
 1. USER1 として login → 既存 group room (PLAYWRIGHT\*GROUP_ROOM_ID) を開く → 「招待」button 押下 → modal 出る
 2. modal で `@test3` 入力 → 送信 → success status
-3. USER1 logout、USER2 として login → `/messages/invitations` を開く → 該当招待が listing に存在
-4. 「承諾」押下 → invitee side で room が見えるようになることを確認
-5. クリーンアップ: USER2 が room から leave (もしくは USER1 が group を delete) — 現状 leave/delete API があれば呼ぶ、無ければ stg 状態をそのまま
+3. **(NEW) #487 通知検証**: USER2 として login し `GET /api/v1/notifications/` を fetch、`kind=dm_invite` のエントリが存在し `actor.handle === "test2"` であることを assert。SPEC §7.5 / §8.1 のアプリ内通知配信を担保する。
+4. USER1 logout、USER2 として login → `/messages/invitations` を開く → 該当招待が listing に存在
+5. 「承諾」押下 → invitee side で room が見えるようになることを確認
+6. クリーンアップ: USER2 が room から leave (もしくは USER1 が group を delete) — 現状 leave/delete API があれば呼ぶ、無ければ stg 状態をそのまま
 
 > ⚠️ stg DB の汚染を最小化するため、E2E 開始時に既存の pending invitation を accept/decline で消すクリーンアップ step を入れる。
+> 加えて、#487 検証のため事前に test3 の `dm_invite` 既存通知も clear しておく (`/notifications/<id>/` mark-as-read で十分。完全削除は API 無し)。
+
+### 6.3 通知配信 (#487 — Phase 4A bridge)
+
+backend は招待作成時に `apps/dm/services.py:invite_user_to_room` 内で
+`transaction.on_commit(lambda: emit_dm_invite(invitation))` を fire する。
+`apps/dm/integrations/notifications.py` がプロセス起動時に
+`apps.notifications.signals.emit_notification` を resolve し、解決できれば
+`create_notification(recipient, kind, actor, target_type, target_id)` で
+`Notification` を永続化する。
+
+- target_type = `"invitation"`、target_id = `invitation.pk`
+- self-skip / 設定 OFF skip / dedup 24h / Block / Mute フィルタは
+  `create_notification` 側で適用 (本 spec 範囲外、別 SPEC §8 参照)
+- pytest: `apps/notifications/tests/test_signals_bridge.py` で bridge を直接検証
+- E2E: §6.2 step 3 で実機検証
 
 ## 7. UI 不足 / 既出来 切り分け表
 
