@@ -167,26 +167,72 @@ backend は招待作成時に `apps/dm/services.py:invite_user_to_room` 内で
 - pytest: `apps/notifications/tests/test_signals_bridge.py` で bridge を直接検証
 - E2E: §6.2 step 3 で実機検証
 
-## 7. UI 不足 / 既出来 切り分け表
+## 7. 通知 inline action (#489 — 通知から直接 承諾/拒否)
 
-| 機能                                                       | backend | frontend | 本 PR         |
-| ---------------------------------------------------------- | ------- | -------- | ------------- |
-| 新規 group 作成時に招待 (`POST /rooms/` `invitee_handles`) | ✅      | ✅       | ―             |
-| 既存 room に後から招待 (`POST /rooms/<id>/invitations/`)   | ✅      | ❌       | ✅            |
-| 自分宛て pending 招待一覧 (`GET /invitations/`)            | ✅      | ✅       | ―             |
-| 招待を承諾 (`POST /invitations/<id>/accept/`)              | ✅      | ✅       | ―             |
-| 招待を拒否 (`POST /invitations/<id>/decline/`)             | ✅      | ✅       | ―             |
-| handle autocomplete (user search)                          | ❌      | ❌       | ❌ (別 Issue) |
-| room メンバー一覧表示 (`/rooms/<id>/` の memberships)      | ✅      | ❌       | ❌ (別 Issue) |
-| 招待を取り消す (`DELETE /invitations/<id>/`)               | ❌      | ❌       | ❌ (別 Issue) |
+### 7.1 UX 仕様
 
-## 8. 想定スケジュール
+他チャットサービス調査:
 
-1 PR で完結予定。<200 行の UI 追加。
+| アプリ          | 招待通知 UX                                              |
+| --------------- | -------------------------------------------------------- |
+| Slack           | 受信箱 button「Join」(別画面)                            |
+| Discord         | 通知に **インライン** `Accept / Reject` button、即時参加 |
+| Microsoft Teams | 通知に `Join` button、即時参加                           |
+| LINE            | 通知に「参加」「拒否」 button、即時参加                  |
 
-## 9. 関連 Issue / PR
+= 標準は **「通知に inline action button」**。受信箱への navigate を不要にする。
 
-- 本 spec の Issue: 後で追記
+本アプリでも `/notifications` ページの `dm_invite` 通知行に **承諾 / 拒否 button** を render する。`/messages/invitations` (受信箱) は alternative entry として残し、片方だけのフローに依存しない。
+
+### 7.2 描画条件
+
+`NotificationItem.kind === "dm_invite"` AND `target_type === "invitation"` AND `target_id` 存在。
+旧通知 (Phase 4A bridge 修正前のもの、`target_type=""`) には button を出さない (target_id が無いと API が叩けない)。
+
+### 7.3 動作
+
+- 承諾 → `POST /api/v1/dm/invitations/<target_id>/accept/`
+  - 成功: `role=status` で「参加しました」表示 → 1.5s 後 row を listing から remove + 通知を read 化
+  - 失敗 (4xx): `role=alert` でメッセージ
+- 拒否 → `POST /api/v1/dm/invitations/<target_id>/decline/`
+  - 成功: `role=status` で「拒否しました」 → 1.5s 後 row remove + read 化
+  - 失敗: 同上
+- 送信中は両 button `disabled + aria-busy`
+- 操作後の通知 row は再 render しない (UX が静止)
+
+### 7.4 a11y
+
+- button は `aria-label` に handle / kind を含めて screen reader でも目的が分かる
+- 承諾 / 拒否 button は通知 row の Link 内ではなく **外側** に配置 (button-in-link は ARIA 非推奨)
+- 通知行全体の Link href は target_type=invitation のとき `/messages/invitations` にしておき、最低限の到達性を保つ
+
+### 7.5 ベル dropdown は別 Issue
+
+ヘッダのベルアイコン dropdown (Phase 4A 末で追加予定) も同 component を流用するが、サイズが小さいため inline button 表示有無は別仕様。本 spec は `/notifications` ページに限定する。
+
+## 8. UI 不足 / 既出来 切り分け表
+
+| 機能                                                       | backend | frontend | 本 PR          |
+| ---------------------------------------------------------- | ------- | -------- | -------------- |
+| 新規 group 作成時に招待 (`POST /rooms/` `invitee_handles`) | ✅      | ✅       | ―              |
+| 既存 room に後から招待 (`POST /rooms/<id>/invitations/`)   | ✅      | ✅       | ✅ (#476 完了) |
+| 自分宛て pending 招待一覧 (`GET /invitations/`)            | ✅      | ✅       | ―              |
+| 招待を承諾 (`POST /invitations/<id>/accept/`)              | ✅      | ✅       | ―              |
+| 招待を拒否 (`POST /invitations/<id>/decline/`)             | ✅      | ✅       | ―              |
+| **通知 inline action (#489)**                              | ✅      | ❌→✅    | ✅ (本 spec)   |
+| handle autocomplete (user search)                          | ✅      | ✅       | ✅ (#480 完了) |
+| room メンバー一覧表示                                      | ✅      | ✅       | ✅ (#479 完了) |
+| 招待を取り消す (`DELETE /invitations/<id>/`)               | ✅      | ✅       | ✅ (#481 完了) |
+
+## 9. 想定スケジュール
+
+#476 (room 内招待 button) は 1 PR で完結予定 (<200 行)。後続 follow-up (#479-#481, #489) は各 1 PR。
+
+## 10. 関連 Issue / PR
+
+- room 内招待 UI: #476 / PR #477
 - backend 招待 API: PR #258 (Issue #229) で実装済
 - 1:1 / グループ作成 UI: PR #239 (Issue #233) / PR #248 (Issue #236)
 - 招待リスト UI: PR #248 (Issue #237)
+- 通知 bridge: #487 / PR #488 (dm_invite 通知が永続化されるよう修正)
+- 通知 inline action: **#489 / 本 PR**

@@ -13,6 +13,7 @@ import { Bell } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import DmInviteActions from "@/components/dm/DmInviteActions";
 import {
 	fetchNotifications,
 	markAllNotificationsRead,
@@ -35,7 +36,16 @@ function buildHref(n: NotificationItem): string | null {
 	if (n.target_type === "user" && n.actor) {
 		return `/u/${n.actor.handle}`;
 	}
+	// #489: dm_invite 通知は inline action button を出すため通知 row 全体を Link に
+	// 包まない (button-in-link は ARIA 非推奨)。受信箱への到達性は妥協する。
 	return null;
+}
+
+function isInlineInviteRow(n: NotificationItem): boolean {
+	if (n.kind !== "dm_invite") return false;
+	if (n.target_type !== "invitation") return false;
+	const id = Number(n.target_id);
+	return Number.isInteger(id) && id > 0;
 }
 
 // #416: 主語と動詞を分離。グループ化対応で複数 actor の表示に対応。
@@ -179,6 +189,7 @@ export default function NotificationsList({
 					{items.map((n) => {
 						const href = buildHref(n);
 						const message = describe(n);
+						const showInlineInvite = isInlineInviteRow(n);
 						const inner = (
 							<>
 								<div className="flex-1">
@@ -209,7 +220,7 @@ export default function NotificationsList({
 						);
 						const liClass =
 							"flex items-start gap-3 p-4 transition hover:bg-muted/40";
-						const handleClick = async () => {
+						const markRead = async () => {
 							if (n.read) return;
 							// #416: グループ全 row を一括既読化 (row_ids が無い古い shape は
 							// id 単独で fallback)
@@ -224,12 +235,29 @@ export default function NotificationsList({
 								// silent
 							}
 						};
+						if (showInlineInvite) {
+							// #489: dm_invite 通知は inline 承諾/拒否 button を出す。
+							// resolved 後は listing から row を remove + read 化。
+							const onResolved = (_kind: "accepted" | "declined") => {
+								setItems((prev) => prev.filter((x) => x.id !== n.id));
+								markRead().catch(() => undefined);
+							};
+							return (
+								<li key={n.id} className={liClass}>
+									<div className="flex w-full items-start gap-3">{inner}</div>
+									<DmInviteActions
+										invitationId={Number(n.target_id)}
+										onResolved={onResolved}
+									/>
+								</li>
+							);
+						}
 						return (
 							<li key={n.id} className={liClass}>
 								{href ? (
 									<Link
 										href={href}
-										onClick={handleClick}
+										onClick={markRead}
 										className="flex w-full items-start gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 									>
 										{inner}

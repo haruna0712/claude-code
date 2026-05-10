@@ -50,8 +50,17 @@ export type NotificationTargetPreview =
 	| NotificationTargetUserPreview
 	| null;
 
-/** target_type 既知値。空文字は target 無し (system notification) を示す。 */
-export type NotificationTargetType = "tweet" | "user" | "";
+/** target_type 既知値。空文字は target 無し (system notification) を示す。
+ *
+ * Phase 4A bridge (#487) で `invitation` / `message` を追加。`dm_invite` 通知は
+ * `target_type === "invitation"` + `target_id === invitation.pk` を持つ。
+ */
+export type NotificationTargetType =
+	| "tweet"
+	| "user"
+	| "invitation"
+	| "message"
+	| "";
 
 export interface NotificationItem {
 	id: string;
