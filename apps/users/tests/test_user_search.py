@@ -38,9 +38,14 @@ def make_user(*, username: str, email: str = "", is_active: bool = True):
 
 @pytest.mark.django_db
 def test_search_requires_auth(search_url: str) -> None:
+    """匿名は 401 もしくは 403 (CookieAuthentication は WWW-Authenticate header
+    を出さないため DRF の既定で 403 になる)。"""
     client = APIClient()
     resp = client.get(f"{search_url}?q=abc")
-    assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+    assert resp.status_code in (
+        status.HTTP_401_UNAUTHORIZED,
+        status.HTTP_403_FORBIDDEN,
+    )
 
 
 @pytest.mark.django_db
