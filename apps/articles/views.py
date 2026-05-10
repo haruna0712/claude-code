@@ -156,14 +156,14 @@ class ArticleDetailView(APIView):
         if article.status == ArticleStatus.DRAFT:
             if not request.user.is_authenticated:
                 raise NotFound("article not found")
-            if article.author_id != request.user.id:
+            if article.author_id != request.user.pk:
                 raise NotFound("article not found")
         return article
 
     def get(self, request: Request, slug: str) -> Response:
         article = self._get_visible_article(request, slug)
         # view_count は本人除外で +1。F() で race-safe に。
-        if request.user.is_authenticated and request.user.id != article.author_id:
+        if request.user.is_authenticated and request.user.pk != article.author_id:
             Article.objects.filter(pk=article.pk).update(view_count=F("view_count") + 1)
             article.refresh_from_db(fields=["view_count"])
         return Response(ArticleDetailSerializer(article).data)
@@ -172,7 +172,7 @@ class ArticleDetailView(APIView):
         article = Article.objects.filter(slug=slug).first()
         if article is None:
             raise NotFound("article not found")
-        if article.author_id != request.user.id:
+        if article.author_id != request.user.pk:
             raise NotFound("article not found")
         return article
 
@@ -213,7 +213,7 @@ class ArticleDetailView(APIView):
         article = Article.objects.filter(slug=slug).first()
         if article is None:
             raise NotFound("article not found")
-        if article.author_id != request.user.id and not request.user.is_staff:
+        if article.author_id != request.user.pk and not request.user.is_staff:
             raise NotFound("article not found")
         article.soft_delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

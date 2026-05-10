@@ -141,19 +141,11 @@ def test_detail_draft_404_for_other_user() -> None:
 @pytest.mark.django_db
 def test_detail_draft_visible_to_author() -> None:
     alice = _user("alice")
-    article = _draft_article(alice, slug="draft1")
-    # 存在確認 (回帰テストのデバッグしやすさのため)
-    assert Article.objects.filter(slug="draft1").exists()
-    assert article.author_id == alice.id
+    _draft_article(alice, slug="draft1")
     client = APIClient()
     client.force_authenticate(user=alice)
-    url = reverse("articles:detail", kwargs={"slug": "draft1"})
-    resp = client.get(url)
-    assert resp.status_code == 200, (
-        f"Expected 200, got {resp.status_code}. "
-        f"URL={url}, body={resp.content!r}, "
-        f"alice.id={alice.id}, article.author_id={article.author_id}"
-    )
+    resp = client.get(reverse("articles:detail", kwargs={"slug": "draft1"}))
+    assert resp.status_code == 200
 
 
 @pytest.mark.django_db
