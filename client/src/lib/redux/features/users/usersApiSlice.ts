@@ -57,7 +57,7 @@ export const usersApiSlice = baseApiSlice.injectEndpoints({
 					username: string;
 					first_name: string;
 					last_name: string;
-					avatar: string | null;
+					avatar_url: string | null;
 				}[];
 			},
 			{ q: string; limit?: number }

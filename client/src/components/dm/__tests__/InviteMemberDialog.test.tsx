@@ -26,7 +26,7 @@ interface SearchData {
 		username: string;
 		first_name: string;
 		last_name: string;
-		avatar: string | null;
+		avatar_url: string | null;
 	}[];
 }
 const mockSearchUsers = vi.fn(
@@ -141,14 +141,14 @@ describe("InviteMemberDialog", () => {
 						username: "alice",
 						first_name: "Alice",
 						last_name: "Smith",
-						avatar: null,
+						avatar_url: null,
 					},
 					{
 						user_id: "u2",
 						username: "alfred",
 						first_name: "",
 						last_name: "",
-						avatar: null,
+						avatar_url: null,
 					},
 				],
 			},
@@ -175,14 +175,14 @@ describe("InviteMemberDialog", () => {
 						username: "alice",
 						first_name: "",
 						last_name: "",
-						avatar: null,
+						avatar_url: null,
 					},
 					{
 						user_id: "u2",
 						username: "alfred",
 						first_name: "",
 						last_name: "",
-						avatar: null,
+						avatar_url: null,
 					},
 				],
 			},

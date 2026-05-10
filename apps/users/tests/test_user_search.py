@@ -141,7 +141,7 @@ def test_search_response_shape(search_url: str) -> None:
     if body["results"]:
         first = body["results"][0]
         # 必要 field のみ (PII を漏らさない)
-        for key in ("user_id", "username", "first_name", "last_name", "avatar"):
+        for key in ("user_id", "username", "first_name", "last_name", "avatar_url"):
             assert key in first
         # email / is_active / is_premium などは出さない
         assert "email" not in first
