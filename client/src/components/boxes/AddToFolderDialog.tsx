@@ -349,11 +349,27 @@ export default function AddToFolderDialog({
 					<button
 						type="submit"
 						disabled={creating || !createName.trim()}
-						className="w-full rounded bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+						className="w-full rounded border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
 					>
 						{creating ? "作成中…" : "+ フォルダを作成"}
 					</button>
 				</form>
+
+				{/*
+				 * #507: Google Chrome / Microsoft Edge のブックマーク popover に倣い、
+				 * dialog 下部に「完了」 button を置く。checkbox toggle 自体は即時 API
+				 * (Google/Edge も同じ) だが、明示的な完了 button が無いと「これで保存
+				 * できたのか / どうやって閉じれば良いか」 が初見ユーザーに伝わらない。
+				 */}
+				<div className="mt-2 flex justify-end">
+					<button
+						type="button"
+						onClick={() => onOpenChange(false)}
+						className="rounded bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+					>
+						完了
+					</button>
+				</div>
 			</DialogContent>
 		</Dialog>
 	);
