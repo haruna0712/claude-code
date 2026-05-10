@@ -55,9 +55,22 @@ def test_ordered_list() -> None:
 def test_inline_link_with_target_and_rel() -> None:
     html = render_article_markdown("[example](https://example.com)")
     assert 'href="https://example.com"' in html
-    # target-blank-links extra で target="_blank" rel="noopener" が付く
+    # security-reviewer #542 LOW L-3: rel の各トークンを assert 個別に
+    # (将来 _LINKIFY_REL_VALUES が縮小したら気付ける)
     assert 'target="_blank"' in html
+    assert "nofollow" in html
     assert "noopener" in html
+    assert "noreferrer" in html
+
+
+def test_anchor_link_skips_target_blank() -> None:
+    """security-reviewer #542 MEDIUM M-1: 同ページ # アンカーは target=_blank
+    付与しない (ToC が新タブで開く UX 崩れを避ける)."""
+
+    html = render_article_markdown("[Intro](#intro)")
+    assert 'href="#intro"' in html
+    assert 'target="_blank"' not in html
+    assert "nofollow" not in html
 
 
 def test_image_with_https_src_kept() -> None:
@@ -279,6 +292,49 @@ def test_article_save_neutralizes_xss_in_body_markdown() -> None:
     )
     assert "<script" not in article.body_html.lower()
     assert "safe" in article.body_html
+
+
+# ----------------------------------------------------------------------
+# DoS ガード (security-reviewer #542 CRITICAL C-1)
+# ----------------------------------------------------------------------
+
+
+def test_oversize_body_markdown_raises_input_too_large() -> None:
+    """100KB 超は MarkdownInputTooLargeError."""
+
+    from apps.articles.services.markdown import (
+        _MAX_BODY_BYTES,
+        MarkdownInputTooLargeError,
+    )
+
+    payload = "x" * (_MAX_BODY_BYTES + 1)
+    with pytest.raises(MarkdownInputTooLargeError):
+        render_article_markdown(payload)
+
+
+def test_deeply_nested_blockquote_raises_nesting_too_deep() -> None:
+    """163+ 段の nested blockquote を投げると markdown2 が RecursionError で
+    crash する (security-reviewer 実証済み)。事前に MarkdownNestingTooDeepError
+    で reject する。"""
+
+    from apps.articles.services.markdown import (
+        _MAX_BLOCKQUOTE_DEPTH,
+        MarkdownNestingTooDeepError,
+    )
+
+    payload = "> " * (_MAX_BLOCKQUOTE_DEPTH + 1) + "evil"
+    with pytest.raises(MarkdownNestingTooDeepError):
+        render_article_markdown(payload)
+
+
+def test_max_blockquote_depth_passes() -> None:
+    """20 段までは OK で render できる."""
+
+    from apps.articles.services.markdown import _MAX_BLOCKQUOTE_DEPTH
+
+    payload = "> " * _MAX_BLOCKQUOTE_DEPTH + "ok"
+    html = render_article_markdown(payload)
+    assert "ok" in html
 
 
 @pytest.mark.django_db

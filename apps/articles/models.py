@@ -56,7 +56,10 @@ class Article(models.Model):
     body_markdown = models.TextField()
     # P6-02 の render_article_markdown() で sanitize 済 HTML を cache。
     # NEVER assign body_html directly from user input — 必ずサニタイザ経由。
-    body_html = models.TextField(blank=True)
+    # security-reviewer #542 HIGH H-2: editable=False で DRF ModelSerializer /
+    # admin form の writable field から自動除外。`Article.objects.update()` の
+    # bypass は防げないが、API / admin 経由の事故を排除。
+    body_html = models.TextField(blank=True, editable=False)
     status = models.CharField(
         max_length=16,
         choices=ArticleStatus.choices,
@@ -253,8 +256,9 @@ class ArticleComment(models.Model):
         blank=True,
     )
     body = models.TextField()
-    # P6-02 で render 済 HTML を cache。
-    body_html = models.TextField(blank=True)
+    # P6-02 で render 済 HTML を cache。security-reviewer #542 HIGH H-2:
+    # editable=False で DRF / admin の writable から自動除外。
+    body_html = models.TextField(blank=True, editable=False)
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

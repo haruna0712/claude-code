@@ -28,6 +28,23 @@ import bleach
 import markdown2
 from django.conf import settings
 
+# security-reviewer #542 CRITICAL C-1: markdown2 の blockquote パーサは Python
+# 再帰実装で、163+ 段ネストすると RecursionError でワーカーが落ちる。
+# body_markdown に長さ + ネスト深さの両ガードをかけて DoS を遮断する。
+_MAX_BODY_BYTES = 100_000  # 100KB は SPEC §12 上の長文記事でも十分な上限
+_MAX_BLOCKQUOTE_DEPTH = 20  # Zenn / Qiita でも 5 段以上はまず無い、安全に余裕を持たせる
+# `> ` 連続行の数を数えるため line head で `^` プレースホルダ
+_BLOCKQUOTE_DEPTH_RE = re.compile(r"^(?:>\s*)+", re.MULTILINE)
+
+
+class MarkdownInputTooLargeError(ValueError):
+    """body_markdown が _MAX_BODY_BYTES を超えたとき raise."""
+
+
+class MarkdownNestingTooDeepError(ValueError):
+    """blockquote ネスト深さが _MAX_BLOCKQUOTE_DEPTH を超えたとき raise."""
+
+
 # 記事用 markdown2 extras。tweets と異なり break-on-newline は使わず段落保持。
 # - fenced-code-blocks: ```lang\n...\n``` を <pre><code> に変換
 # - highlightjs-lang:   ↑ の出力に `class="language-xxx"` を付与 (frontend Shiki 用)
@@ -71,12 +88,35 @@ def _linkify_callback(attrs: dict, new: bool = False) -> dict:
     """linkify した <a> に target/rel を強制付与する."""
 
     href_key = (None, "href")
-    if attrs.get(href_key) is None:
-        # bleach 内部で 一時的に href が無いケースが起こるため安全側へ
+    href = attrs.get(href_key)
+    if href is None:
+        return attrs
+    # security-reviewer #542 MEDIUM M-1: 同ページアンカー (`#xxx`) に
+    # target="_blank" を付けると ToC 系のリンクで新タブが開いて UX が崩れる。
+    # rel も nofollow 不要なのでスキップ。
+    if href.startswith("#"):
         return attrs
     attrs[(None, "target")] = "_blank"
     attrs[(None, "rel")] = " ".join(_LINKIFY_REL_VALUES)
     return attrs
+
+
+# security-reviewer #542 MEDIUM M-3: <noscript> / <style> / <script> ブロックは
+# bleach の strip でタグだけ消すと中身の HTML が残ってしまう。allowlist が
+# 将来広がったときに「noscript の中に隠した攻撃」 が顕在化するため、bleach
+# 前段でブロック全体を除去する。apps/tweets/rendering.py と同 pattern。
+_SCRIPTING_BLOCK_RE = re.compile(
+    r"<(script|style|noscript)\b[^>]*>.*?</\1\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _strip_scripting_blocks(html: str) -> str:
+    """`<script>` / `<style>` / `<noscript>` を中身ごと除去 (前処理)."""
+
+    if not html:
+        return html
+    return _SCRIPTING_BLOCK_RE.sub("", html)
 
 
 def _build_markdown() -> markdown2.Markdown:
@@ -85,21 +125,55 @@ def _build_markdown() -> markdown2.Markdown:
     return markdown2.Markdown(extras=_MARKDOWN_EXTRAS)
 
 
+def _enforce_input_limits(source: str) -> None:
+    """body_markdown の DoS ガード (security-reviewer #542 CRITICAL C-1).
+
+    - サイズ: 100KB 超は MarkdownInputTooLargeError
+    - blockquote ネスト深さ: 20 段超は MarkdownNestingTooDeepError
+      (markdown2 の blockquote パーサが Python 再帰で、163+ 段で RecursionError)
+    """
+
+    if len(source.encode("utf-8")) > _MAX_BODY_BYTES:
+        raise MarkdownInputTooLargeError(
+            f"body_markdown のサイズが上限 ({_MAX_BODY_BYTES} bytes) を超えています"
+        )
+    # `> ` を連続でカウント。各行の最大段数を取得して上限と比較。
+    max_depth = 0
+    for match in _BLOCKQUOTE_DEPTH_RE.finditer(source):
+        depth = match.group(0).count(">")
+        if depth > max_depth:
+            max_depth = depth
+    if max_depth > _MAX_BLOCKQUOTE_DEPTH:
+        raise MarkdownNestingTooDeepError(
+            f"blockquote ネスト深さが上限 ({_MAX_BLOCKQUOTE_DEPTH}) を超えています"
+        )
+
+
 def render_article_markdown(source: str) -> str:
     """Article body の Markdown をサニタイズ済 HTML に変換する.
 
     パイプライン:
+        0. 入力サイズ + ネスト深さの DoS ガード (CRITICAL C-1)
         1. markdown2 で HTML 化 (extras: 段落、コードブロック、表、脚注)
-        2. bleach.clean で settings.MARKDOWN_BLEACH_* 準拠の allowlist
-        3. protocol-relative URL を post-process で除去
-        4. bleach.linkify で URL を <a target="_blank" rel="..."> に
+        2. <script>/<style>/<noscript> ブロックを中身ごと除去 (M-3)
+        3. bleach.clean で settings.MARKDOWN_BLEACH_* 準拠の allowlist
+        4. protocol-relative URL を post-process で除去
+        5. bleach.linkify で URL を <a target="_blank" rel="..."> に
+
+    Raises:
+        MarkdownInputTooLargeError / MarkdownNestingTooDeepError:
+            ガードに引っかかった場合 (view 層で 400 にハンドリングする想定)
     """
 
     if not source:
         return ""
 
+    _enforce_input_limits(source)
+
     converter = _build_markdown()
     rendered_html = converter.convert(source)
+
+    rendered_html = _strip_scripting_blocks(rendered_html)
 
     sanitized = bleach.clean(
         rendered_html,
