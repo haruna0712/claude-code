@@ -20,9 +20,30 @@ vi.mock("@/lib/redux/features/dm/dmApiSlice", () => ({
 	],
 }));
 
+interface SearchData {
+	results: {
+		user_id: string;
+		username: string;
+		first_name: string;
+		last_name: string;
+		avatar: string | null;
+	}[];
+}
+const mockSearchUsers = vi.fn(
+	(_args?: unknown, _opts?: unknown): { data: SearchData | undefined } => ({
+		data: undefined,
+	}),
+);
+vi.mock("@/lib/redux/features/users/usersApiSlice", () => ({
+	useSearchUsersQuery: (args: unknown, opts?: unknown) =>
+		mockSearchUsers(args, opts),
+}));
+
 beforeEach(() => {
 	mockCreate.mockReset();
 	mockOnOpenChange.mockReset();
+	mockSearchUsers.mockReset();
+	mockSearchUsers.mockReturnValue({ data: undefined });
 });
 
 describe("InviteMemberDialog", () => {
@@ -108,5 +129,70 @@ describe("InviteMemberDialog", () => {
 		await userEvent.click(screen.getByRole("button", { name: "招待を送る" }));
 		expect(await screen.findByRole("alert")).toHaveTextContent(/使用できない/);
 		expect(mockCreate).not.toHaveBeenCalled();
+	});
+
+	// #480: handle autocomplete dropdown
+	it("入力中に suggestions dropdown が出て click で input に補完される", async () => {
+		mockSearchUsers.mockReturnValue({
+			data: {
+				results: [
+					{
+						user_id: "u1",
+						username: "alice",
+						first_name: "Alice",
+						last_name: "Smith",
+						avatar: null,
+					},
+					{
+						user_id: "u2",
+						username: "alfred",
+						first_name: "",
+						last_name: "",
+						avatar: null,
+					},
+				],
+			},
+		});
+		render(
+			<InviteMemberDialog open roomId={42} onOpenChange={mockOnOpenChange} />,
+		);
+		await userEvent.type(screen.getByLabelText(/handle/i), "al");
+		const list = await screen.findByRole("listbox", { name: "ユーザー候補" });
+		expect(list).toBeInTheDocument();
+		const opts = screen.getAllByRole("option");
+		expect(opts).toHaveLength(2);
+		// click で input に値が入る (mousedown で picked)
+		await userEvent.click(opts[1]);
+		expect(screen.getByLabelText(/handle/i)).toHaveValue("alfred");
+	});
+
+	it("矢印 + Enter で suggestion を選択できる", async () => {
+		mockSearchUsers.mockReturnValue({
+			data: {
+				results: [
+					{
+						user_id: "u1",
+						username: "alice",
+						first_name: "",
+						last_name: "",
+						avatar: null,
+					},
+					{
+						user_id: "u2",
+						username: "alfred",
+						first_name: "",
+						last_name: "",
+						avatar: null,
+					},
+				],
+			},
+		});
+		render(
+			<InviteMemberDialog open roomId={42} onOpenChange={mockOnOpenChange} />,
+		);
+		const input = screen.getByLabelText(/handle/i);
+		await userEvent.type(input, "al");
+		await userEvent.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+		expect(input).toHaveValue("alfred");
 	});
 });

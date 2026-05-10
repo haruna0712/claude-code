@@ -22,9 +22,13 @@ from .views import (
     HeaderUploadUrlView,
     MeView,
     PublicProfileView,
+    UserSearchView,
 )
 
 urlpatterns = [
+    # Issue #480: handle 前方一致検索 (autocomplete 用)。
+    # 静的 path として `<str:username>/` より先に登録する (greedy 対策)。
+    path("", UserSearchView.as_view(), name="users-search"),
     path("me/", MeView.as_view(), name="users-me"),
     # P1-04: avatar / header 画像 S3 presigned URL 発行。
     path(
