@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import FavoritesTab from "@/components/boxes/FavoritesTab";
 import StartDMButton from "@/components/dm/StartDMButton";
 import FollowButton from "@/components/follows/FollowButton";
 import ProfileKebab from "@/components/moderation/ProfileKebab";
@@ -38,10 +39,12 @@ interface PublicProfile {
 	user_id: string;
 }
 
-type ProfileTab = "tweets" | "likes";
+type ProfileTab = "tweets" | "likes" | "favorites";
 
 function resolveTab(raw: string | undefined): ProfileTab {
-	return raw === "likes" ? "likes" : "tweets";
+	if (raw === "likes") return "likes";
+	if (raw === "favorites") return "favorites";
+	return "tweets";
 }
 
 interface PageProps {
@@ -262,20 +265,47 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 				</Link>
 			</div>
 
-			{/* #421: ポスト / いいね タブ (X 風)。?tab=likes で切替。 */}
+			{/* #421: ポスト / いいね タブ (X 風)。?tab=likes で切替。
+			    #499: 自分のプロフィールのみ「お気に入り」 タブを追加。 */}
 			<nav
 				aria-label="プロフィール タブ"
 				className="mt-6 flex border-b border-border px-4"
 			>
 				{(
-					[
-						{ key: "tweets", label: "ポスト", href: `/u/${profile.username}` },
-						{
-							key: "likes",
-							label: "いいね",
-							href: `/u/${profile.username}?tab=likes`,
-						},
-					] as const
+					(isOwnProfile
+						? [
+								{
+									key: "tweets",
+									label: "ポスト",
+									href: `/u/${profile.username}`,
+								},
+								{
+									key: "likes",
+									label: "いいね",
+									href: `/u/${profile.username}?tab=likes`,
+								},
+								{
+									key: "favorites",
+									label: "お気に入り",
+									href: `/u/${profile.username}?tab=favorites`,
+								},
+							]
+						: [
+								{
+									key: "tweets",
+									label: "ポスト",
+									href: `/u/${profile.username}`,
+								},
+								{
+									key: "likes",
+									label: "いいね",
+									href: `/u/${profile.username}?tab=likes`,
+								},
+							]) as ReadonlyArray<{
+						key: ProfileTab;
+						label: string;
+						href: string;
+					}>
 				).map((t) => (
 					<Link
 						key={t.key}
@@ -300,9 +330,18 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 
 			<section className="mt-4 px-4" aria-labelledby="tweets-heading">
 				<h2 id="tweets-heading" className="sr-only">
-					{tab === "likes" ? "いいねした投稿" : "ツイート"}
+					{tab === "likes"
+						? "いいねした投稿"
+						: tab === "favorites"
+							? "お気に入り"
+							: "ツイート"}
 				</h2>
-				{tab === "likes" ? (
+				{tab === "favorites" && isOwnProfile ? (
+					/* #499: 自分のお気に入り (Google ブックマーク風 folder ツリー)。
+					    他人プロフィールでは tab 自体非表示にしているが、
+					    URL 直叩きで来たケースに備えて isOwnProfile gate を二重化。 */
+					<FavoritesTab currentUserHandle={profile.username} />
+				) : tab === "likes" ? (
 					<TweetCardList
 						tweets={likedTweets}
 						ariaLabel={`@${profile.username} がいいねした投稿`}

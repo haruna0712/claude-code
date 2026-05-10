@@ -14,6 +14,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { Flag, MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
+import BookmarkButton from "@/components/boxes/BookmarkButton";
 import ReactionBar from "@/components/reactions/ReactionBar";
 import ReactionSummary from "@/components/reactions/ReactionSummary";
 import ExpandableBody from "@/components/timeline/ExpandableBody";
@@ -601,6 +602,15 @@ export default function TweetCard({
 					tweetId={displayTweet.id}
 					initial={displayTweet.reaction_summary}
 					onChange={setReactionAggregate}
+				/>
+
+				{/* #499: お気に入り (Google ブックマーク風 folder 階層) を開く.
+				    isRepost のとき displayTweet は TweetMini (bookmark_folder_ids
+				    を持たない) ので空配列で初期化し、Dialog open 時に
+				    `/boxes/tweets/<id>/status/` から正しい状態を取得する。 */}
+				<BookmarkButton
+					tweetId={displayTweet.id}
+					initialFolderIds={isRepost ? [] : (tweet.bookmark_folder_ids ?? [])}
 				/>
 			</footer>
 

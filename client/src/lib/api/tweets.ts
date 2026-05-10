@@ -84,6 +84,12 @@ export interface TweetSummary {
 	 * 未認証 / フィールド未付与時は undefined → false 扱い。
 	 */
 	reposted_by_me?: boolean;
+	/**
+	 * #499: viewer がこの tweet を保存している folder の id 配列。
+	 * BookmarkButton.initialFolderIds に渡し、リロード後の塗り状態を復元する。
+	 * backend が未付与の段階では undefined → 空配列扱い。
+	 */
+	bookmark_folder_ids?: number[];
 }
 
 export async function createTweet(
