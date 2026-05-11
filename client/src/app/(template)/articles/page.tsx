@@ -13,7 +13,8 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Feather } from "lucide-react";
+import { cookies } from "next/headers";
+import { Feather, FileEdit } from "lucide-react";
 
 import ArticleCard from "@/components/articles/ArticleCard";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
@@ -57,6 +58,9 @@ export default async function ArticlesListPage({ searchParams }: PageProps) {
 		author: searchParams?.author,
 		tag: searchParams?.tag,
 	});
+	// auth user のときだけ「下書き」 link を出す。 cookie 経由で軽量判定
+	// (notifications 系と同流儀、 SSR で `/users/me/` を叩くより安い)。
+	const isAuthenticated = cookies().get("logged_in")?.value === "true";
 
 	const filterDescription = (() => {
 		if (searchParams?.author) return `@${searchParams.author} の記事`;
@@ -88,6 +92,20 @@ export default async function ArticlesListPage({ searchParams }: PageProps) {
 						{filterDescription}
 					</p>
 				</div>
+				{isAuthenticated && (
+					<Link
+						href="/articles/me/drafts"
+						className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-medium transition-colors hover:bg-[color:var(--a-bg-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+						style={{
+							borderColor: "var(--a-border)",
+							color: "var(--a-text-muted)",
+							fontSize: 12.5,
+						}}
+					>
+						<FileEdit className="size-3.5" aria-hidden />
+						下書き
+					</Link>
+				)}
 				<Link
 					href="/articles/new"
 					className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"

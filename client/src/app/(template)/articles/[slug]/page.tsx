@@ -11,6 +11,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import ArticleBody from "@/components/articles/ArticleBody";
+import ArticleOwnerActions from "@/components/articles/ArticleOwnerActions";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { ArticleDetail } from "@/lib/api/articles";
 import { stringifyJsonLd } from "@/lib/json-ld";
@@ -19,12 +20,27 @@ interface PageProps {
 	params: { slug: string };
 }
 
+interface CurrentUserMini {
+	id: number | string;
+	username: string;
+}
+
 async function fetchArticleSSR(slug: string): Promise<ArticleDetail | null> {
 	try {
 		return await serverFetch<ArticleDetail>(`/articles/${slug}/`);
 	} catch (err) {
 		if (err instanceof ApiServerError && err.status === 404) return null;
 		throw err;
+	}
+}
+
+async function fetchCurrentUserSSR(): Promise<CurrentUserMini | null> {
+	// 未ログイン (401) でも fetch 不能でも owner 判定は false にしたいので、
+	// 例外は全て swallow して null を返す (page render は継続)。
+	try {
+		return await serverFetch<CurrentUserMini>("/users/me/");
+	} catch {
+		return null;
 	}
 }
 
@@ -75,6 +91,12 @@ export default async function ArticleDetailPage({ params }: PageProps) {
 	const article = await fetchArticleSSR(params.slug);
 	if (!article) notFound();
 
+	// owner 判定: handle (== Django username) で比較。 ArticleAuthor.id は serializer
+	// 未公開なので backend 変更回避のため username/handle で照合する。
+	const currentUser = await fetchCurrentUserSSR();
+	const isOwner =
+		currentUser !== null && currentUser.username === article.author.handle;
+
 	const author = article.author.display_name || article.author.handle;
 	const description = excerpt(article.body_html);
 	const jsonLd = {
@@ -112,12 +134,16 @@ export default async function ArticleDetailPage({ params }: PageProps) {
 				>
 					← 記事一覧
 				</Link>
-				<span
-					className="ml-auto text-[color:var(--a-text-subtle)]"
-					style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
-				>
-					article
-				</span>
+				{isOwner ? (
+					<ArticleOwnerActions slug={article.slug} />
+				) : (
+					<span
+						className="ml-auto text-[color:var(--a-text-subtle)]"
+						style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
+					>
+						article
+					</span>
+				)}
 			</header>
 
 			<article className="px-5 py-6">
