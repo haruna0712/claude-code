@@ -131,13 +131,15 @@ export default function NotificationsList({
 			className="rounded-lg border border-border bg-card"
 		>
 			<header className="flex items-center justify-between border-b border-border p-4">
-				<h1
+				{/* #574 後続: page wrapper の sticky <h1>「通知」 が page heading なので、
+				    NotificationsList の内部見出しは <h2> に降格 (1 page 1 h1)。 */}
+				<h2
 					id="notifications-heading"
 					className="flex items-center gap-2 text-lg font-bold text-foreground"
 				>
 					<Bell className="size-5" aria-hidden="true" />
 					{groupedTitle}
-				</h1>
+				</h2>
 				{/* a11y MED: tablist + tab は tabpanel ペアが必要なので、ここは
 				    通常の toggle button + aria-pressed にする (X 慣習)。 */}
 				<div role="group" aria-label="フィルタ" className="flex gap-2 text-sm">
