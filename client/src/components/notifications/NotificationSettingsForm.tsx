@@ -121,7 +121,10 @@ export default function NotificationSettingsForm() {
 	}
 	if (state === "error") {
 		return (
-			<div role="alert" className="text-baby_red p-8 text-center">
+			<div
+				role="alert"
+				className="p-8 text-center text-[color:var(--a-danger)]"
+			>
 				通知設定の取得に失敗しました
 			</div>
 		);
@@ -135,12 +138,14 @@ export default function NotificationSettingsForm() {
 			className="rounded-lg border border-border bg-card"
 		>
 			<header className="border-b border-border p-4">
-				<h1
+				{/* #577: page wrapper の sticky <h1>「通知の設定」 が page heading なので、
+				    NotificationSettingsForm 内部は <h2> に降格 (1 page 1 h1)。 */}
+				<h2
 					id="notif-settings-heading"
 					className="text-lg font-bold text-foreground"
 				>
 					通知の設定
-				</h1>
+				</h2>
 				<p className="mt-1 text-xs text-muted-foreground">
 					種別ごとに通知の受け取りを ON/OFF できます。OFF
 					にすると、その種別の通知は作成されません。

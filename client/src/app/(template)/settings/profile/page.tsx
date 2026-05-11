@@ -24,14 +24,33 @@ export default async function ProfileSettingsPage() {
 	if (!currentUser) redirect("/login");
 
 	return (
-		<main className="mx-auto max-w-3xl px-4 py-8">
-			<header className="mb-6">
-				<h1 className="text-2xl font-bold">プロフィール編集</h1>
-				<p className="mt-1 text-sm text-muted-foreground">
-					表示名、自己紹介、プロフィール画像、外部リンクを更新できます。
-				</p>
+		<>
+			<header
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
+				<div className="min-w-0 flex-1">
+					<h1
+						className="truncate font-semibold tracking-tight"
+						style={{ fontSize: 15, letterSpacing: -0.2 }}
+					>
+						プロフィール編集
+					</h1>
+					<p
+						className="truncate text-[color:var(--a-text-subtle)]"
+						style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
+					>
+						表示名 / bio / 画像 / 外部リンク
+					</p>
+				</div>
 			</header>
-			<ProfileEditForm initialUser={currentUser} />
-		</main>
+			<div className="p-5">
+				<ProfileEditForm initialUser={currentUser} />
+			</div>
+		</>
 	);
 }

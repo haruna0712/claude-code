@@ -100,10 +100,14 @@ export default function ModerationListClient({ mode }: Props) {
 	};
 
 	return (
-		<main className="mx-auto w-full max-w-2xl px-4 py-6">
-			<h1 className="mb-4 text-xl font-bold text-gray-900 dark:text-gray-100">
+		<section aria-label={labels.title}>
+			{/* #577: page wrapper の sticky <h1> が page heading なので、
+			    ModerationListClient 内部は <h2> + section に降格 (1 page 1 h1)。
+			    また外側 <main> は (template)/layout の <main> と二重ネストするため
+			    <section> に変更。 */}
+			<h2 className="mb-4 text-xl font-bold text-[color:var(--a-text)]">
 				{labels.title}
-			</h1>
+			</h2>
 			{loading ? (
 				<p className="text-sm text-muted-foreground">読み込み中…</p>
 			) : !rows || rows.length === 0 ? (
@@ -129,10 +133,10 @@ export default function ModerationListClient({ mode }: Props) {
 										width={40}
 										height={40}
 										unoptimized
-										className="h-10 w-10 rounded-full object-cover"
+										className="size-10 rounded-full object-cover"
 									/>
 								) : (
-									<span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm">
+									<span className="flex size-10 items-center justify-center rounded-full bg-muted text-sm">
 										{r.handle.slice(0, 1).toUpperCase()}
 									</span>
 								)}
@@ -156,6 +160,6 @@ export default function ModerationListClient({ mode }: Props) {
 					))}
 				</ul>
 			)}
-		</main>
+		</section>
 	);
 }
