@@ -12,6 +12,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import AComposeShell from "@/components/layout-a/AComposeShell";
 import HomeFeed from "@/components/timeline/HomeFeed";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { HomeTimelinePage } from "@/lib/api/timeline";
@@ -144,6 +145,7 @@ export default async function HomePage({
 					live
 				</span>
 			</header>
+			<AComposeShell />
 			<HomeFeed
 				initialTab={initialTab}
 				initialTweets={initialTweets}
