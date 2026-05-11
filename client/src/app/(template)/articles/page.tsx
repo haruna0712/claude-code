@@ -71,6 +71,7 @@ export default async function ArticlesListPage({ searchParams }: PageProps) {
 	return (
 		<>
 			<header
+				aria-label="ページヘッダー"
 				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
 				style={{
 					borderBottom: "1px solid var(--a-border)",
@@ -102,7 +103,7 @@ export default async function ArticlesListPage({ searchParams }: PageProps) {
 							fontSize: 12.5,
 						}}
 					>
-						<FileEdit className="size-3.5" aria-hidden />
+						<FileEdit className="size-3.5" aria-hidden="true" />
 						下書き
 					</Link>
 				)}
@@ -111,7 +112,7 @@ export default async function ArticlesListPage({ searchParams }: PageProps) {
 					className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 					style={{ background: "var(--a-accent)", fontSize: 12.5 }}
 				>
-					<Feather className="size-3.5" aria-hidden />
+					<Feather className="size-3.5" aria-hidden="true" />
 					記事を書く
 				</Link>
 			</header>

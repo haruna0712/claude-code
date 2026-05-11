@@ -62,6 +62,7 @@ export default async function DraftsPage() {
 	return (
 		<>
 			<header
+				aria-label="ページヘッダー"
 				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
 				style={{
 					borderBottom: "1px solid var(--a-border)",
@@ -95,17 +96,14 @@ export default async function DraftsPage() {
 					className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 					style={{ background: "var(--a-accent)", fontSize: 12.5 }}
 				>
-					<Feather className="size-3.5" aria-hidden />
+					<Feather className="size-3.5" aria-hidden="true" />
 					記事を書く
 				</Link>
 			</header>
 
 			<div className="p-5">
 				{drafts.length === 0 ? (
-					<div
-						className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-10 text-center"
-						role="status"
-					>
+					<div className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-10 text-center">
 						<p className="text-sm text-[color:var(--a-text-muted)]">
 							まだ下書きはありません。
 						</p>
@@ -114,7 +112,7 @@ export default async function DraftsPage() {
 							className="mt-3 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
 							style={{ background: "var(--a-accent)" }}
 						>
-							<Feather className="size-3.5" aria-hidden />
+							<Feather className="size-3.5" aria-hidden="true" />
 							記事を書く
 						</Link>
 					</div>
@@ -124,7 +122,7 @@ export default async function DraftsPage() {
 							<li key={d.id}>
 								<Link
 									href={`/articles/${d.slug}/edit`}
-									className="block rounded-lg border border-[color:var(--a-border)] bg-white px-4 py-3 transition-colors hover:bg-[color:var(--a-bg-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+									className="block scroll-mt-16 rounded-lg border border-[color:var(--a-border)] bg-white px-4 py-3 transition-colors hover:bg-[color:var(--a-bg-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 								>
 									<div className="flex items-start justify-between gap-3">
 										<div className="min-w-0 flex-1">
@@ -164,7 +162,7 @@ export default async function DraftsPage() {
 											className="inline-flex shrink-0 items-center gap-1 text-[color:var(--a-text-muted)]"
 											style={{ fontSize: 12.5 }}
 										>
-											<Edit3 className="size-3.5" aria-hidden />
+											<Edit3 className="size-3.5" aria-hidden="true" />
 											編集
 										</span>
 									</div>

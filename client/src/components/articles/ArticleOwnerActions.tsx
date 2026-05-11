@@ -66,31 +66,37 @@ export default function ArticleOwnerActions({
 			<Link
 				href={`/articles/${slug}/edit`}
 				aria-label="記事を編集"
-				className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 font-medium transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+				className="inline-flex min-h-[28px] items-center gap-1 rounded-md px-2.5 py-1.5 font-medium transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 				style={{
 					background: "var(--a-accent)",
 					color: "white",
 					fontSize: 12.5,
 				}}
 			>
-				<Edit3 className="size-3.5" aria-hidden />
+				<Edit3 className="size-3.5" aria-hidden="true" />
 				編集
 			</Link>
 			<button
 				type="button"
 				onClick={handleDelete}
 				disabled={busy}
+				aria-busy={busy}
 				aria-label="記事を削除"
-				className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 font-medium transition-colors hover:bg-[color:var(--a-bg-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)] disabled:opacity-50"
+				className="inline-flex min-h-[28px] items-center gap-1 rounded-md border px-2.5 py-1.5 font-medium transition-colors hover:bg-[color:var(--a-bg-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)] disabled:opacity-50"
 				style={{
 					borderColor: "var(--a-border)",
 					color: "var(--a-text-muted)",
 					fontSize: 12.5,
 				}}
 			>
-				<Trash2 className="size-3.5" aria-hidden />
+				<Trash2 className="size-3.5" aria-hidden="true" />
 				{busy ? "削除中…" : "削除"}
 			</button>
+			{/* a11y-reviewer M-2: 削除中の状態を SR にアナウンス。 disabled で focus が
+			    外れても live region から読み上げが届く。 */}
+			<span role="status" aria-live="polite" className="sr-only">
+				{busy ? "削除しています" : ""}
+			</span>
 		</div>
 	);
 }

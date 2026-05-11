@@ -129,6 +129,7 @@ export default async function ArticleDetailPage({ params }: PageProps) {
 			/>
 
 			<header
+				aria-label="ページヘッダー"
 				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
 				style={{
 					borderBottom: "1px solid var(--a-border)",
@@ -174,7 +175,11 @@ export default async function ArticleDetailPage({ params }: PageProps) {
 							</time>
 						)}
 						{article.status === "draft" && (
-							<span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
+							<span
+								role="status"
+								aria-label="ステータス: 下書き"
+								className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900"
+							>
 								下書き
 							</span>
 						)}
