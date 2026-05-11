@@ -1,5 +1,7 @@
 /**
  * /notifications page (#412 / Phase 4A).
+ *
+ * #574 (B-1-5) で A direction sticky header を追加。
  */
 
 import { redirect } from "next/navigation";
@@ -14,8 +16,25 @@ export default function NotificationsPage() {
 		redirect("/login");
 	}
 	return (
-		<div className="mx-auto w-full max-w-2xl">
-			<NotificationsList />
-		</div>
+		<>
+			<header
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
+				<h1
+					className="min-w-0 flex-1 truncate font-semibold tracking-tight"
+					style={{ fontSize: 15, letterSpacing: -0.2 }}
+				>
+					通知
+				</h1>
+			</header>
+			<div className="p-5">
+				<NotificationsList />
+			</div>
+		</>
 	);
 }

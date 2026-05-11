@@ -177,7 +177,10 @@ export default function NotificationsList({
 					読み込み中…
 				</div>
 			) : state === "error" ? (
-				<div role="alert" className="text-baby_red p-8 text-center">
+				<div
+					role="alert"
+					className="p-8 text-center text-[color:var(--a-danger)]"
+				>
 					通知の取得に失敗しました
 				</div>
 			) : items.length === 0 ? (
