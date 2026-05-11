@@ -120,4 +120,70 @@ describe("ArticleEditor", () => {
 		expect(enqueueMock).toHaveBeenCalledTimes(1);
 		expect(enqueueMock).toHaveBeenCalledWith([file]);
 	});
+
+	it("T-EDIT-4 paste with image file → enqueue + preventDefault (code-reviewer M-3)", () => {
+		render(<ArticleEditor mode="create" />);
+		const textarea = screen.getByLabelText(/本文/, {
+			selector: "textarea",
+		}) as HTMLTextAreaElement;
+
+		const imageFile = new File(["x"], "pasted.png", { type: "image/png" });
+		const clipboardData = {
+			items: [
+				{
+					kind: "file",
+					type: "image/png",
+					getAsFile: () => imageFile,
+				},
+			],
+		};
+		fireEvent.paste(textarea, { clipboardData });
+		expect(enqueueMock).toHaveBeenCalledTimes(1);
+		expect(enqueueMock).toHaveBeenCalledWith([imageFile]);
+	});
+
+	it("T-EDIT-5 paste with non-image (text) does NOT enqueue (code-reviewer M-3)", () => {
+		render(<ArticleEditor mode="create" />);
+		const textarea = screen.getByLabelText(/本文/, {
+			selector: "textarea",
+		}) as HTMLTextAreaElement;
+
+		const clipboardData = {
+			items: [
+				{
+					kind: "string",
+					type: "text/plain",
+					getAsFile: () => null,
+				},
+			],
+		};
+		fireEvent.paste(textarea, { clipboardData });
+		expect(enqueueMock).not.toHaveBeenCalled();
+	});
+
+	it("T-EDIT-6 drop with image file → enqueue + preventDefault (code-reviewer M-3)", () => {
+		render(<ArticleEditor mode="create" />);
+		const textarea = screen.getByLabelText(/本文/, {
+			selector: "textarea",
+		}) as HTMLTextAreaElement;
+
+		const imageFile = new File(["x"], "dropped.png", { type: "image/png" });
+		fireEvent.drop(textarea, {
+			dataTransfer: { files: [imageFile], types: ["Files"] },
+		});
+		expect(enqueueMock).toHaveBeenCalledTimes(1);
+		expect(enqueueMock).toHaveBeenCalledWith([imageFile]);
+	});
+
+	it("T-EDIT-7 drop with non-image (text/html) does NOT enqueue", () => {
+		render(<ArticleEditor mode="create" />);
+		const textarea = screen.getByLabelText(/本文/, {
+			selector: "textarea",
+		}) as HTMLTextAreaElement;
+
+		fireEvent.drop(textarea, {
+			dataTransfer: { files: [], types: ["text/html"] },
+		});
+		expect(enqueueMock).not.toHaveBeenCalled();
+	});
 });

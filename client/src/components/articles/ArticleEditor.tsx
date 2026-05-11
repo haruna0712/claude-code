@@ -119,6 +119,8 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 	// setSelectionRange が連発するのを防ぐ)。
 	const pendingCaretRef = useRef<number | null>(null);
 
+	// code-reviewer H-2 反映: body 更新ごとに pendingCaretRef を flush。 dep array
+	// なしの useEffect は毎レンダー走ってオーバーヘッドになるので body を観測する形に。
 	useEffect(() => {
 		if (pendingCaretRef.current === null) return;
 		const target = pendingCaretRef.current;
@@ -128,7 +130,7 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 			ta.focus();
 			ta.setSelectionRange(target, target);
 		}
-	});
+	}, [body]);
 
 	const tags = tagsInput
 		.split(/[,\s]+/)

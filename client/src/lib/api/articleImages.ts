@@ -26,6 +26,8 @@ const ALLOWED_MIME = new Set<string>([
 	"image/gif",
 ]);
 const MAX_BYTES = 5 * 1024 * 1024;
+// code-reviewer LOW-1: マジックナンバーに名前を付ける。 fetch の AbortSignal.timeout で参照。
+const S3_UPLOAD_TIMEOUT_MS = 30_000;
 
 export interface UploadedImage {
 	id: string;
@@ -85,10 +87,12 @@ export function validateImageFile(file: File): void {
  * HTMLImageElement.naturalWidth/Height をクライアント側で計測する。
  * confirm endpoint に渡す必須フィールド。
  */
-async function readImageDimensions(
+function readImageDimensions(
 	file: File,
 ): Promise<{ width: number; height: number }> {
-	return await new Promise((resolve, reject) => {
+	// code-reviewer M-2 反映: `async` + `return await new Promise` は anti-pattern。
+	// 単なる Promise factory なので非 async に変更。
+	return new Promise((resolve, reject) => {
 		const url = URL.createObjectURL(file);
 		const img = new Image();
 		img.onload = () => {
@@ -161,7 +165,7 @@ export async function requestImageUpload(
 		const s3Res = await fetch(presign.url, {
 			method: "POST",
 			body: formData,
-			signal: AbortSignal.timeout(30_000),
+			signal: AbortSignal.timeout(S3_UPLOAD_TIMEOUT_MS),
 			// presigned 署名で auth するので credentials は不要
 		});
 		if (!s3Res.ok) {
