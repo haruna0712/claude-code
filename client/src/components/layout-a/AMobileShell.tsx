@@ -16,7 +16,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
 	Bell,
 	Compass,
@@ -73,11 +73,7 @@ function BrandMark({ size = 22 }: { size?: number }) {
  * Mobile 上部 app bar。BrandMark + hamburger trigger。
  * Sheet 内に ALeftNav の中身を再利用する代わりに、簡易な drawer 用 nav を埋め込む。
  */
-export default function AMobileAppBar({
-	children,
-}: {
-	children?: React.ReactNode;
-}) {
+export default function AMobileAppBar({ children }: { children?: ReactNode }) {
 	const [open, setOpen] = useState(false);
 	const pathname = usePathname();
 	const { profile } = useUserProfile();
@@ -138,7 +134,7 @@ export default function AMobileAppBar({
 									type="button"
 									onClick={() => {
 										setOpen(false);
-										void handleLogout();
+										handleLogout();
 									}}
 									className="mt-3 inline-flex items-center justify-center rounded-md px-3 py-2 font-medium"
 									style={{
