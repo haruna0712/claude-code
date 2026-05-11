@@ -146,11 +146,9 @@ export default function RegisterForm() {
 				</span>
 			)}
 
-			<Button
-				type="submit"
-				className="h4-semibold bg-eerieBlack dark:bg-pumpkin w-full text-white"
-				disabled={isSubmitting}
-			>
+			{/* #609: LoginForm と同じく `bg-eerieBlack dark:bg-pumpkin` の未定義 class
+			    で submit button が透明になっていた。 default variant に揃える。 */}
+			<Button type="submit" className="w-full" disabled={isSubmitting}>
 				{isSubmitting ? <Spinner size="sm" /> : "アカウント作成"}
 			</Button>
 		</form>

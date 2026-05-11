@@ -65,11 +65,8 @@ export default function PasswordResetConfirmForm() {
 				placeholder="もう一度入力"
 				isPassword
 			/>
-			<Button
-				type="submit"
-				className="h4-semibold bg-eerieBlack dark:bg-pumpkin w-full text-white"
-				disabled={isSubmitting}
-			>
+			{/* #609: 未定義 class で submit button が透明だった。 default variant に統一。 */}
+			<Button type="submit" className="w-full" disabled={isSubmitting}>
 				{isSubmitting ? <Spinner size="sm" /> : "パスワードを再設定"}
 			</Button>
 		</form>

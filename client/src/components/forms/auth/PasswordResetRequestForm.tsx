@@ -55,11 +55,8 @@ export default function PasswordResetRequestForm() {
 				type="email"
 				startIcon={<MailIcon className="dark:text-babyPowder size-8" />}
 			/>
-			<Button
-				type="submit"
-				className="h4-semibold bg-eerieBlack dark:bg-pumpkin w-full text-white"
-				disabled={isSubmitting}
-			>
+			{/* #609: 未定義 class で submit button が透明だった。 default variant に統一。 */}
+			<Button type="submit" className="w-full" disabled={isSubmitting}>
 				{isSubmitting ? <Spinner size="sm" /> : "再設定リンクを送信"}
 			</Button>
 		</form>
