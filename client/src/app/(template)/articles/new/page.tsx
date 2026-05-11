@@ -1,14 +1,14 @@
 /**
  * /articles/new 記事新規作成ページ (#536 / Phase 6 P6-13).
  *
- * auth 必須 (未ログインは backend が 401 を返すので /login にリダイレクト
- * は client 側でも追加で示すが、Server Component の段階では fetch しない)。
- *
- * #566 (B-1-1) で外側 <main> を <div> に変更 + sticky header 追加。
+ * auth 必須。 #606 で SSR auth gate を追加: anon は server 側で /login に
+ * redirect。 backend 401 待ちで入力が消える UX 違反 (CLAUDE.md §4.5) を防ぐ。
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 import ArticleEditor from "@/components/articles/ArticleEditor";
 
@@ -18,6 +18,11 @@ export const metadata: Metadata = {
 };
 
 export default function NewArticlePage() {
+	const isAuthenticated = cookies().get("logged_in")?.value === "true";
+	if (!isAuthenticated) {
+		redirect("/login?next=/articles/new");
+	}
+
 	return (
 		<>
 			<header

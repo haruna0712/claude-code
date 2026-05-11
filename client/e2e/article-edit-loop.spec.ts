@@ -9,6 +9,9 @@
  *   EDIT-LOOP-3: 新規 → 公開 → 詳細「削除」 → confirm → /articles へ + toast
  *   EDIT-LOOP-4: drafts page (auth) で自分の下書きが見える / row から edit へ
  *   EDIT-LOOP-5: drafts page (anon) は /login へ redirect
+ *   EDIT-LOOP-6: /articles/new (anon) → /login?next=/articles/new redirect (#606)
+ *   EDIT-LOOP-7: /articles/<slug>/edit (anon) → /login?next=... redirect (#606)
+ *   EDIT-LOOP-8: 他人の /articles/<slug>/edit → 404 (#606 / gan-evaluator H2)
  *
  * env: docs/local/e2e-stg.md の test2 / test3 を使用。
  */
@@ -274,5 +277,77 @@ test.describe("記事編集ループの導線 (#593)", () => {
 		// /login or /login?next=... へ redirect
 		await page.waitForURL(/\/login(\?.*)?/, { timeout: 15000 });
 		await ctx.close();
+	});
+
+	test("EDIT-LOOP-6: /articles/new (anon) → /login?next= redirect (#606)", async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		await page.goto(`${BASE}/articles/new`);
+		await page.waitForURL(/\/login(\?.*)?/, { timeout: 15000 });
+		expect(page.url()).toContain("next=%2Farticles%2Fnew");
+		await ctx.close();
+	});
+
+	test("EDIT-LOOP-7: 他人の /<slug>/edit (anon) → /login?next= redirect (#606)", async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext();
+		// author 側で記事を作る
+		const ctxAuthor = await browser.newContext();
+		const { csrf: csrf1 } = await loginViaApi(ctxAuthor.request, USER1);
+		const { slug } = await createPublishedArticle(
+			ctxAuthor.request,
+			csrf1,
+			"EDIT-LOOP-7 anon edit attempt",
+		);
+		await ctxAuthor.close();
+
+		const page = await ctx.newPage();
+		await page.goto(`${BASE}/articles/${slug}/edit`);
+		await page.waitForURL(/\/login(\?.*)?/, { timeout: 15000 });
+		expect(page.url()).toContain(
+			`next=%2Farticles%2F${encodeURIComponent(slug)}%2Fedit`,
+		);
+
+		// cleanup
+		const cleanCtx = await browser.newContext();
+		const { csrf: cleanCsrf } = await loginViaApi(cleanCtx.request, USER1);
+		await deleteArticleViaApi(cleanCtx.request, cleanCsrf, slug);
+		await cleanCtx.close();
+		await ctx.close();
+	});
+
+	test("EDIT-LOOP-8: 他人 (auth) の /<slug>/edit → 404 (#606)", async ({
+		browser,
+	}) => {
+		test.skip(
+			!USER2.email || !USER2.password || !USER2.handle,
+			"USER2 env 未設定",
+		);
+		// USER1 が author
+		const ctxAuthor = await browser.newContext();
+		const { csrf: csrf1 } = await loginViaApi(ctxAuthor.request, USER1);
+		const { slug } = await createPublishedArticle(
+			ctxAuthor.request,
+			csrf1,
+			"EDIT-LOOP-8 other-user edit attempt",
+		);
+		await ctxAuthor.close();
+
+		// USER2 が他人として edit URL を踏む
+		const ctxOther = await browser.newContext();
+		await loginViaApi(ctxOther.request, USER2);
+		const page = await ctxOther.newPage();
+		const resp = await page.goto(`${BASE}/articles/${slug}/edit`);
+		expect(resp?.status()).toBe(404);
+
+		// cleanup
+		const cleanCtx = await browser.newContext();
+		const { csrf: cleanCsrf } = await loginViaApi(cleanCtx.request, USER1);
+		await deleteArticleViaApi(cleanCtx.request, cleanCsrf, slug);
+		await cleanCtx.close();
+		await ctxOther.close();
 	});
 });
