@@ -31,23 +31,43 @@ export default async function FollowersPage({ params }: PageProps) {
 	if (!profile) notFound();
 
 	return (
-		<main className="mx-auto max-w-3xl pb-10">
-			<header className="border-b border-border px-4 py-3">
+		<>
+			<header
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
 				<Link
 					href={`/u/${profile.username}`}
-					className="text-xs text-muted-foreground hover:underline"
+					className="rounded text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+					style={{ fontSize: 12.5 }}
 				>
-					← {profile.display_name || profile.username} さんのプロフィールへ戻る
+					← @{profile.username}
 				</Link>
-				<h1 className="mt-1 text-lg font-bold">
-					{profile.display_name || profile.username} のフォロワー
-				</h1>
-				<p className="text-xs text-muted-foreground">@{profile.username}</p>
+				<div className="ml-2 min-w-0 flex-1">
+					<h1
+						className="truncate font-semibold tracking-tight"
+						style={{ fontSize: 15, letterSpacing: -0.2 }}
+					>
+						フォロワー
+					</h1>
+					<p
+						className="truncate text-[color:var(--a-text-subtle)]"
+						style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
+					>
+						{profile.display_name || profile.username}
+					</p>
+				</div>
 			</header>
-			<UserList
-				endpoint={`/users/${profile.username}/followers/`}
-				emptyMessage="フォロワーはまだいません。"
-			/>
-		</main>
+			<div className="pb-10">
+				<UserList
+					endpoint={`/users/${profile.username}/followers/`}
+					emptyMessage="フォロワーはまだいません。"
+				/>
+			</div>
+		</>
 	);
 }
