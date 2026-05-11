@@ -9,24 +9,45 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 
 import ArticleBody from "@/components/articles/ArticleBody";
+import ArticleOwnerActions from "@/components/articles/ArticleOwnerActions";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { ArticleDetail } from "@/lib/api/articles";
+import type { CurrentUser } from "@/lib/api/users";
 import { stringifyJsonLd } from "@/lib/json-ld";
 
 interface PageProps {
 	params: { slug: string };
 }
 
-async function fetchArticleSSR(slug: string): Promise<ArticleDetail | null> {
+// owner 判定で username だけ使うため、 重複 ad-hoc type を作らず Pick で導出。
+type CurrentUserMini = Pick<CurrentUser, "username">;
+
+// generateMetadata と page 本体で同じ slug の article を 2 回 fetch するため、
+// React.cache でリクエスト内 dedupe する (reviewer H-2 反映)。 serverFetch は
+// cache: "no-store" なので React.cache が無いと毎回叩く。
+const fetchArticleSSR = cache(
+	async (slug: string): Promise<ArticleDetail | null> => {
+		try {
+			return await serverFetch<ArticleDetail>(`/articles/${slug}/`);
+		} catch (err) {
+			if (err instanceof ApiServerError && err.status === 404) return null;
+			throw err;
+		}
+	},
+);
+
+const fetchCurrentUserSSR = cache(async (): Promise<CurrentUserMini | null> => {
+	// 未ログイン (401) でも fetch 不能でも owner 判定は false にしたいので、
+	// 例外は全て swallow して null を返す (page render は継続)。
 	try {
-		return await serverFetch<ArticleDetail>(`/articles/${slug}/`);
-	} catch (err) {
-		if (err instanceof ApiServerError && err.status === 404) return null;
-		throw err;
+		return await serverFetch<CurrentUserMini>("/users/me/");
+	} catch {
+		return null;
 	}
-}
+});
 
 function excerpt(html: string, max = 160): string {
 	// HTML タグを粗く剥がして先頭を返す。OGP description 用。
@@ -72,8 +93,18 @@ function formatDate(iso: string | null): string {
 }
 
 export default async function ArticleDetailPage({ params }: PageProps) {
-	const article = await fetchArticleSSR(params.slug);
+	// article 取得と /users/me/ の取得は互いに独立しているので Promise.all で
+	// 並列化する (reviewer H-1 反映)。 article の null check は resolve 後に行う。
+	const [article, currentUser] = await Promise.all([
+		fetchArticleSSR(params.slug),
+		fetchCurrentUserSSR(),
+	]);
 	if (!article) notFound();
+
+	// owner 判定: handle (== Django username) で比較。 ArticleAuthor.id は serializer
+	// 未公開なので backend 変更回避のため username/handle で照合する。
+	const isOwner =
+		currentUser !== null && currentUser.username === article.author.handle;
 
 	const author = article.author.display_name || article.author.handle;
 	const description = excerpt(article.body_html);
@@ -98,6 +129,7 @@ export default async function ArticleDetailPage({ params }: PageProps) {
 			/>
 
 			<header
+				aria-label="記事詳細ヘッダー"
 				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
 				style={{
 					borderBottom: "1px solid var(--a-border)",
@@ -112,12 +144,16 @@ export default async function ArticleDetailPage({ params }: PageProps) {
 				>
 					← 記事一覧
 				</Link>
-				<span
-					className="ml-auto text-[color:var(--a-text-subtle)]"
-					style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
-				>
-					article
-				</span>
+				{isOwner ? (
+					<ArticleOwnerActions slug={article.slug} />
+				) : (
+					<span
+						className="ml-auto text-[color:var(--a-text-subtle)]"
+						style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
+					>
+						article
+					</span>
+				)}
 			</header>
 
 			<article className="px-5 py-6">
@@ -139,7 +175,11 @@ export default async function ArticleDetailPage({ params }: PageProps) {
 							</time>
 						)}
 						{article.status === "draft" && (
-							<span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
+							<span
+								role="status"
+								aria-label="ステータス: 下書き"
+								className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900"
+							>
 								下書き
 							</span>
 						)}
