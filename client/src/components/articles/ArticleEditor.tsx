@@ -70,6 +70,31 @@ function describeApiError(err: unknown, fallback: string): string {
 }
 
 /**
+ * #616: body 先頭の h1 (`# ...`) が title と一致するなら重複表示の origin になる。
+ * editor 側で warning を出すための判定。 先頭の whitespace / blank line を許容し、
+ * trim 後の大文字小文字無視で照合する (タイポ修正の途中状態を warn し過ぎない)。
+ *
+ * 一致しない / そもそも body が `#` で始まらない時は null を返して非表示にする。
+ */
+export function detectBodyH1MatchesTitle(
+	title: string,
+	body: string,
+): string | null {
+	const t = title.trim();
+	if (!t) return null;
+	const lines = body.split("\n");
+	const firstNonBlank = lines.find((l) => l.trim().length > 0);
+	if (!firstNonBlank) return null;
+	const m = /^#\s+(.+?)\s*$/.exec(firstNonBlank.trim());
+	if (!m) return null;
+	const h1Text = m[1].trim();
+	if (h1Text.toLowerCase() === t.toLowerCase()) {
+		return h1Text;
+	}
+	return null;
+}
+
+/**
  * upload 完了で textarea の caret 位置に `![filename](url)` を挿入する。
  * 行頭・行末でない場合は前後に改行を補完して画像が文中で潰れないようにする。
  */
@@ -276,6 +301,9 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 		(r) => r.state === "queued" || r.state === "uploading",
 	);
 
+	// #616: title と body 1 行目の h1 が一致しているか。 null なら警告なし。
+	const titleH1Duplicate = detectBodyH1MatchesTitle(title, body);
+
 	return (
 		<form onSubmit={handleSubmit} className="space-y-4">
 			{error && (
@@ -403,6 +431,19 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 						画像はドラッグ&ドロップ / ペースト / 「画像を追加」 button
 						で挿入できます (jpeg / png / webp / gif、 5 MiB まで)。
 					</p>
+					{titleH1Duplicate !== null && (
+						// #616: title と body 先頭 h1 が一致するなら、 詳細ページで H1 が
+						// 重複表示されるので作者に警告。 inline で非モーダル、 author の
+						// 意図的な選択は妨げない (block しない、 publish も通す)。
+						<p
+							role="status"
+							aria-live="polite"
+							className="mt-1 rounded border border-yellow-400/60 bg-yellow-50/80 px-2 py-1 text-xs text-yellow-900 dark:border-yellow-500/30 dark:bg-yellow-900/20 dark:text-yellow-100"
+						>
+							タイトルと本文 1 行目「# {titleH1Duplicate}」 が同じです。
+							詳細ページで見出しが二重に表示される可能性があります。
+						</p>
+					)}
 				</div>
 				<div className="block">
 					<span className="block text-sm font-medium">プレビュー</span>
