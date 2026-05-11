@@ -51,7 +51,7 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
 	DropdownMenuSeparator: () => null,
 }));
 
-vi.mock("@/components/layout-a/AComposeShell", () => ({
+vi.mock("@/components/layout-a/AComposeDialogHost", () => ({
 	dispatchAComposeOpen: vi.fn(),
 }));
 

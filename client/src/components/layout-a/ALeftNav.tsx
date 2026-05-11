@@ -33,7 +33,7 @@ import {
 	type LucideIcon,
 } from "lucide-react";
 
-import { dispatchAComposeOpen } from "@/components/layout-a/AComposeShell";
+import { dispatchAComposeOpen } from "@/components/layout-a/AComposeDialogHost";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
