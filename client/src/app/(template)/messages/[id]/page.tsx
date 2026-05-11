@@ -36,7 +36,7 @@ export default function RoomDetailPage() {
 			<section
 				role="status"
 				aria-live="polite"
-				className="text-baby_grey mx-auto max-w-2xl py-12 text-center"
+				className="mx-auto max-w-2xl py-12 text-center text-[color:var(--a-text-muted)]"
 			>
 				認証情報を確認しています...
 			</section>
@@ -48,7 +48,7 @@ export default function RoomDetailPage() {
 		return (
 			<section
 				role="alert"
-				className="text-baby_red mx-auto max-w-2xl py-12 text-center"
+				className="mx-auto max-w-2xl py-12 text-center text-[color:var(--a-danger)]"
 			>
 				ルーム ID またはプロフィールが不正です。
 			</section>
