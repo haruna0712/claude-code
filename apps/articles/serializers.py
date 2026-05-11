@@ -164,9 +164,21 @@ class ConfirmImageInputSerializer(serializers.Serializer):
     """`POST /articles/images/confirm/` の入力検証.
 
     width / height は frontend が ``HTMLImageElement.naturalWidth/Height`` から取得する想定。
+
+    NOTE (security-reviewer M-1 反映): ``s3_key`` は ``RegexField`` で
+    ``[a-zA-Z0-9._/-]`` のみを accept する。 ``posixpath.normpath`` は path
+    separator ベースの正規化しかしないため、 制御文字 (`\\t`、`\\n`、`\\r`、
+    `\\x00`、`\\x7f` 等) が valid prefix の後に紛れ込むと normpath = 元 で
+    通過してしまい boto3 内部まで到達する defense-in-depth gap が DM 添付には
+    存在した (DM 側にも同じ穴があり別 issue で起票予定)。 本 PR では allowlist
+    に絞ることで制御文字を入力段階で 400 にする。
     """
 
-    s3_key = serializers.CharField(min_length=1, max_length=512)
+    s3_key = serializers.RegexField(
+        regex=r"^[a-zA-Z0-9._/-]+$",
+        min_length=1,
+        max_length=512,
+    )
     filename = serializers.CharField(min_length=1, max_length=200)
     mime_type = serializers.ChoiceField(choices=sorted(ALLOWED_CONTENT_TYPES))
     size = serializers.IntegerField(min_value=1, max_value=MAX_CONTENT_LENGTH)

@@ -452,6 +452,74 @@ def test_public_url_for_falls_back_to_virtual_host(settings) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Security: s3_key control chars (security-reviewer M-1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "bad_key",
+    [
+        "articles/1/abc.png\nINJECT",
+        "articles/1/abc.png\x00null",
+        "articles/1/abc\x7fdel.png",
+        "articles/1/abc\rcr.png",
+        "articles/1/abc\ttab.png",
+        "articles/1/中文.png",  # non-ASCII not in allowlist
+        "articles/1/space inside.png",
+    ],
+)
+@pytest.mark.django_db
+def test_confirm_view_rejects_s3_key_with_control_chars(bad_key: str) -> None:
+    """M-1: s3_key の RegexField allowlist で制御文字 / 非 ASCII / space は 400 になる.
+
+    serializer 層で弾くため head_object に到達せず、 boto3 内部にも非正規文字を渡さない
+    (defense-in-depth)。 ``posixpath.normpath`` は path-separator 系しか正規化しないため
+    制御文字を含む key が ``normalised == s3_key`` を通過してしまう穴を塞ぐ。
+    """
+
+    user = _user("alice")
+    resp = _client_for(user).post(
+        reverse("articles:image-confirm"),
+        {
+            "s3_key": bad_key,
+            "filename": "shot.png",
+            "mime_type": "image/png",
+            "size": 1024,
+            "width": 800,
+            "height": 600,
+        },
+        format="json",
+    )
+    # serializer 段階で 400、 head_object / DB に到達しない。 NUL を含む key は
+    # PostgreSQL の COUNT も呼べないので、 ここでは status だけ確認する (件数 0 は
+    # 「未到達」 とほぼ等価)。
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Security: Bearer token must not authenticate (security-reviewer M-3)
+# ---------------------------------------------------------------------------
+
+
+def test_image_views_use_explicit_cookie_authentication() -> None:
+    """M-3: ``authentication_classes = [CookieAuthentication]`` が明示されていることを
+    確認する.
+
+    本プロジェクトの ``CookieAuthentication`` は ``JWTAuthentication`` を継承していて
+    Bearer header も accept する (cookie_auth.py:75-79 参照、 意図的)。 重要なのは
+    DRF default の auth 順序 (JWTAuthentication → CookieAuthentication) を素通しに
+    せず、 CSRF enforce が必要な cookie 経路を統一クラスに寄せている点。 tweet view と
+    同じ class 構成にする (reviewer M-3 反映)。
+    """
+
+    from apps.articles.views import ConfirmArticleImageView, PresignArticleImageView
+    from apps.common.cookie_auth import CookieAuthentication
+
+    assert PresignArticleImageView.authentication_classes == [CookieAuthentication]
+    assert ConfirmArticleImageView.authentication_classes == [CookieAuthentication]
+
+
+# ---------------------------------------------------------------------------
 # Dimension boundary tests (review MEDIUM-2)
 # ---------------------------------------------------------------------------
 

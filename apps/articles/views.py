@@ -51,6 +51,7 @@ from apps.articles.serializers import (
     PresignImageInputSerializer,
 )
 from apps.articles.services.images import confirm_image
+from apps.common.cookie_auth import CookieAuthentication
 
 logger = logging.getLogger(__name__)
 
@@ -276,8 +277,15 @@ class PresignArticleImageView(APIView):
     認可:
     - 認証必須 (``IsAuthenticated``)
     - throttle ``article_image_presign`` 30/hour (stg 300/hour) で濫用抑制
+    - ``authentication_classes`` を ``CookieAuthentication`` のみに明示
+      (security-reviewer M-3 反映): tweet view と同じ class 構成に揃える。
+      なお ``CookieAuthentication`` は ``JWTAuthentication`` を継承していて Bearer
+      header も accept する (cookie_auth.py:75-79、 意図的)。 重要なのは DRF default の
+      auth chain (JWTAuthentication 先、 CookieAuthentication 後) を素通しせず、
+      CSRF enforce 経路を統一クラスに寄せている点。
     """
 
+    authentication_classes = [CookieAuthentication]
     permission_classes = [permissions.IsAuthenticated]
     throttle_classes = [_ArticleImagePresignThrottle]
 
@@ -327,8 +335,12 @@ class ConfirmArticleImageView(APIView):
     1. s3_key prefix が ``articles/<request.user.pk>/`` で始まることを再検証 (IDOR 防止)
     2. ``head_object`` で S3 上の実物 metadata と申告を再検証 (改ざん防止)
     3. orphan ``ArticleImage`` (article=None) を作成
+
+    認可: presign view と同じく ``CookieAuthentication`` のみ
+    (security-reviewer M-3 反映、 Bearer token を意図せず受け入れない)。
     """
 
+    authentication_classes = [CookieAuthentication]
     permission_classes = [permissions.IsAuthenticated]
     throttle_classes = [_ArticleImageConfirmThrottle]
 
