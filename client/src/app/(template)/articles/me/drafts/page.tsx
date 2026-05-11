@@ -41,13 +41,22 @@ async function fetchDraftsSSR(): Promise<ArticleSummary[]> {
 }
 
 function formatDateTime(iso: string): string {
-	const d = new Date(iso);
-	const y = d.getFullYear();
-	const mo = String(d.getMonth() + 1).padStart(2, "0");
-	const da = String(d.getDate()).padStart(2, "0");
-	const hh = String(d.getHours()).padStart(2, "0");
-	const mm = String(d.getMinutes()).padStart(2, "0");
-	return `${y}/${mo}/${da} ${hh}:${mm}`;
+	// code-reviewer MEDIUM #2 反映: Invalid Date を guard し、 toLocaleString(ja-JP)
+	// で OS locale / DST に強い書式に切替。
+	try {
+		const d = new Date(iso);
+		if (Number.isNaN(d.getTime())) return "";
+		return d.toLocaleString("ja-JP", {
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+			hour: "2-digit",
+			minute: "2-digit",
+			hour12: false,
+		});
+	} catch {
+		return "";
+	}
 }
 
 export default async function DraftsPage() {
@@ -62,7 +71,7 @@ export default async function DraftsPage() {
 	return (
 		<>
 			<header
-				aria-label="ページヘッダー"
+				aria-label="下書き一覧ヘッダー"
 				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
 				style={{
 					borderBottom: "1px solid var(--a-border)",
@@ -120,6 +129,11 @@ export default async function DraftsPage() {
 					<ul role="list" className="grid gap-3">
 						{drafts.map((d) => (
 							<li key={d.id}>
+								{/*
+								 * scroll-mt-16: focus が来た row が sticky header (~50px) に
+								 * 覆われないよう 4rem の scroll offset を確保する。 WCAG 2.2
+								 * SC 2.4.11 Focus Not Obscured Minimum、 a11y-architect M-5 反映。
+								 */}
 								<Link
 									href={`/articles/${d.slug}/edit`}
 									className="block scroll-mt-16 rounded-lg border border-[color:var(--a-border)] bg-white px-4 py-3 transition-colors hover:bg-[color:var(--a-bg-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"

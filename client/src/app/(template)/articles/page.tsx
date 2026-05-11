@@ -71,7 +71,7 @@ export default async function ArticlesListPage({ searchParams }: PageProps) {
 	return (
 		<>
 			<header
-				aria-label="ページヘッダー"
+				aria-label="記事一覧ヘッダー"
 				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
 				style={{
 					borderBottom: "1px solid var(--a-border)",

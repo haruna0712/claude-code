@@ -15,15 +15,15 @@ import ArticleBody from "@/components/articles/ArticleBody";
 import ArticleOwnerActions from "@/components/articles/ArticleOwnerActions";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { ArticleDetail } from "@/lib/api/articles";
+import type { CurrentUser } from "@/lib/api/users";
 import { stringifyJsonLd } from "@/lib/json-ld";
 
 interface PageProps {
 	params: { slug: string };
 }
 
-interface CurrentUserMini {
-	username: string;
-}
+// owner 判定で username だけ使うため、 重複 ad-hoc type を作らず Pick で導出。
+type CurrentUserMini = Pick<CurrentUser, "username">;
 
 // generateMetadata と page 本体で同じ slug の article を 2 回 fetch するため、
 // React.cache でリクエスト内 dedupe する (reviewer H-2 反映)。 serverFetch は
@@ -129,7 +129,7 @@ export default async function ArticleDetailPage({ params }: PageProps) {
 			/>
 
 			<header
-				aria-label="ページヘッダー"
+				aria-label="記事詳細ヘッダー"
 				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
 				style={{
 					borderBottom: "1px solid var(--a-border)",

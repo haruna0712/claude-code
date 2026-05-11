@@ -66,7 +66,7 @@ describe("ArticleOwnerActions", () => {
 		).toBeInTheDocument();
 	});
 
-	it("calls deleteArticle + toast.success + router.push on delete confirm", async () => {
+	it("calls deleteArticle + toast.success + router.refresh→push on delete confirm", async () => {
 		// window.confirm を accept
 		const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 		deleteArticleMock.mockResolvedValueOnce(undefined);
@@ -82,6 +82,10 @@ describe("ArticleOwnerActions", () => {
 		expect(toast.success).toHaveBeenCalledWith("削除しました");
 		expect(pushMock).toHaveBeenCalledWith("/articles");
 		expect(refreshMock).toHaveBeenCalledTimes(1);
+		// code-reviewer LOW: refresh が push の前に呼ばれる順序を guard。
+		expect(refreshMock.mock.invocationCallOrder[0]).toBeLessThan(
+			pushMock.mock.invocationCallOrder[0]!,
+		);
 
 		confirmSpy.mockRestore();
 	});
@@ -114,6 +118,10 @@ describe("ArticleOwnerActions", () => {
 		});
 		// 失敗時は router.push しない (画面に留まる)
 		expect(pushMock).not.toHaveBeenCalled();
+		// code-reviewer MEDIUM #4 反映: 失敗で button が再活性化することを assert。
+		await waitFor(() => {
+			expect(btn).not.toBeDisabled();
+		});
 
 		confirmSpy.mockRestore();
 	});
