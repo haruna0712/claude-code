@@ -24,28 +24,57 @@ docs/issues/phase-6.md P6-03 + SPEC §12 を実装。
 
 from __future__ import annotations
 
+import logging
+
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
 from django.db.models import F
 from django.utils import timezone
 from rest_framework import generics, permissions, status, throttling
 from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import CursorPagination
 from rest_framework.permissions import SAFE_METHODS
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.articles import s3_presign as _presign
 from apps.articles.models import Article, ArticleStatus, ArticleTag
 from apps.articles.serializers import (
     ArticleCreateInputSerializer,
     ArticleDetailSerializer,
+    ArticleImageOutputSerializer,
     ArticleSummarySerializer,
     ArticleUpdateInputSerializer,
+    ConfirmImageInputSerializer,
+    PresignImageInputSerializer,
 )
+from apps.articles.services.images import confirm_image
+from apps.common.cookie_auth import CookieAuthentication
+
+logger = logging.getLogger(__name__)
 
 
 class _ArticleWriteThrottle(throttling.UserRateThrottle):
     scope = "article_write"
+
+
+class _ArticleImagePresignThrottle(throttling.UserRateThrottle):
+    """画像 presign URL 発行 throttle (article_image_presign scope).
+
+    NOTE: ``ScopedRateThrottle`` は view 側に ``throttle_scope`` 属性が必要で、
+    クラス属性 ``scope`` だけでは no-op になる。 ``_ArticleWriteThrottle`` と同様に
+    ``UserRateThrottle`` 継承 + クラス属性 ``scope`` で適用される。
+    """
+
+    scope = "article_image_presign"
+
+
+class _ArticleImageConfirmThrottle(throttling.UserRateThrottle):
+    """画像 confirm throttle (article_image_confirm scope).  see notes 上記."""
+
+    scope = "article_image_confirm"
 
 
 class _ArticleListPagination(CursorPagination):
@@ -231,4 +260,125 @@ class MyDraftListView(generics.ListAPIView):
             Article.objects.filter(author=self.request.user, status=ArticleStatus.DRAFT)
             .select_related("author")
             .prefetch_related("article_tags__tag")
+        )
+
+
+# ---------------------------------------------------------------------------
+# 画像アップロード (P6-04 / docs/specs/article-image-upload-spec.md)
+# ---------------------------------------------------------------------------
+
+
+class PresignArticleImageView(APIView):
+    """``POST /api/v1/articles/images/presign/``: 記事内画像の presigned POST URL を発行する.
+
+    body: ``{"filename": str, "mime_type": str, "size": int}``
+    response (200): ``{"url", "fields", "s3_key", "expires_at"}``
+
+    認可:
+    - 認証必須 (``IsAuthenticated``)
+    - throttle ``article_image_presign`` 30/hour (stg 300/hour) で濫用抑制
+    - ``authentication_classes`` を ``CookieAuthentication`` のみに明示
+      (security-reviewer M-3 反映): tweet view と同じ class 構成に揃える。
+      なお ``CookieAuthentication`` は ``JWTAuthentication`` を継承していて Bearer
+      header も accept する (cookie_auth.py:75-79、 意図的)。 重要なのは DRF default の
+      auth chain (JWTAuthentication 先、 CookieAuthentication 後) を素通しせず、
+      CSRF enforce 経路を統一クラスに寄せている点。
+    """
+
+    authentication_classes = [CookieAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [_ArticleImagePresignThrottle]
+
+    def post(self, request: Request) -> Response:
+        serializer = PresignImageInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        try:
+            result = _presign.generate_presigned_image_upload(
+                user_id=request.user.pk,
+                mime_type=data["mime_type"],
+                size=data["size"],
+                filename=data["filename"],
+            )
+        except DjangoValidationError as exc:
+            raise DRFValidationError(detail=exc.messages) from exc
+
+        # 監査用: 署名済 URL 本体 (credentials を含む) は残さず object_key のみ記録。
+        logger.info(
+            "articles.image_presign.issued",
+            extra={
+                "event": "articles.image_presign.issued",
+                "user_id": request.user.pk,
+                "s3_key": result.s3_key,
+            },
+        )
+
+        return Response(
+            {
+                "url": result.url,
+                "fields": result.fields,
+                "s3_key": result.s3_key,
+                "expires_at": result.expires_at.isoformat(),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ConfirmArticleImageView(APIView):
+    """``POST /api/v1/articles/images/confirm/``: presigned POST で完了した画像を確定する.
+
+    body: ``{"s3_key", "filename", "mime_type", "size", "width", "height"}``
+    response (201): ``ArticleImageOutputSerializer`` 全フィールド (id, s3_key, url, width, height, size, created_at)
+
+    フロー (services.images.confirm_image を参照):
+    1. s3_key prefix が ``articles/<request.user.pk>/`` で始まることを再検証 (IDOR 防止)
+    2. ``head_object`` で S3 上の実物 metadata と申告を再検証 (改ざん防止)
+    3. orphan ``ArticleImage`` (article=None) を作成
+
+    認可: presign view と同じく ``CookieAuthentication`` のみ
+    (security-reviewer M-3 反映、 Bearer token を意図せず受け入れない)。
+    """
+
+    authentication_classes = [CookieAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [_ArticleImageConfirmThrottle]
+
+    def post(self, request: Request) -> Response:
+        serializer = ConfirmImageInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        try:
+            image = confirm_image(
+                user=request.user,
+                s3_key=data["s3_key"],
+                filename=data["filename"],
+                mime_type=data["mime_type"],
+                size=data["size"],
+                width=data["width"],
+                height=data["height"],
+            )
+        except DjangoValidationError as exc:
+            raise DRFValidationError(detail=exc.messages) from exc
+        except IntegrityError as exc:
+            # database-reviewer HIGH H-1: 同一 s3_key で confirm が二重呼び出しされた
+            # 場合 (network retry / 二重 submit) は unique constraint が走り
+            # IntegrityError になる。 そのまま 500 にせず 400 に変換して
+            # 「既に確定済み」 と明示する。 既存 Article CRUD の slug 衝突と同じ流儀。
+            raise DRFValidationError(detail=["この s3_key は既に確定済みです"]) from exc
+
+        logger.info(
+            "articles.image_confirm.created",
+            extra={
+                "event": "articles.image_confirm.created",
+                "user_id": request.user.pk,
+                "image_id": str(image.id),
+                "s3_key": image.s3_key,
+            },
+        )
+
+        return Response(
+            ArticleImageOutputSerializer(image).data,
+            status=status.HTTP_201_CREATED,
         )

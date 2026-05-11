@@ -150,6 +150,7 @@ resource "aws_cloudfront_origin_access_control" "s3" {
 #   /media/*         -> S3 media (long TTL、GET のみ)
 #   /users/*         -> S3 media (profile avatar/header public objects)
 #   /dm/*            -> S3 media (DM attachment objects)
+#   /articles/*      -> S3 media (記事内画像、SecurityHeaders 付与) (P6-04)
 #   /api/*           -> ALB  (no cache)
 #   /ws/*            -> ALB  (no cache、WebSocket 透過)
 #   / (default)      -> ALB  (Next.js SSR、short TTL)
@@ -181,6 +182,21 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
 
 data "aws_cloudfront_origin_request_policy" "cors_s3" {
   name = "Managed-CORS-S3Origin"
+}
+
+# AWS Managed Response Headers Policy: `SecurityHeadersPolicy`
+# 提供する header (security-reviewer M-2 反映、 P6-04 / #527):
+#   - X-Content-Type-Options: nosniff  (MIME sniffing 防止、 stored XSS 緩和)
+#   - Strict-Transport-Security: max-age=31536000; includeSubDomains
+#   - X-Frame-Options: SAMEORIGIN
+#   - Referrer-Policy: strict-origin-when-cross-origin
+#   - X-XSS-Protection: 1; mode=block
+# /articles/* に attach することで、 MIME 偽装で stored XSS を試みる
+# 攻撃 (HTML payload を image/png として upload) をブラウザ側で防ぐ。
+# /dm/* と /users/* にも同じ policy を retrofit すべきだが、 本 PR
+# スコープは /articles/* のみ (follow-up issue で対応)。
+data "aws_cloudfront_response_headers_policy" "security_headers" {
+  name = "Managed-SecurityHeadersPolicy"
 }
 
 resource "aws_cloudfront_distribution" "this" {
@@ -309,6 +325,24 @@ resource "aws_cloudfront_distribution" "this" {
 
     cache_policy_id          = data.aws_cloudfront_cache_policy.caching_optimized.id
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.cors_s3.id
+  }
+
+  # -------- /articles/* → S3 media (P6-04 / #527) --------
+  # 記事内画像 (apps.articles.s3_presign で issue する s3_key = articles/<user_id>/<uuid>.<ext>)
+  # を配信する。 SecurityHeadersPolicy で nosniff + Strict-Transport-Security 等を付与し、
+  # MIME 偽装による stored XSS (HTML payload を image/png として upload) をブラウザ側で
+  # 防ぐ (security-reviewer M-2 反映)。
+  ordered_cache_behavior {
+    path_pattern           = "/articles/*"
+    target_origin_id       = "media"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
+    origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.cors_s3.id
+    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
   }
 
   # -------- /api/* → ALB (no cache) --------

@@ -14,7 +14,8 @@ from typing import Any
 from django.utils.text import slugify
 from rest_framework import serializers
 
-from apps.articles.models import Article, ArticleStatus
+from apps.articles.models import Article, ArticleImage, ArticleStatus
+from apps.articles.s3_presign import ALLOWED_CONTENT_TYPES, MAX_CONTENT_LENGTH
 from apps.tags.models import Tag
 
 
@@ -140,3 +141,63 @@ class ArticleUpdateInputSerializer(serializers.Serializer):
         required=False,
         max_length=5,
     )
+
+
+# --------------------------------------------------------------------------
+# 画像アップロード (P6-04 / docs/specs/article-image-upload-spec.md)
+# --------------------------------------------------------------------------
+
+
+class PresignImageInputSerializer(serializers.Serializer):
+    """`POST /articles/images/presign/` の入力検証.
+
+    値そのものの allowlist / size 上限は :func:`apps.articles.s3_presign.validate_image_request`
+    で最終確認するが、 ここでも UX のために早期 400 を返す。
+    """
+
+    filename = serializers.CharField(min_length=1, max_length=200)
+    mime_type = serializers.ChoiceField(choices=sorted(ALLOWED_CONTENT_TYPES))
+    size = serializers.IntegerField(min_value=1, max_value=MAX_CONTENT_LENGTH)
+
+
+class ConfirmImageInputSerializer(serializers.Serializer):
+    """`POST /articles/images/confirm/` の入力検証.
+
+    width / height は frontend が ``HTMLImageElement.naturalWidth/Height`` から取得する想定。
+
+    NOTE (security-reviewer M-1 反映): ``s3_key`` は ``RegexField`` で
+    ``[a-zA-Z0-9._/-]`` のみを accept する。 ``posixpath.normpath`` は path
+    separator ベースの正規化しかしないため、 制御文字 (`\\t`、`\\n`、`\\r`、
+    `\\x00`、`\\x7f` 等) が valid prefix の後に紛れ込むと normpath = 元 で
+    通過してしまい boto3 内部まで到達する defense-in-depth gap が DM 添付には
+    存在した (DM 側にも同じ穴があり別 issue で起票予定)。 本 PR では allowlist
+    に絞ることで制御文字を入力段階で 400 にする。
+    """
+
+    s3_key = serializers.RegexField(
+        regex=r"^[a-zA-Z0-9._/-]+$",
+        min_length=1,
+        max_length=512,
+    )
+    filename = serializers.CharField(min_length=1, max_length=200)
+    mime_type = serializers.ChoiceField(choices=sorted(ALLOWED_CONTENT_TYPES))
+    size = serializers.IntegerField(min_value=1, max_value=MAX_CONTENT_LENGTH)
+    width = serializers.IntegerField(min_value=1, max_value=10000)
+    height = serializers.IntegerField(min_value=1, max_value=10000)
+
+
+class ArticleImageOutputSerializer(serializers.ModelSerializer):
+    """`/articles/images/confirm/` の 201 response。 frontend が Markdown に挿入する ``url`` を含む."""
+
+    class Meta:
+        model = ArticleImage
+        fields = (
+            "id",
+            "s3_key",
+            "url",
+            "width",
+            "height",
+            "size",
+            "created_at",
+        )
+        read_only_fields = fields

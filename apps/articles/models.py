@@ -164,7 +164,16 @@ class ArticleTag(models.Model):
 
 
 class ArticleImage(models.Model):
-    """記事内に貼られる画像 (S3 + CloudFront 配信)."""
+    """記事内に貼られる画像 (S3 + CloudFront 配信).
+
+    NOTE (database-reviewer M-2 反映): ``Article.soft_delete`` は ``is_deleted=True``
+    の UPDATE しか行わないため、 関連する ``ArticleImage`` は **残存する**
+    (on_delete=CASCADE は hard-delete 時のみ作動)。 これは「記事が論理削除されても
+    本文の画像 URL は失わないようにする / P6-09 GitHub push 連携で再評価する」 と
+    いう設計意図 (docs/specs/article-image-upload-spec.md §1)。 Admin から
+    hard-delete された場合は CASCADE で ArticleImage 行も消えるが、 S3 上の object
+    は残る (orphan S3 object)。 S3 lifecycle (365 日、 follow-up issue) で回収。
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # 編集中は article=None で先に upload、確定時に article を埋める運用 (P6-04)。
