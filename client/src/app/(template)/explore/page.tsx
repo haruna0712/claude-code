@@ -81,32 +81,52 @@ export default async function ExplorePage() {
 				dangerouslySetInnerHTML={{ __html: stringifyJsonLd(websiteJsonLd) }}
 			/>
 
-			<div className="mx-auto flex max-w-6xl gap-6 px-4">
-				<main className="flex-1 min-w-0">
-					<HeroBanner />
-
-					<section aria-labelledby="explore-feed-heading" className="mt-8">
-						<h2
-							id="explore-feed-heading"
-							className="px-2 mb-4 text-lg font-semibold text-foreground"
-						>
-							トレンドツイート
-						</h2>
-
-						{/* #301: explore も TweetCardList で render。
-						    リアクション / RT は未ログインユーザでも表示はされ、click 時
-						    に 401 → 各 button 内の placeholder 挙動 (ReactionBar
-						    / RepostButton 既存実装) でログイン誘導。 */}
-						<TweetCardList
-							tweets={page.results}
-							ariaLabel="トレンドツイート"
-							emptyMessage="今は表示できるツイートがありません。"
-						/>
-					</section>
-				</main>
-				{/* #316: RightSidebar は (template) layout で全 page 共通 mount。
-				    重複防止のため explore 個別の mount は撤去。 */}
+			{/* #584: page h1 は HeroBanner 側 (「エンジニアによる、エンジニアのための SNS」)
+			    なので、sticky bar は heading 抜きの context bar として置く。 */}
+			<div
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
+				<div
+					className="min-w-0 flex-1 truncate font-semibold tracking-tight text-[color:var(--a-text)]"
+					style={{ fontSize: 15, letterSpacing: -0.2 }}
+				>
+					Explore
+				</div>
+				<span
+					className="text-[color:var(--a-text-subtle)]"
+					style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
+				>
+					discover
+				</span>
 			</div>
+
+			<article className="min-w-0">
+				<HeroBanner />
+
+				<section aria-labelledby="explore-feed-heading" className="mt-8 px-5">
+					<h2
+						id="explore-feed-heading"
+						className="mb-4 px-2 text-lg font-semibold text-foreground"
+					>
+						トレンドツイート
+					</h2>
+
+					{/* #301: explore も TweetCardList で render。
+					    リアクション / RT は未ログインユーザでも表示はされ、click 時
+					    に 401 → 各 button 内の placeholder 挙動 (ReactionBar
+					    / RepostButton 既存実装) でログイン誘導。 */}
+					<TweetCardList
+						tweets={page.results}
+						ariaLabel="トレンドツイート"
+						emptyMessage="今は表示できるツイートがありません。"
+					/>
+				</section>
+			</article>
 
 			<StickyLoginBanner />
 		</>
