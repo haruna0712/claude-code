@@ -96,6 +96,57 @@ class S3ObjectInfo:
 # -----------------------------------------------------------------------------
 
 
+def _check_mime(mime_type: str) -> str:
+    """MIME を allowlist でチェックして対応 ext を返す."""
+
+    if mime_type not in ALLOWED_CONTENT_TYPES:
+        raise ValidationError(
+            f"Unsupported mime_type: {mime_type!r}. Allowed: {sorted(ALLOWED_CONTENT_TYPES)}"
+        )
+    return ALLOWED_CONTENT_TYPES[mime_type]
+
+
+def _check_size(size: int) -> None:
+    """size を 1..MAX_CONTENT_LENGTH の範囲でチェック."""
+
+    if size <= 0:
+        raise ValidationError("size must be positive")
+    if size > MAX_CONTENT_LENGTH:
+        raise ValidationError(f"size {size} exceeds maximum {MAX_CONTENT_LENGTH} bytes")
+
+
+def _check_filename(filename: str, expected_ext: str) -> None:
+    """filename の長さ・制御文字・拡張子と MIME の一致をチェック.
+
+    NOTE: ``..`` を含む filename (例 ``photo..backup.png``) は path separator が
+    無い限り 1 つの component で完結するので **拒否しない**。 ``image/jpeg`` は
+    ``.jpg`` と ``.jpeg`` の両方を accept する。
+    ``"..png"`` のように leading dot のみ (本体名なし) は ``rfind(".")`` で拡張子
+    抽出は通るが、 同様に accept される (s3_key は MIME から生成するので filename を
+    storage に使わない — security 上の問題は無く、 spec doc §3.1 で意図的に許容)。
+    """
+
+    if not filename or len(filename) > FILENAME_MAX_LENGTH:
+        raise ValidationError(
+            f"filename must be 1..{FILENAME_MAX_LENGTH} chars (got {len(filename)})"
+        )
+    if _FILENAME_INVALID_PATTERN.search(filename):
+        raise ValidationError("filename contains invalid characters (path traversal / control)")
+
+    name_lower = filename.lower()
+    dot_idx = name_lower.rfind(".")
+    if dot_idx < 0:
+        raise ValidationError("filename must have an extension matching the mime_type")
+    actual_ext = name_lower[dot_idx + 1 :]
+    accepted_exts = {expected_ext}
+    if expected_ext == "jpg":
+        accepted_exts.add("jpeg")
+    if actual_ext not in accepted_exts:
+        raise ValidationError(
+            f"filename extension '.{actual_ext}' does not match mime_type allowlist"
+        )
+
+
 def validate_image_request(
     *,
     mime_type: str,
@@ -116,37 +167,9 @@ def validate_image_request(
         ValidationError: いずれかの検証に失敗した場合。
     """
 
-    if mime_type not in ALLOWED_CONTENT_TYPES:
-        raise ValidationError(
-            f"Unsupported mime_type: {mime_type!r}. Allowed: {sorted(ALLOWED_CONTENT_TYPES)}"
-        )
-
-    if size <= 0:
-        raise ValidationError("size must be positive")
-    if size > MAX_CONTENT_LENGTH:
-        raise ValidationError(f"size {size} exceeds maximum {MAX_CONTENT_LENGTH} bytes")
-
-    if not filename or len(filename) > FILENAME_MAX_LENGTH:
-        raise ValidationError(
-            f"filename must be 1..{FILENAME_MAX_LENGTH} chars (got {len(filename)})"
-        )
-    if _FILENAME_INVALID_PATTERN.search(filename):
-        raise ValidationError("filename contains invalid characters (path traversal / control)")
-
-    expected_ext = ALLOWED_CONTENT_TYPES[mime_type]
-    name_lower = filename.lower()
-    dot_idx = name_lower.rfind(".")
-    if dot_idx < 0:
-        raise ValidationError("filename must have an extension matching the mime_type")
-    actual_ext = name_lower[dot_idx + 1 :]
-    accepted_exts = {expected_ext}
-    if expected_ext == "jpg":
-        accepted_exts.add("jpeg")
-    if actual_ext not in accepted_exts:
-        raise ValidationError(
-            f"filename extension '.{actual_ext}' does not match mime_type {mime_type}"
-        )
-
+    expected_ext = _check_mime(mime_type)
+    _check_size(size)
+    _check_filename(filename, expected_ext)
     return expected_ext
 
 
@@ -162,6 +185,23 @@ def build_s3_key(*, user_id: int, ext: str) -> str:
     """
 
     return f"articles/{user_id}/{uuid.uuid4()}.{ext}"
+
+
+def _build_post_conditions(*, s3_key: str, mime_type: str) -> list[Any]:
+    """S3 generate_presigned_post の ``Conditions`` を組み立てる.
+
+    S3 側で以下を強制チェックさせる:
+
+    - ``content-length-range`` 1..MAX_CONTENT_LENGTH (改ざんによる DoS / 巨大 PUT 防止)
+    - ``eq Content-Type``: アプリ側申告と完全一致 (MIME 偽装防止)
+    - ``eq key``: 別ファイルへの上書き / 別 key への流用攻撃防止
+    """
+
+    return [
+        ["content-length-range", 1, MAX_CONTENT_LENGTH],
+        {"Content-Type": mime_type},
+        {"key": s3_key},
+    ]
 
 
 def generate_presigned_image_upload(
@@ -189,23 +229,14 @@ def generate_presigned_image_upload(
     ext = validate_image_request(mime_type=mime_type, size=size, filename=filename)
     s3_key = build_s3_key(user_id=user_id, ext=ext)
     bucket = settings.AWS_STORAGE_BUCKET_NAME
-
     s3_client = _build_s3_client()
 
-    # S3 側で Conditions を強制チェックさせる。
-    #   - content-length-range: 1..MAX_CONTENT_LENGTH (改ざんによる DoS / 巨大 PUT 防止)
-    #   - eq Content-Type: アプリ側申告と完全一致 (MIME 偽装防止)
-    #   - eq key: 別ファイルへの上書き / 別 key への流用攻撃防止
     try:
         post_data = s3_client.generate_presigned_post(
             Bucket=bucket,
             Key=s3_key,
             Fields={"Content-Type": mime_type, "key": s3_key},
-            Conditions=[
-                ["content-length-range", 1, MAX_CONTENT_LENGTH],
-                {"Content-Type": mime_type},
-                {"key": s3_key},
-            ],
+            Conditions=_build_post_conditions(s3_key=s3_key, mime_type=mime_type),
             ExpiresIn=PRESIGN_EXPIRES_SECONDS,
         )
     except ClientError as exc:  # pragma: no cover - boto3 internal failure

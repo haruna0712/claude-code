@@ -10,12 +10,20 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
+from botocore.exceptions import ClientError
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.articles.models import ArticleImage
+from apps.articles.s3_presign import (
+    MAX_CONTENT_LENGTH,
+    head_object,
+    public_url_for,
+    validate_image_request,
+)
+from apps.articles.services.images import confirm_image
 
 User = get_user_model()
 
@@ -328,9 +336,7 @@ def test_confirm_view_requires_auth() -> None:
 
 
 def test_validate_image_request_rejects_path_traversal() -> None:
-    """filename に `..` を含むと ValidationError (path traversal 対策)."""
-
-    from apps.articles.s3_presign import validate_image_request
+    """filename に `../` を含むと ValidationError (path traversal 対策)."""
 
     with pytest.raises(DjangoValidationError):
         validate_image_request(mime_type="image/png", size=1024, filename="../evil.png")
@@ -339,8 +345,6 @@ def test_validate_image_request_rejects_path_traversal() -> None:
 def test_validate_image_request_rejects_extension_mismatch() -> None:
     """filename の拡張子が mime_type と一致しなければ ValidationError."""
 
-    from apps.articles.s3_presign import validate_image_request
-
     with pytest.raises(DjangoValidationError):
         validate_image_request(mime_type="image/png", size=1024, filename="shot.jpg")
 
@@ -348,11 +352,20 @@ def test_validate_image_request_rejects_extension_mismatch() -> None:
 def test_validate_image_request_accepts_jpeg_with_jpg_extension() -> None:
     """``image/jpeg`` は `.jpg` と `.jpeg` の両方を受容する."""
 
-    from apps.articles.s3_presign import validate_image_request
-
     # raises 無し
     validate_image_request(mime_type="image/jpeg", size=1024, filename="shot.jpg")
     validate_image_request(mime_type="image/jpeg", size=1024, filename="shot.jpeg")
+
+
+def test_validate_image_request_accepts_double_dot_in_middle() -> None:
+    """``photo..backup.png`` のような中間連続ドットは accept する.
+
+    docs/specs/article-image-upload-spec.md §3.1 で意図的に許容している (path separator が
+    無ければ traversal にならない)。 DM の filename pattern とは挙動が異なる。
+    """
+
+    # raises 無し
+    validate_image_request(mime_type="image/png", size=1024, filename="photo..backup.png")
 
 
 def test_validate_image_request_rejects_unsupported_mime_direct() -> None:
@@ -362,8 +375,6 @@ def test_validate_image_request_rejects_unsupported_mime_direct() -> None:
     fail-fast を担保する (defense-in-depth)。
     """
 
-    from apps.articles.s3_presign import validate_image_request
-
     with pytest.raises(DjangoValidationError):
         validate_image_request(mime_type="application/pdf", size=1024, filename="doc.pdf")
 
@@ -371,19 +382,12 @@ def test_validate_image_request_rejects_unsupported_mime_direct() -> None:
 def test_validate_image_request_rejects_non_positive_size() -> None:
     """size <= 0 は ValidationError."""
 
-    from apps.articles.s3_presign import validate_image_request
-
     with pytest.raises(DjangoValidationError):
         validate_image_request(mime_type="image/png", size=0, filename="shot.png")
 
 
 def test_validate_image_request_rejects_oversize_direct() -> None:
     """size > MAX_CONTENT_LENGTH は ValidationError."""
-
-    from apps.articles.s3_presign import (
-        MAX_CONTENT_LENGTH,
-        validate_image_request,
-    )
 
     with pytest.raises(DjangoValidationError):
         validate_image_request(
@@ -394,8 +398,6 @@ def test_validate_image_request_rejects_oversize_direct() -> None:
 def test_validate_image_request_rejects_empty_filename() -> None:
     """filename が空 / 過大は ValidationError."""
 
-    from apps.articles.s3_presign import validate_image_request
-
     with pytest.raises(DjangoValidationError):
         validate_image_request(mime_type="image/png", size=1024, filename="")
     with pytest.raises(DjangoValidationError):
@@ -405,18 +407,12 @@ def test_validate_image_request_rejects_empty_filename() -> None:
 def test_validate_image_request_rejects_filename_without_extension() -> None:
     """拡張子の無い filename は ValidationError."""
 
-    from apps.articles.s3_presign import validate_image_request
-
     with pytest.raises(DjangoValidationError):
         validate_image_request(mime_type="image/png", size=1024, filename="no_dot_name")
 
 
 def test_head_object_translates_not_found_to_validation_error() -> None:
     """S3 が NoSuchKey を返したら ValidationError("object not found")."""
-
-    from botocore.exceptions import ClientError
-
-    from apps.articles.s3_presign import head_object
 
     err = ClientError({"Error": {"Code": "NoSuchKey", "Message": "missing"}}, "HeadObject")
     with patch("apps.articles.s3_presign._build_s3_client") as build_client:
@@ -429,10 +425,6 @@ def test_head_object_translates_not_found_to_validation_error() -> None:
 def test_head_object_translates_other_errors_to_validation_error() -> None:
     """403 等 NoSuchKey 以外のエラーも ValidationError("failed to verify") に変換される."""
 
-    from botocore.exceptions import ClientError
-
-    from apps.articles.s3_presign import head_object
-
     err = ClientError({"Error": {"Code": "403", "Message": "AccessDenied"}}, "HeadObject")
     with patch("apps.articles.s3_presign._build_s3_client") as build_client:
         build_client.return_value.head_object.side_effect = err
@@ -444,8 +436,6 @@ def test_head_object_translates_other_errors_to_validation_error() -> None:
 def test_public_url_for_uses_custom_domain_when_set(settings) -> None:
     """``AWS_S3_CUSTOM_DOMAIN`` が設定されていれば CloudFront URL を返す."""
 
-    from apps.articles.s3_presign import public_url_for
-
     settings.AWS_S3_CUSTOM_DOMAIN = "cdn.example.com"
     url = public_url_for(s3_key="articles/1/abc.png")
     assert url == "https://cdn.example.com/articles/1/abc.png"
@@ -454,10 +444,103 @@ def test_public_url_for_uses_custom_domain_when_set(settings) -> None:
 def test_public_url_for_falls_back_to_virtual_host(settings) -> None:
     """``AWS_S3_CUSTOM_DOMAIN`` が空なら S3 virtual host URL に fallback."""
 
-    from apps.articles.s3_presign import public_url_for
-
     settings.AWS_S3_CUSTOM_DOMAIN = ""
     settings.AWS_STORAGE_BUCKET_NAME = "test-bucket"
     settings.AWS_S3_REGION_NAME = "ap-northeast-1"
     url = public_url_for(s3_key="articles/1/abc.png")
     assert url == ("https://test-bucket.s3.ap-northeast-1.amazonaws.com/articles/1/abc.png")
+
+
+# ---------------------------------------------------------------------------
+# Dimension boundary tests (review MEDIUM-2)
+# ---------------------------------------------------------------------------
+
+
+def _confirm_kwargs(user, **overrides):
+    """``confirm_image`` の典型 kwargs を組む helper (boundary テスト用)."""
+
+    base = {
+        "user": user,
+        "s3_key": f"articles/{user.pk}/abc.png",
+        "filename": "shot.png",
+        "mime_type": "image/png",
+        "size": 1024,
+        "width": 800,
+        "height": 600,
+    }
+    base.update(overrides)
+    return base
+
+
+@pytest.mark.django_db
+def test_confirm_image_rejects_width_zero() -> None:
+    """width=0 は service レベルで ValidationError (serializer bypass 経路の保険)."""
+
+    user = _user("alice")
+    with pytest.raises(DjangoValidationError):
+        confirm_image(**_confirm_kwargs(user, width=0))
+
+
+@pytest.mark.django_db
+def test_confirm_image_rejects_height_over_max() -> None:
+    """height=10001 (10000 + 1) は service レベルで ValidationError."""
+
+    user = _user("alice")
+    with pytest.raises(DjangoValidationError):
+        confirm_image(**_confirm_kwargs(user, height=10001))
+
+
+@pytest.mark.django_db
+def test_confirm_image_rejects_bool_as_dimension() -> None:
+    """Python の ``True`` / ``False`` は ``int`` のサブクラスだが service は弾く.
+
+    serializer の ``IntegerField`` も bool を許さないが、 service が独立呼びされる
+    場合の保険として明示的にチェックしている。
+    """
+
+    user = _user("alice")
+    with pytest.raises(DjangoValidationError):
+        confirm_image(**_confirm_kwargs(user, width=True))
+
+
+# ---------------------------------------------------------------------------
+# Conditions assertion (review MEDIUM-3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_presign_view_passes_correct_conditions_to_s3(settings) -> None:
+    """presign 発行時に S3 へ渡る ``Conditions`` が spec 通りであることを確認.
+
+    Conditions は S3 側で content-length-range / eq Content-Type / eq key を強制する
+    primary な security mechanism。 regression で削除 / 弱体化されないようテストで保護する。
+    """
+
+    settings.AWS_STORAGE_BUCKET_NAME = "test-bucket"
+    settings.AWS_S3_REGION_NAME = "ap-northeast-1"
+    user = _user("alice")
+
+    with patch("apps.articles.s3_presign._build_s3_client") as build_client:
+        build_client.return_value.generate_presigned_post.side_effect = (
+            lambda **kw: _fake_post_response(kw["Bucket"], kw["Key"], "image/png")
+        )
+        _client_for(user).post(
+            reverse("articles:image-presign"),
+            {"filename": "shot.png", "mime_type": "image/png", "size": 1024},
+            format="json",
+        )
+
+        # generate_presigned_post の呼び出し引数を確認
+        assert build_client.return_value.generate_presigned_post.call_count == 1
+        kwargs = build_client.return_value.generate_presigned_post.call_args.kwargs
+        conditions = kwargs["Conditions"]
+
+    # content-length-range を含む
+    assert ["content-length-range", 1, MAX_CONTENT_LENGTH] in conditions
+    # eq Content-Type を含む (申告 MIME と完全一致)
+    assert {"Content-Type": "image/png"} in conditions
+    # eq key を含む (s3_key の流用攻撃を防ぐ)
+    assert any(
+        isinstance(c, dict) and "key" in c and c["key"].startswith(f"articles/{user.pk}/")
+        for c in conditions
+    )
