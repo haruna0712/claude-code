@@ -68,54 +68,74 @@ export default async function TagPage({ params }: PageProps) {
 	const tweets = await loadTweets(tag.name);
 
 	return (
-		<main className="mx-auto max-w-3xl px-4 pb-10 pt-6">
-			<header className="mb-6">
-				<h1 className="text-2xl font-bold">#{tag.display_name}</h1>
+		<>
+			<header
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
+				<div className="min-w-0 flex-1">
+					<h1
+						className="truncate font-semibold tracking-tight"
+						style={{ fontSize: 15, letterSpacing: -0.2 }}
+					>
+						#{tag.display_name}
+					</h1>
+					<p
+						className="truncate text-[color:var(--a-text-subtle)]"
+						style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
+					>
+						{tag.usage_count} 件のツイート
+					</p>
+				</div>
+			</header>
+
+			<div className="px-5 py-5">
 				{tag.description && (
-					<p className="mt-2 text-sm text-muted-foreground">
+					<p className="mb-5 text-sm text-[color:var(--a-text-muted)]">
 						{tag.description}
 					</p>
 				)}
-				<p className="mt-3 text-xs text-muted-foreground">
-					{tag.usage_count} 件のツイート
-				</p>
-			</header>
 
-			{tag.related && tag.related.length > 0 && (
-				<section className="mb-8" aria-labelledby="related-heading">
-					<h2
-						id="related-heading"
-						className="mb-2 text-sm font-semibold text-muted-foreground"
-					>
-						関連タグ
+				{tag.related && tag.related.length > 0 && (
+					<section className="mb-8" aria-labelledby="related-heading">
+						<h2
+							id="related-heading"
+							className="mb-2 text-sm font-semibold text-[color:var(--a-text-muted)]"
+						>
+							関連タグ
+						</h2>
+						<ul className="flex flex-wrap gap-2">
+							{tag.related.map((r) => (
+								<li key={r.name}>
+									<a
+										href={`/tag/${r.name}`}
+										className="rounded-full bg-[color:var(--a-bg-muted)] px-2 py-0.5 text-sm text-[color:var(--a-text-muted)] transition-colors hover:bg-[color:var(--a-bg-subtle)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+									>
+										#{r.display_name}
+									</a>
+								</li>
+							))}
+						</ul>
+					</section>
+				)}
+
+				<section aria-labelledby="tweets-heading">
+					<h2 id="tweets-heading" className="mb-3 text-lg font-semibold">
+						このタグのツイート
 					</h2>
-					<ul className="flex flex-wrap gap-2">
-						{tag.related.map((r) => (
-							<li key={r.name}>
-								<a
-									href={`/tag/${r.name}`}
-									className="rounded-full bg-muted px-2 py-0.5 text-sm hover:bg-accent"
-								>
-									#{r.display_name}
-								</a>
-							</li>
-						))}
-					</ul>
+					{/* #301: 旧 inline link 列挙を TweetCardList に置換。リアクション
+					    / RT / 「もっと見る」展開が動作する。 */}
+					<TweetCardList
+						tweets={tweets}
+						ariaLabel={`${tag.display_name} タグのツイート`}
+						emptyMessage="まだこのタグのツイートはありません。"
+					/>
 				</section>
-			)}
-
-			<section aria-labelledby="tweets-heading">
-				<h2 id="tweets-heading" className="mb-3 text-lg font-semibold">
-					このタグのツイート
-				</h2>
-				{/* #301: 旧 inline link 列挙を TweetCardList に置換。リアクション
-				    / RT / 「もっと見る」展開が動作する。 */}
-				<TweetCardList
-					tweets={tweets}
-					ariaLabel={`${tag.display_name} タグのツイート`}
-					emptyMessage="まだこのタグのツイートはありません。"
-				/>
-			</section>
-		</main>
+			</div>
+		</>
 	);
 }
