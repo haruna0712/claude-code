@@ -91,50 +91,77 @@ export default async function ArticleDetailPage({ params }: PageProps) {
 	};
 
 	return (
-		<main className="mx-auto w-full max-w-3xl px-4 py-6">
+		<>
 			<script
 				type="application/ld+json"
 				dangerouslySetInnerHTML={{ __html: stringifyJsonLd(jsonLd) }}
 			/>
 
-			<header className="mb-6">
-				<h1 className="text-3xl font-bold leading-tight">{article.title}</h1>
-				<div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-					<Link
-						href={`/u/${article.author.handle}`}
-						className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-					>
-						<span className="font-medium text-foreground">{author}</span>
-						<span className="ml-1">@{article.author.handle}</span>
-					</Link>
-					{article.published_at && (
-						<time dateTime={article.published_at}>
-							{formatDate(article.published_at)}
-						</time>
-					)}
-					{article.status === "draft" && (
-						<span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
-							下書き
-						</span>
-					)}
-				</div>
-				{article.tags.length > 0 && (
-					<ul aria-label="タグ" className="mt-3 flex flex-wrap gap-1">
-						{article.tags.map((t) => (
-							<li key={t.slug}>
-								<Link
-									href={`/articles?tag=${encodeURIComponent(t.slug)}`}
-									className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/70"
-								>
-									#{t.display_name}
-								</Link>
-							</li>
-						))}
-					</ul>
-				)}
+			<header
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
+				<Link
+					href="/articles"
+					className="rounded text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+					style={{ fontSize: 12.5 }}
+				>
+					← 記事一覧
+				</Link>
+				<span
+					className="ml-auto text-[color:var(--a-text-subtle)]"
+					style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
+				>
+					article
+				</span>
 			</header>
 
-			<ArticleBody html={article.body_html} />
-		</main>
+			<article className="px-5 py-6">
+				<header className="mb-6">
+					<h1 className="text-3xl font-bold leading-tight">{article.title}</h1>
+					<div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-[color:var(--a-text-muted)]">
+						<Link
+							href={`/u/${article.author.handle}`}
+							className="rounded hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+						>
+							<span className="font-medium text-[color:var(--a-text)]">
+								{author}
+							</span>
+							<span className="ml-1">@{article.author.handle}</span>
+						</Link>
+						{article.published_at && (
+							<time dateTime={article.published_at}>
+								{formatDate(article.published_at)}
+							</time>
+						)}
+						{article.status === "draft" && (
+							<span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
+								下書き
+							</span>
+						)}
+					</div>
+					{article.tags.length > 0 && (
+						<ul aria-label="タグ" className="mt-3 flex flex-wrap gap-1">
+							{article.tags.map((t) => (
+								<li key={t.slug}>
+									<Link
+										href={`/articles?tag=${encodeURIComponent(t.slug)}`}
+										className="rounded-full bg-[color:var(--a-bg-muted)] px-2 py-0.5 text-xs text-[color:var(--a-text-muted)] hover:bg-[color:var(--a-bg-subtle)]"
+									>
+										#{t.display_name}
+									</Link>
+								</li>
+							))}
+						</ul>
+					)}
+				</header>
+
+				<ArticleBody html={article.body_html} />
+			</article>
+		</>
 	);
 }
