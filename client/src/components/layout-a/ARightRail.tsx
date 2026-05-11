@@ -10,19 +10,15 @@
  * frame でラップして見た目だけ揃える。
  */
 
+import type { ReactNode } from "react";
+
 import Link from "next/link";
 import { Search } from "lucide-react";
 
 import TrendingTags from "@/components/sidebar/TrendingTags";
 import WhoToFollow from "@/components/sidebar/WhoToFollow";
 
-function APanel({
-	title,
-	children,
-}: {
-	title: string;
-	children: React.ReactNode;
-}) {
+function APanel({ title, children }: { title: string; children: ReactNode }) {
 	return (
 		<div className="mb-3 rounded-lg border border-[color:var(--a-border)] bg-[color:var(--a-bg)] px-3 py-2.5">
 			<div
