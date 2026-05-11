@@ -209,7 +209,15 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 		}
 	};
 
-	const handleDragLeave = () => setIsDragging(false);
+	const handleDragLeave = (e: DragEvent<HTMLTextAreaElement>) => {
+		// a11y-architect L-1: 内部 child element 越境では消さない。
+		// relatedTarget が textarea の subtree なら状態維持。
+		const target = e.relatedTarget;
+		if (target instanceof Node && e.currentTarget.contains(target)) {
+			return;
+		}
+		setIsDragging(false);
+	};
 
 	const handleSubmit = async (e: FormEvent) => {
 		e.preventDefault();
@@ -336,8 +344,13 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 						<button
 							type="button"
 							onClick={() => fileInputRef.current?.click()}
-							className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+							// a11y-architect H-1: WCAG 2.2 SC 2.5.8 Target Size Minimum
+							// (24×24 CSS px) を満たすため min-h-[24px] + py-1。
+							// a11y-architect M-3: aria-haspopup="dialog" で OS file picker
+							// が開くことを SR に通知。
+							className="inline-flex min-h-[24px] items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 							aria-label="画像を追加"
+							aria-haspopup="dialog"
 						>
 							<ImagePlus className="size-3.5" aria-hidden="true" />
 							画像を追加
@@ -345,6 +358,9 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 						<input
 							ref={fileInputRef}
 							type="file"
+							// a11y-architect M-2: hidden input でも programmatic click 経由で
+							// 操作するため、 偶発的に SR に拾われた時のために label を補強。
+							aria-label="画像ファイルを選択"
 							accept="image/jpeg,image/png,image/webp,image/gif"
 							multiple
 							hidden
@@ -367,10 +383,12 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 						}
 						required
 						aria-describedby="body-help"
-						className={`mt-1 h-[28rem] w-full rounded border bg-background p-3 font-mono text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+						className={`mt-1 h-[28rem] w-full rounded p-3 font-mono text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
 							isDragging
-								? "border-[color:var(--a-accent)] bg-[color:var(--a-bg-subtle)]"
-								: "border-border"
+								? // a11y-architect H-2: WCAG 1.4.1 / 1.4.11 を満たすため色だけ
+									// でなく border-dashed + ring で形状変化も付与する。
+									"ring-[color:var(--a-accent)]/40 border-2 border-dashed border-[color:var(--a-accent)] bg-[color:var(--a-bg-subtle)] ring-2"
+								: "border border-border bg-background"
 						}`}
 					/>
 					<p id="body-help" className="mt-1 text-xs text-muted-foreground">
@@ -380,11 +398,16 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 				</div>
 				<div className="block">
 					<span className="block text-sm font-medium">プレビュー</span>
+					{/* a11y-architect M-1: 集約 SR 通知。 画像 1 件ごとに polite が
+					    連発するのを防ぐ。 視覚 list は live region から外す。 */}
+					<p role="status" aria-live="polite" className="sr-only">
+						{activeUploadRows.length > 0
+							? `${activeUploadRows.length} 件の画像をアップロード中`
+							: ""}
+					</p>
 					{activeUploadRows.length > 0 && (
 						<ul
 							aria-label="アップロード中の画像"
-							role="status"
-							aria-live="polite"
 							className="mt-1 space-y-1 rounded border border-dashed border-border bg-muted/20 p-2 text-xs"
 						>
 							{activeUploadRows.map((r) => (
