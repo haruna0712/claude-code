@@ -12,6 +12,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ArticleEditor, {
+	detectBodyH1MatchesTitle,
 	insertImageMarkdown,
 } from "@/components/articles/ArticleEditor";
 
@@ -98,6 +99,50 @@ describe("insertImageMarkdown", () => {
 		// typescript-reviewer H-1 反映: [/]/\\ を全て除去して malformed markdown
 		// (`![[shot.png](url)`) にならないようにする。
 		expect(result.next).toBe("![shot.png](https://cdn.example.com/foo.png)");
+	});
+});
+
+describe("detectBodyH1MatchesTitle (#616)", () => {
+	it("T-H1-DUP-1 body 先頭 h1 が title と完全一致 → h1 text を返す", () => {
+		expect(detectBodyH1MatchesTitle("Hello", "# Hello\n\nbody")).toBe("Hello");
+	});
+
+	it("T-H1-DUP-2 大文字小文字無視で一致判定", () => {
+		expect(detectBodyH1MatchesTitle("Hello", "# hello\n\nbody")).toBe("hello");
+	});
+
+	it("T-H1-DUP-3 title の前後 whitespace を許容", () => {
+		expect(detectBodyH1MatchesTitle("  Hello  ", "# Hello\n\nbody")).toBe(
+			"Hello",
+		);
+	});
+
+	it("T-H1-DUP-4 body 先頭の blank line を許容", () => {
+		expect(detectBodyH1MatchesTitle("Hello", "\n\n# Hello\n\nbody")).toBe(
+			"Hello",
+		);
+	});
+
+	it("T-H1-DUP-5 body が h2 (##) で始まる場合は null", () => {
+		expect(detectBodyH1MatchesTitle("Hello", "## Hello\n\nbody")).toBeNull();
+	});
+
+	it("T-H1-DUP-6 title と h1 text が違うなら null", () => {
+		expect(detectBodyH1MatchesTitle("Hello", "# World\n\nbody")).toBeNull();
+	});
+
+	it("T-H1-DUP-7 body に h1 が無いなら null", () => {
+		expect(
+			detectBodyH1MatchesTitle("Hello", "body without heading"),
+		).toBeNull();
+	});
+
+	it("T-H1-DUP-8 title が空文字なら null (誤検知防止)", () => {
+		expect(detectBodyH1MatchesTitle("", "# Hello\n\nbody")).toBeNull();
+	});
+
+	it("T-H1-DUP-9 body が空文字なら null", () => {
+		expect(detectBodyH1MatchesTitle("Hello", "")).toBeNull();
 	});
 });
 
