@@ -88,7 +88,7 @@ def test_presign_view_returns_200_with_user_scoped_key(settings) -> None:
     assert resp.status_code == 200, resp.content
     body = resp.json()
     assert body["url"].startswith("https://test-bucket.s3.")
-    assert body["s3_key"].startswith(f"articles/{user.pk}/")
+    assert body["s3_key"].startswith(f"article-images/{user.pk}/")
     assert body["s3_key"].endswith(".png")
     assert "fields" in body
     assert "expires_at" in body
@@ -162,7 +162,7 @@ def test_confirm_view_creates_orphan_article_image(settings) -> None:
     settings.AWS_STORAGE_BUCKET_NAME = "test-bucket"
     settings.AWS_S3_REGION_NAME = "ap-northeast-1"
     user = _user("alice")
-    s3_key = f"articles/{user.pk}/abcdef12-3456-7890-abcd-ef1234567890.png"
+    s3_key = f"article-images/{user.pk}/abcdef12-3456-7890-abcd-ef1234567890.png"
 
     with patch("apps.articles.s3_presign._build_s3_client") as build_client:
         build_client.return_value.head_object.return_value = _fake_head_object(
@@ -205,7 +205,7 @@ def test_confirm_view_rejects_content_type_mismatch(settings) -> None:
     settings.AWS_STORAGE_BUCKET_NAME = "test-bucket"
     settings.AWS_S3_REGION_NAME = "ap-northeast-1"
     user = _user("alice")
-    s3_key = f"articles/{user.pk}/abcdef12-3456-7890-abcd-ef1234567890.png"
+    s3_key = f"article-images/{user.pk}/abcdef12-3456-7890-abcd-ef1234567890.png"
 
     with patch("apps.articles.s3_presign._build_s3_client") as build_client:
         build_client.return_value.head_object.return_value = _fake_head_object(
@@ -238,7 +238,7 @@ def test_confirm_view_rejects_path_traversal_in_key() -> None:
     """
 
     user = _user("alice")
-    s3_key = f"articles/{user.pk}/sub/../malicious.png"
+    s3_key = f"article-images/{user.pk}/sub/../malicious.png"
     resp = _client_for(user).post(
         reverse("articles:image-confirm"),
         {
@@ -260,7 +260,7 @@ def test_confirm_view_rejects_size_mismatch() -> None:
     """T6: head_object の ContentLength が申告と不一致 → 400、 row 作成されない."""
 
     user = _user("alice")
-    s3_key = f"articles/{user.pk}/abcdef12-3456-7890-abcd-ef1234567890.png"
+    s3_key = f"article-images/{user.pk}/abcdef12-3456-7890-abcd-ef1234567890.png"
 
     with patch("apps.articles.s3_presign._build_s3_client") as build_client:
         build_client.return_value.head_object.return_value = _fake_head_object(
@@ -290,7 +290,7 @@ def test_confirm_view_rejects_foreign_user_key_prefix() -> None:
 
     user = _user("alice")
     other = _user("bob")
-    s3_key = f"articles/{other.pk}/00000000-0000-0000-0000-000000000000.png"
+    s3_key = f"article-images/{other.pk}/00000000-0000-0000-0000-000000000000.png"
 
     # boto3 を mock しない: prefix チェックで弾かれて S3 まで行かない (期待)
     resp = _client_for(user).post(
@@ -529,7 +529,7 @@ def _confirm_kwargs(user, **overrides):
 
     base = {
         "user": user,
-        "s3_key": f"articles/{user.pk}/abc.png",
+        "s3_key": f"article-images/{user.pk}/abc.png",
         "filename": "shot.png",
         "mime_type": "image/png",
         "size": 1024,
@@ -587,7 +587,7 @@ def test_confirm_view_returns_400_on_duplicate_s3_key(settings) -> None:
     settings.AWS_STORAGE_BUCKET_NAME = "test-bucket"
     settings.AWS_S3_REGION_NAME = "ap-northeast-1"
     user = _user("alice")
-    s3_key = f"articles/{user.pk}/abcdef12-3456-7890-abcd-ef1234567890.png"
+    s3_key = f"article-images/{user.pk}/abcdef12-3456-7890-abcd-ef1234567890.png"
 
     payload = {
         "s3_key": s3_key,
@@ -653,6 +653,6 @@ def test_presign_view_passes_correct_conditions_to_s3(settings) -> None:
     assert {"Content-Type": "image/png"} in conditions
     # eq key を含む (s3_key の流用攻撃を防ぐ)
     assert any(
-        isinstance(c, dict) and "key" in c and c["key"].startswith(f"articles/{user.pk}/")
+        isinstance(c, dict) and "key" in c and c["key"].startswith(f"article-images/{user.pk}/")
         for c in conditions
     )

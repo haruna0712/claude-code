@@ -335,7 +335,7 @@ module "observability" {
 #   - PutObject  : presigned URL 経由のアップロード
 #   - GetObject  : 添付ダウンロード (ヘッド確認 + ファイルサイズ確認、SPEC §7)
 #   - DeleteObject : メッセージ削除時のオブジェクト削除 (SPEC §7.3、24h 削除キュー)
-# avatar/header は users/*、DM添付は dm/*、 記事内画像は articles/*、
+# avatar/header は users/*、DM添付は dm/*、 記事内画像は article-images/*、
 # collectstatic は static bucket の static/* prefix に限定する。
 # ---------------------------------------------------------------------------
 
@@ -356,11 +356,11 @@ data "aws_iam_policy_document" "ecs_dm_attachment_access" {
       "${module.storage.media_bucket_arn}/dm/*",
       "${module.storage.media_bucket_arn}/users/*",
       # 記事内画像 (apps.articles.s3_presign で発行する key 形式
-      # `articles/<user_id>/<uuid>.<ext>`、 P6-04 PR #591)。
-      # PR #591 では CloudFront /articles/* behavior は追加したが IAM の
-      # PutObject 許可は漏れており、 stg E2E (article-editor-image.spec) が
-      # 403 AccessDenied で fail していた (2026-05-11 検出)。
-      "${module.storage.media_bucket_arn}/articles/*",
+      # `article-images/<user_id>/<uuid>.<ext>`、 P6-04 PR #591)。
+      # 当初は `articles/` prefix を使っていたが、 Next.js の 2 階層 page
+      # (`/articles/me/drafts` `/articles/<slug>/edit`) と CloudFront path_pattern
+      # が衝突したため、 prefix を `article-images/` に分離した (2026-05-11)。
+      "${module.storage.media_bucket_arn}/article-images/*",
     ]
   }
 
@@ -378,7 +378,7 @@ data "aws_iam_policy_document" "ecs_dm_attachment_access" {
       values = [
         "dm/*", "dm/", "dm",
         "users/*", "users/", "users",
-        "articles/*", "articles/", "articles",
+        "article-images/*", "article-images/", "article-images",
       ]
     }
   }

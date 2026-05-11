@@ -55,7 +55,7 @@ def confirm_image(
     #    ``posixpath.normpath`` で ``..`` を実際に collapse し、 元の入力と一致しなければ拒否
     #    (S3 はキーをリテラル文字列として扱うので、 ``articles/1/../1/foo`` のような形を
     #    DB に書き込まないようにする)。
-    expected_prefix = f"articles/{user.pk}/"
+    expected_prefix = f"article-images/{user.pk}/"
     normalised = posixpath.normpath(s3_key)
     if normalised != s3_key:
         raise ValidationError(

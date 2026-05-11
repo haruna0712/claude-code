@@ -179,12 +179,16 @@ def validate_image_request(
 
 
 def build_s3_key(*, user_id: int, ext: str) -> str:
-    """``articles/<user_id>/<image_uuid>.<ext>`` を生成.
+    """``article-images/<user_id>/<image_uuid>.<ext>`` を生成.
 
     user_id は ``User.pk`` (BigAutoField → int) 前提。
+
+    NOTE: prefix は `articles/` ではなく `article-images/` を使う。 CloudFront
+    で path_pattern を Next.js routes (`/articles/me/drafts` `/articles/<slug>/edit`
+    等) と完全分離するため (stg E2E で 2026-05-11 に衝突発覚)。
     """
 
-    return f"articles/{user_id}/{uuid.uuid4()}.{ext}"
+    return f"article-images/{user_id}/{uuid.uuid4()}.{ext}"
 
 
 def _build_post_conditions(*, s3_key: str, mime_type: str) -> list[Any]:

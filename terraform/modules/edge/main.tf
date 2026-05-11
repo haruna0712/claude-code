@@ -150,7 +150,7 @@ resource "aws_cloudfront_origin_access_control" "s3" {
 #   /media/*         -> S3 media (long TTL、GET のみ)
 #   /users/*         -> S3 media (profile avatar/header public objects)
 #   /dm/*            -> S3 media (DM attachment objects)
-#   /articles/*      -> S3 media (記事内画像、SecurityHeaders 付与) (P6-04)
+#   /article-images/* -> S3 media (記事内画像、SecurityHeaders 付与) (P6-04)
 #   /api/*           -> ALB  (no cache)
 #   /ws/*            -> ALB  (no cache、WebSocket 透過)
 #   / (default)      -> ALB  (Next.js SSR、short TTL)
@@ -387,19 +387,26 @@ resource "aws_cloudfront_distribution" "this" {
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
   }
 
-  # -------- /articles/* → S3 media (P6-04 / #527) --------
-  # 記事内画像 (apps.articles.s3_presign で issue する s3_key = articles/<user_id>/<uuid>.<ext>)
-  # を配信する。 SecurityHeadersPolicy で nosniff + Strict-Transport-Security 等を付与し、
+  # -------- /article-images/* → S3 media (P6-04 / #527) --------
+  # 記事内画像 (apps.articles.s3_presign で issue する s3_key
+  # `article-images/<user_id>/<uuid>.<ext>`) を配信する。
+  # SecurityHeadersPolicy で nosniff + Strict-Transport-Security 等を付与し、
   # MIME 偽装による stored XSS (HTML payload を image/png として upload) をブラウザ側で
   # 防ぐ (security-reviewer M-2 反映)。
+  #
+  # NOTE: prefix を `articles/` ではなく `article-images/` にしているのは、
+  # Next.js の `/articles/me/drafts` (2 階層) や `/articles/<slug>/edit` (2 階層)
+  # と CloudFront path_pattern (`/articles/*` や `/articles/*/*`) が衝突して
+  # ページ request まで S3 origin に振られて 403 になっていた問題への対応
+  # (stg E2E で Claude が踏んで発見、 2026-05-11)。 prefix を完全分離するのが
+  # 最もシンプル + 副作用が無い解。
   #
   # NOTE: /dm/* と /users/* の直後ではなく `/ws/*` の **後 (末尾)** に配置している。
   # ordered_cache_behavior は terraform 上 配列 index ベースで diff されるため、
   # 中間に挿入すると後続全 behavior が in-place 書き換え扱いになり、 apply 中の
   # 数秒間 `/api/*` が誤 origin に振られる risk がある。 末尾追加なら drift なし。
-  # path_pattern は完全分離しているので位置による matching 影響なし。
   ordered_cache_behavior {
-    path_pattern           = "/articles/*"
+    path_pattern           = "/article-images/*"
     target_origin_id       = "media"
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD"]
