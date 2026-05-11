@@ -35,7 +35,7 @@ export default function InvitationsPage() {
 			<section
 				role="status"
 				aria-live="polite"
-				className="text-baby_grey mx-auto max-w-2xl py-12 text-center"
+				className="mx-auto max-w-2xl py-12 text-center text-[color:var(--a-text-muted)]"
 			>
 				認証情報を確認しています...
 			</section>
@@ -43,17 +43,32 @@ export default function InvitationsPage() {
 	}
 
 	return (
-		<section className="mx-auto max-w-2xl">
-			<header className="mb-6 flex items-baseline justify-between">
-				<h1 className="text-baby_white text-xl font-bold">グループ招待</h1>
+		<>
+			<header
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
 				<Link
 					href="/messages"
-					className="text-baby_blue focus-visible:ring-baby_blue focus-visible:ring-offset-baby_veryBlack text-sm underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+					className="rounded text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+					style={{ fontSize: 12.5 }}
 				>
-					<span aria-hidden="true">←</span> メッセージ一覧
+					← メッセージ一覧
 				</Link>
+				<h1
+					className="ml-2 min-w-0 flex-1 truncate font-semibold tracking-tight"
+					style={{ fontSize: 15, letterSpacing: -0.2 }}
+				>
+					グループ招待
+				</h1>
 			</header>
-			<InvitationList />
-		</section>
+			<div className="p-5">
+				<InvitationList />
+			</div>
+		</>
 	);
 }

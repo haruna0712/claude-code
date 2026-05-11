@@ -56,7 +56,7 @@ export default function MessagesPage() {
 			<section
 				role="status"
 				aria-live="polite"
-				className="text-baby_grey mx-auto max-w-2xl py-12 text-center"
+				className="mx-auto max-w-2xl py-12 text-center text-[color:var(--a-text-muted)]"
 			>
 				認証情報を確認しています...
 			</section>
@@ -69,7 +69,7 @@ export default function MessagesPage() {
 		return (
 			<section
 				role="alert"
-				className="text-baby_red mx-auto max-w-2xl py-12 text-center"
+				className="mx-auto max-w-2xl py-12 text-center text-[color:var(--a-danger)]"
 			>
 				プロフィール ID が取得できませんでした。再ログインしてください。
 			</section>
@@ -77,9 +77,21 @@ export default function MessagesPage() {
 	}
 
 	return (
-		<section className="mx-auto max-w-2xl">
-			<header className="mb-6 flex items-baseline justify-between gap-3">
-				<h1 className="text-baby_white text-xl font-bold">メッセージ</h1>
+		<>
+			<header
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
+				<h1
+					className="min-w-0 flex-1 truncate font-semibold tracking-tight"
+					style={{ fontSize: 15, letterSpacing: -0.2 }}
+				>
+					メッセージ
+				</h1>
 				<div className="flex items-center gap-2">
 					{/* #300: 招待リスト導線。pending 0 件でも link は表示 (Phase 3
 					    spec が /messages/invitations 直リンクを使うため)、badge は
@@ -89,13 +101,14 @@ export default function MessagesPage() {
 						aria-label={
 							pendingCount > 0 ? `招待 ${pendingCount} 件` : "招待リストを開く"
 						}
-						className="text-baby_white inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						className="inline-flex items-center gap-1 rounded-md border border-[color:var(--a-border)] px-3 py-1.5 text-sm font-medium text-[color:var(--a-text)] transition-colors hover:bg-[color:var(--a-bg-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 					>
 						招待
 						{pendingCount > 0 ? (
 							<span
 								aria-hidden="true"
-								className="bg-baby_red text-baby_white inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0 text-xs font-semibold"
+								className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0 text-xs font-semibold text-white"
+								style={{ background: "var(--a-accent)" }}
 							>
 								{pendingCount}
 							</span>
@@ -108,7 +121,8 @@ export default function MessagesPage() {
 							<button
 								type="button"
 								aria-label="新規グループ作成"
-								className="bg-baby_blue text-baby_white focus-visible:ring-baby_white rounded-md px-3 py-1.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2"
+								className="rounded-md px-3 py-1.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+								style={{ background: "var(--a-accent)" }}
 							>
 								＋ 新規グループ
 							</button>
@@ -122,7 +136,9 @@ export default function MessagesPage() {
 					</Dialog>
 				</div>
 			</header>
-			<RoomList currentUserId={profile.pkid} />
-		</section>
+			<div className="p-5">
+				<RoomList currentUserId={profile.pkid} />
+			</div>
+		</>
 	);
 }
