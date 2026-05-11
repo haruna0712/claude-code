@@ -472,6 +472,10 @@ _THROTTLE_RATES_BASE = {
     # Phase 6 articles (P6-03):
     # 30/hour = 2 分に 1 本ペース。長文記事の保存頻度を考えると十分余裕あり。
     "article_write": "30/hour" if not _IS_STG else "300/hour",
+    # Phase 6 articles 画像アップロード (P6-04 / docs/specs/article-image-upload-spec.md):
+    # 30/hour は記事 1 本に画像 10 枚貼っても 3 本/時 = 通常運用十分。
+    "article_image_presign": "30/hour" if not _IS_STG else "300/hour",
+    "article_image_confirm": "30/hour" if not _IS_STG else "300/hour",
 }
 
 REST_FRAMEWORK = {

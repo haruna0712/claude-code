@@ -14,7 +14,8 @@ from typing import Any
 from django.utils.text import slugify
 from rest_framework import serializers
 
-from apps.articles.models import Article, ArticleStatus
+from apps.articles.models import Article, ArticleImage, ArticleStatus
+from apps.articles.s3_presign import ALLOWED_CONTENT_TYPES, MAX_CONTENT_LENGTH
 from apps.tags.models import Tag
 
 
@@ -140,3 +141,51 @@ class ArticleUpdateInputSerializer(serializers.Serializer):
         required=False,
         max_length=5,
     )
+
+
+# --------------------------------------------------------------------------
+# 画像アップロード (P6-04 / docs/specs/article-image-upload-spec.md)
+# --------------------------------------------------------------------------
+
+
+class PresignImageInputSerializer(serializers.Serializer):
+    """`POST /articles/images/presign/` の入力検証.
+
+    値そのものの allowlist / size 上限は :func:`apps.articles.s3_presign.validate_image_request`
+    で最終確認するが、 ここでも UX のために早期 400 を返す。
+    """
+
+    filename = serializers.CharField(min_length=1, max_length=200)
+    mime_type = serializers.ChoiceField(choices=sorted(ALLOWED_CONTENT_TYPES))
+    size = serializers.IntegerField(min_value=1, max_value=MAX_CONTENT_LENGTH)
+
+
+class ConfirmImageInputSerializer(serializers.Serializer):
+    """`POST /articles/images/confirm/` の入力検証.
+
+    width / height は frontend が ``HTMLImageElement.naturalWidth/Height`` から取得する想定。
+    """
+
+    s3_key = serializers.CharField(min_length=1, max_length=512)
+    filename = serializers.CharField(min_length=1, max_length=200)
+    mime_type = serializers.ChoiceField(choices=sorted(ALLOWED_CONTENT_TYPES))
+    size = serializers.IntegerField(min_value=1, max_value=MAX_CONTENT_LENGTH)
+    width = serializers.IntegerField(min_value=1, max_value=10000)
+    height = serializers.IntegerField(min_value=1, max_value=10000)
+
+
+class ArticleImageOutputSerializer(serializers.ModelSerializer):
+    """`/articles/images/confirm/` の 201 response。 frontend が Markdown に挿入する ``url`` を含む."""
+
+    class Meta:
+        model = ArticleImage
+        fields = (
+            "id",
+            "s3_key",
+            "url",
+            "width",
+            "height",
+            "size",
+            "created_at",
+        )
+        read_only_fields = fields
