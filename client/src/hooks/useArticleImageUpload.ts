@@ -47,10 +47,19 @@ interface UseArticleImageUploadResult {
 	clearFinished: () => void;
 }
 
-let _idCounter = 0;
+/**
+ * row id を生成する。 `crypto.randomUUID()` が無い古い環境向け fallback あり。
+ * typescript-reviewer H-4 反映: module-level の mutable counter は Strict Mode /
+ * test isolation で bleed する。 stateless な実装に切替。
+ */
 function nextRowId(): string {
-	_idCounter += 1;
-	return `upload-${Date.now()}-${_idCounter}`;
+	const cryptoObj =
+		typeof globalThis !== "undefined" ? globalThis.crypto : undefined;
+	if (cryptoObj && typeof cryptoObj.randomUUID === "function") {
+		return `upload-${cryptoObj.randomUUID()}`;
+	}
+	// fallback: time + random で実用上の衝突回避 (test 環境向け)
+	return `upload-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export function useArticleImageUpload({
@@ -97,10 +106,15 @@ export function useArticleImageUpload({
 		while (activeRef.current < MAX_CONCURRENT && queueRef.current.length > 0) {
 			const next = queueRef.current.shift();
 			if (!next) break;
-			runOne(next.row, next.file).catch(() => {
+			runOne(next.row, next.file).catch((unexpected: unknown) => {
 				// runOne 内部で try/catch して state="failed" にしているので、
-				// ここまで例外が漏れるのは想定外。 silent 化せず最低限 swallow + dev 環境では
-				// console に出す (production では unhandledrejection も hookup される)。
+				// ここまで例外が漏れるのは想定外 (setRow / setRows の bug 等)。
+				// silent 化せず console に残して Sentry が拾える形にする
+				// (typescript-reviewer H-3 反映、 旧版は空 catch でコメントと挙動が乖離)。
+				console.error(
+					"[useArticleImageUpload] unexpected error escaped runOne",
+					unexpected,
+				);
 			});
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps

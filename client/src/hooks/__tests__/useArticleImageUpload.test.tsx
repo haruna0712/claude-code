@@ -8,7 +8,7 @@
  */
 
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useArticleImageUpload } from "@/hooks/useArticleImageUpload";
 import {
@@ -46,10 +46,6 @@ function fakeImage(url = "https://cdn.example.com/x.png"): UploadedImage {
 describe("useArticleImageUpload", () => {
 	beforeEach(() => {
 		requestImageUploadMock.mockReset();
-	});
-
-	afterEach(() => {
-		vi.useRealTimers();
 	});
 
 	it("T-UPLOAD-1 valid file → uploading → done、 onUploaded で url が渡る", async () => {

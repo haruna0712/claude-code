@@ -70,10 +70,11 @@ describe("insertImageMarkdown", () => {
 		expect(result.next).toBe("abc\n![x.png](https://cdn.example.com/foo.png)");
 	});
 
-	it("T-EDIT-1e filename with ] and \\ is sanitized for alt", () => {
+	it("T-EDIT-1e filename with [ ] \\ are all stripped from alt", () => {
 		const result = insertImageMarkdown("", 0, image, "[shot].png");
-		// `[` `\` `]` のうち `]` と `\` だけが除去される (`[` は alt text 内で許可)
-		expect(result.next).toBe("![[shot.png](https://cdn.example.com/foo.png)");
+		// typescript-reviewer H-1 反映: [/]/\\ を全て除去して malformed markdown
+		// (`![[shot.png](url)`) にならないようにする。
+		expect(result.next).toBe("![shot.png](https://cdn.example.com/foo.png)");
 	});
 });
 
@@ -102,12 +103,15 @@ describe("ArticleEditor", () => {
 	});
 
 	it("T-EDIT-3 file picker via 「画像を追加」 button enqueues selected files", () => {
-		render(<ArticleEditor mode="create" />);
-		const btn = screen.getByRole("button", { name: "画像を追加" });
+		const { container } = render(<ArticleEditor mode="create" />);
+		expect(
+			screen.getByRole("button", { name: "画像を追加" }),
+		).toBeInTheDocument();
 
-		// button の隣に hidden file input がある (next sibling)
-		const fileInput = btn.parentElement?.querySelector(
-			'input[type="file"]',
+		// hidden file input は role を持たないので container 経由で直接取る
+		// (typescript-reviewer LOW-4 反映: DOM walk 経由ではなく selector で取得)。
+		const fileInput = container.querySelector(
+			'input[type="file"][accept*="image"]',
 		) as HTMLInputElement | null;
 		expect(fileInput).not.toBeNull();
 

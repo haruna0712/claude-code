@@ -150,6 +150,8 @@ export async function requestImageUpload(
 	}
 
 	// 2. S3 直 POST (presigned form fields + file)
+	// typescript-reviewer M-2 反映: stall した接続を 30 秒で abort する。
+	// AbortSignal.timeout は Node 18 / 主要ブラウザ 2023 以降で対応。
 	try {
 		const formData = new FormData();
 		for (const [k, v] of Object.entries(presign.fields)) {
@@ -159,6 +161,7 @@ export async function requestImageUpload(
 		const s3Res = await fetch(presign.url, {
 			method: "POST",
 			body: formData,
+			signal: AbortSignal.timeout(30_000),
 			// presigned 署名で auth するので credentials は不要
 		});
 		if (!s3Res.ok) {
@@ -169,6 +172,13 @@ export async function requestImageUpload(
 		}
 	} catch (err) {
 		if (err instanceof ArticleImageUploadError) throw err;
+		// abort (timeout) は DOMException name="TimeoutError" として throw される
+		if (err instanceof Error && err.name === "TimeoutError") {
+			throw new ArticleImageUploadError(
+				"S3 アップロードがタイムアウトしました (30 秒)",
+				"s3",
+			);
+		}
 		throw new ArticleImageUploadError(
 			err instanceof Error ? err.message : "S3 アップロードに失敗しました",
 			"s3",

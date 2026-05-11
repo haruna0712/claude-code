@@ -20,6 +20,7 @@ import { ImagePlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
 	useCallback,
+	useEffect,
 	useRef,
 	useState,
 	type ChangeEvent,
@@ -78,7 +79,10 @@ export function insertImageMarkdown(
 	image: UploadedImage,
 	filename: string,
 ): { next: string; nextCaret: number } {
-	const alt = filename.replace(/[\]\\]/g, "").trim() || "image";
+	// markdown image alt text に `[` `]` `\` が残ると `![alt](url)` の parse が崩れる。
+	// 全部除去する (typescript-reviewer H-1 反映、 旧コードは `]` `\` のみ除去で
+	// 「[shot].png」 が `![[shot.png](url)` という malformed を生んでいた)。
+	const alt = filename.replace(/[[\]\\]/g, "").trim() || "image";
 	const snippet = `![${alt}](${image.url})`;
 	const safeCaret = Math.max(0, Math.min(caret, current.length));
 	const before = current.slice(0, safeCaret);
@@ -109,6 +113,22 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 
 	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
+	// upload 完了で caret を移動させたい位置を保持。 setBody の updater 内では
+	// 副作用 (DOM 操作) を起こさず、 commit 後に useEffect 経由で flush する
+	// (typescript-reviewer M-3 反映、 React Strict Mode の double-call で
+	// setSelectionRange が連発するのを防ぐ)。
+	const pendingCaretRef = useRef<number | null>(null);
+
+	useEffect(() => {
+		if (pendingCaretRef.current === null) return;
+		const target = pendingCaretRef.current;
+		pendingCaretRef.current = null;
+		const ta = textareaRef.current;
+		if (ta) {
+			ta.focus();
+			ta.setSelectionRange(target, target);
+		}
+	});
 
 	const tags = tagsInput
 		.split(/[,\s]+/)
@@ -117,28 +137,24 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 
 	const handleUploadedImage = useCallback(
 		(image: UploadedImage, filename: string) => {
-			const ta = textareaRef.current;
-			const caret = ta?.selectionStart ?? body.length;
+			// caret 位置は textarea から live で読む (typescript-reviewer H-2)。
+			// 取れない (focus 失われ) ときは current state の末尾を使う。
 			setBody((current) => {
+				const caret = textareaRef.current?.selectionStart ?? current.length;
 				const { next, nextCaret } = insertImageMarkdown(
 					current,
 					caret,
 					image,
 					filename,
 				);
-				// 描画後に caret 位置を update する (textarea の selectionStart は
-				// state 反映後でないと更新できないので microtask に逃がす)。
-				queueMicrotask(() => {
-					if (textareaRef.current) {
-						textareaRef.current.focus();
-						textareaRef.current.setSelectionRange(nextCaret, nextCaret);
-					}
-				});
+				// updater は pure に保ち、 caret 復元は useEffect で flush。
+				pendingCaretRef.current = nextCaret;
 				return next;
 			});
 			toast.success(`「${filename}」 を追加しました`);
 		},
-		[body.length],
+		// dep 空: setBody は stable、 textareaRef / pendingCaretRef も ref で stable。
+		[],
 	);
 
 	const handleUploadFailed = useCallback(
