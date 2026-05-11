@@ -14,7 +14,7 @@
  * `dispatchAComposeOpen()` を呼ぶだけになり、 dialog state は持たない。
  */
 
-import { useEffect, useState } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 
 import ComposeTweetDialog from "@/components/tweets/ComposeTweetDialog";
 
@@ -27,7 +27,7 @@ export function dispatchAComposeOpen(): void {
 	}
 }
 
-export default function AComposeDialogHost() {
+export default function AComposeDialogHost(): ReactElement {
 	const [open, setOpen] = useState(false);
 
 	useEffect(() => {

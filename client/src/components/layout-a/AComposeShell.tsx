@@ -34,7 +34,7 @@ export default function AComposeShell() {
 		<button
 			type="button"
 			aria-label="ツイートを投稿する"
-			onClick={() => dispatchAComposeOpen()}
+			onClick={dispatchAComposeOpen}
 			className="flex w-full items-start gap-2.5 border-b px-5 py-3 text-left transition-colors hover:bg-[color:var(--a-bg-subtle)] focus-visible:bg-[color:var(--a-bg-subtle)] focus-visible:outline-none"
 			style={{ borderColor: "var(--a-border)" }}
 		>

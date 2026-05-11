@@ -73,12 +73,13 @@ test.describe("ALeftNav 「投稿する」 button が全ページで動く (#595
 			const page = await ctx.newPage();
 			await page.goto(`${BASE}${path}`);
 
-			// ALeftNav の cyan「投稿する」 button (aria-label="ツイートを投稿する")
-			// は inline compose 行と aria-label が同じなので、 home では複数 hit する。
-			// LeftNav 側を狙うため、 全部 first() で取って click する。
+			// ALeftNav の cyan「投稿する」 button は home の inline compose 行と
+			// aria-label が同じ ("ツイートを投稿する")。 LeftNav 側に scope を絞るため
+			// ALeftNav root の <aside aria-label="メインナビゲーション"> を起点に取る。
+			// home でも他ページでも一意に決まる (typescript-reviewer MEDIUM 反映)。
 			const trigger = page
-				.getByRole("button", { name: "ツイートを投稿する" })
-				.first();
+				.locator('aside[aria-label="メインナビゲーション"]')
+				.getByRole("button", { name: "ツイートを投稿する" });
 			await expect(trigger).toBeVisible({ timeout: 15000 });
 			await trigger.click();
 
