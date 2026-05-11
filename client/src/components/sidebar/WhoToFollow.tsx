@@ -31,9 +31,17 @@ type LoadState = "loading" | "ready" | "error";
 
 interface WhoToFollowProps {
 	isAuthenticated: boolean;
+	/**
+	 * #557: ARightRail (A direction) で APanel に内包する場合に外側 section の
+	 * card style (border + bg + p-4) を抑制する。デフォルトは旧 RightSidebar 互換。
+	 */
+	bare?: boolean;
 }
 
-export default function WhoToFollow({ isAuthenticated }: WhoToFollowProps) {
+export default function WhoToFollow({
+	isAuthenticated,
+	bare = false,
+}: WhoToFollowProps) {
 	const [users, setUsers] = useState<SidebarUser[]>([]);
 	const [state, setState] = useState<LoadState>("loading");
 
@@ -67,15 +75,18 @@ export default function WhoToFollow({ isAuthenticated }: WhoToFollowProps) {
 
 	return (
 		<section
-			aria-labelledby="sidebar-wtf-heading"
-			className="rounded-lg border border-border bg-card p-4"
+			aria-label={bare ? "おすすめユーザー" : undefined}
+			aria-labelledby={bare ? undefined : "sidebar-wtf-heading"}
+			className={bare ? "" : "rounded-lg border border-border bg-card p-4"}
 		>
-			<h2
-				id="sidebar-wtf-heading"
-				className="mb-3 text-sm font-semibold text-foreground"
-			>
-				おすすめユーザー
-			</h2>
+			{!bare && (
+				<h2
+					id="sidebar-wtf-heading"
+					className="mb-3 text-sm font-semibold text-foreground"
+				>
+					おすすめユーザー
+				</h2>
+			)}
 
 			{state === "loading" && (
 				<ul className="space-y-3">

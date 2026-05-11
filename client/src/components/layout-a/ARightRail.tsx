@@ -23,7 +23,7 @@ function APanel({ title, children }: { title: string; children: ReactNode }) {
 	return (
 		<div className="mb-3 rounded-lg border border-[color:var(--a-border)] bg-[color:var(--a-bg)] px-3 py-2.5">
 			<div
-				className="mb-1.5 text-[color:var(--a-text-subtle)] uppercase"
+				className="mb-1.5 uppercase text-[color:var(--a-text-subtle)]"
 				style={{
 					fontFamily: "var(--a-font-mono)",
 					fontSize: 10.5,
@@ -54,7 +54,7 @@ export default function ARightRail() {
 				className="mb-3 block rounded-lg border border-[color:var(--a-border)] bg-[color:var(--a-bg)] px-3 py-2.5 transition-colors hover:border-[color:var(--a-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 			>
 				<div
-					className="flex items-center gap-2 text-[color:var(--a-text-subtle)] uppercase"
+					className="flex items-center gap-2 uppercase text-[color:var(--a-text-subtle)]"
 					style={{
 						fontFamily: "var(--a-font-mono)",
 						fontSize: 11,
@@ -79,15 +79,11 @@ export default function ARightRail() {
 			</Link>
 
 			<APanel title="Trending tags · 24h">
-				<div className="-mx-1">
-					<TrendingTags />
-				</div>
+				<TrendingTags bare />
 			</APanel>
 
 			<APanel title="Who to follow">
-				<div className="-mx-1">
-					<WhoToFollow isAuthenticated={isAuthenticated} />
-				</div>
+				<WhoToFollow isAuthenticated={isAuthenticated} bare />
 			</APanel>
 
 			<div

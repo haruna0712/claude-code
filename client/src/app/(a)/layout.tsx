@@ -32,9 +32,12 @@ export default function ALayout({ children }: AppLayoutProps) {
 		>
 			<ALeftNav />
 			{/* #554: overflow-hidden を外して body scroll に。これで header の
-			    `position: sticky top-0` が browser viewport 基準で固定される。 */}
+			    `position: sticky top-0` が browser viewport 基準で固定される。
+			    #557: 中央列に max-width 800px を入れて 1920px wide での読みづらさを解消。
+			    grid の 1fr column 内で `mx-auto` + width clamp で中央寄せ。 */}
 			<main
-				className="flex min-w-0 flex-col sm:border-r sm:border-[color:var(--a-border)]"
+				className="mx-auto flex w-full min-w-0 flex-col sm:border-r sm:border-[color:var(--a-border)]"
+				style={{ maxWidth: 800 }}
 				aria-label="メインコンテンツ"
 			>
 				<AMobileAppBar />

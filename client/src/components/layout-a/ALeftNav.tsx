@@ -1,15 +1,16 @@
 "use client";
 
 /**
- * A direction Left Nav (#550 Phase 10 POC).
+ * A direction Left Nav (#550 Phase 10 POC, polished in #557 Phase B-0-6).
  *
  * `/workspace/staticfiles/test/parts/home-a.jsx` LeftNav の Next.js 移植。
  * Linear / Vercel ベース、light theme、cyan accent、compact density (232px 幅)。
  *
- * - Brand mark + "devstream"
- * - Nav items with badge support (将来 useUnreadCount で badge を表示)
- * - Accent ツイート button
- * - Avatar pod at bottom
+ * #557 で追加:
+ *  - 通知 badge を `useUnreadCount` で wire (cyan pill, 99+ で打ち切り)
+ *  - 全 NavItem / pod に `focus-visible:outline-2 outline-[var(--a-accent)]` (WCAG 2.4.7)
+ *  - 非 active 時の `hover:bg-[var(--a-bg-muted)]` (現在 transparent で hover 無反応)
+ *  - Explore icon を Compass → Hash (reference home-a.jsx の `ic:'hash'` に揃える)
  *
  * 既存 `LeftNavbar` とは別実装で並存 (POC、Phase B で統一予定)。
  */
@@ -19,10 +20,10 @@ import { usePathname } from "next/navigation";
 import {
 	Bell,
 	ChevronDown,
-	Compass,
 	Feather,
 	FileText,
 	Flame,
+	Hash,
 	Home,
 	LogOut,
 	MessageSquare,
@@ -41,20 +42,28 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuthNavigation } from "@/hooks";
+import { useUnreadCount } from "@/hooks/useUnreadCount";
 import { useUserProfile } from "@/hooks/useUseProfile";
 
-interface NavItem {
+interface NavItemDef {
 	href: string;
 	label: string;
 	Icon: LucideIcon;
 	requiresAuth?: boolean;
+	badgeKey?: "notifications";
 }
 
-const NAV_ITEMS: NavItem[] = [
+const NAV_ITEMS: NavItemDef[] = [
 	{ href: "/", label: "ホーム", Icon: Home },
-	{ href: "/explore", label: "Explore", Icon: Compass },
+	{ href: "/explore", label: "Explore", Icon: Hash },
 	{ href: "/search", label: "検索", Icon: Search },
-	{ href: "/notifications", label: "通知", Icon: Bell, requiresAuth: true },
+	{
+		href: "/notifications",
+		label: "通知",
+		Icon: Bell,
+		requiresAuth: true,
+		badgeKey: "notifications",
+	},
 	{
 		href: "/messages",
 		label: "メッセージ",
@@ -85,14 +94,41 @@ function BrandMark({ size = 22 }: { size?: number }) {
 	);
 }
 
+function NavBadge({ count }: { count: number }) {
+	if (count <= 0) return null;
+	const label = count > 99 ? "99+" : String(count);
+	return (
+		<span
+			aria-label={`未読 ${label} 件`}
+			className="ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 text-white"
+			style={{
+				background: "var(--a-accent)",
+				fontFamily: "var(--a-font-mono)",
+				fontSize: 10.5,
+				lineHeight: "16px",
+				height: 16,
+			}}
+		>
+			{label}
+		</span>
+	);
+}
+
 export default function ALeftNav() {
 	const pathname = usePathname();
 	const { profile } = useUserProfile();
 	const { isAuthenticated, handleLogout } = useAuthNavigation();
+	// 通知 badge: ログイン中のみ polling (`useUnreadCount` 側で enabled=false なら no-op)
+	const { count: notifUnread } = useUnreadCount(isAuthenticated);
 
 	const visibleItems = NAV_ITEMS.filter(
 		(it) => !it.requiresAuth || isAuthenticated,
 	);
+
+	const itemBadgeCount = (key: NavItemDef["badgeKey"]): number => {
+		if (key === "notifications") return notifUnread;
+		return 0;
+	};
 
 	return (
 		<aside
@@ -113,12 +149,15 @@ export default function ALeftNav() {
 			{visibleItems.map((item) => {
 				const isActive =
 					item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+				const badgeCount = itemBadgeCount(item.badgeKey);
 				return (
 					<Link
 						key={item.href}
 						href={item.href}
 						aria-current={isActive || undefined}
-						className="flex items-center gap-3 rounded-md py-1.5 pr-2.5 transition-colors"
+						className={`flex items-center gap-3 rounded-md py-1.5 pr-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)] ${
+							isActive ? "" : "hover:bg-[color:var(--a-bg-muted)]"
+						}`}
 						style={{
 							paddingLeft: 7,
 							borderLeft: `2px solid ${
@@ -131,6 +170,7 @@ export default function ALeftNav() {
 					>
 						<item.Icon className="size-4" />
 						<span className="flex-1 truncate">{item.label}</span>
+						<NavBadge count={badgeCount} />
 					</Link>
 				);
 			})}
@@ -138,9 +178,16 @@ export default function ALeftNav() {
 			{isAuthenticated && profile && (
 				<Link
 					href={`/u/${profile.username}`}
-					className="flex items-center gap-3 rounded-md py-1.5 pr-2.5 transition-colors"
+					aria-current={
+						pathname.startsWith(`/u/${profile.username}`) || undefined
+					}
+					className={`flex items-center gap-3 rounded-md py-1.5 pr-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)] ${
+						pathname.startsWith(`/u/${profile.username}`)
+							? ""
+							: "hover:bg-[color:var(--a-bg-muted)]"
+					}`}
 					style={{
-						paddingLeft: pathname.startsWith(`/u/${profile.username}`) ? 7 : 9,
+						paddingLeft: 7,
 						borderLeft: `2px solid ${
 							pathname.startsWith(`/u/${profile.username}`)
 								? "var(--a-accent)"
@@ -250,7 +297,7 @@ export default function ALeftNav() {
 				<div className="mt-auto flex items-center gap-2 rounded-lg border border-[color:var(--a-border)] p-2">
 					<Link
 						href="/login"
-						className="flex-1 text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)]"
+						className="flex-1 text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 						style={{ fontSize: 12.5 }}
 					>
 						ログインして始める →

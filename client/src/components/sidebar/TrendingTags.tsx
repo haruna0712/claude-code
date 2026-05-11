@@ -19,7 +19,15 @@ const MAX_ITEMS = 10;
 
 type LoadState = "loading" | "ready" | "error";
 
-export default function TrendingTags() {
+interface TrendingTagsProps {
+	/**
+	 * #557: ARightRail (A direction) で APanel に内包する場合に外側 section の
+	 * card style (border + bg + p-4) を抑制する。デフォルトは旧 RightSidebar 互換。
+	 */
+	bare?: boolean;
+}
+
+export default function TrendingTags({ bare = false }: TrendingTagsProps) {
 	const [tags, setTags] = useState<TrendingTag[]>([]);
 	const [state, setState] = useState<LoadState>("loading");
 
@@ -42,15 +50,18 @@ export default function TrendingTags() {
 
 	return (
 		<section
-			aria-labelledby="sidebar-trending-heading"
-			className="rounded-lg border border-border bg-card p-4"
+			aria-label={bare ? "トレンドタグ" : undefined}
+			aria-labelledby={bare ? undefined : "sidebar-trending-heading"}
+			className={bare ? "" : "rounded-lg border border-border bg-card p-4"}
 		>
-			<h2
-				id="sidebar-trending-heading"
-				className="mb-3 text-sm font-semibold text-foreground"
-			>
-				トレンドタグ
-			</h2>
+			{!bare && (
+				<h2
+					id="sidebar-trending-heading"
+					className="mb-3 text-sm font-semibold text-foreground"
+				>
+					トレンドタグ
+				</h2>
+			)}
 
 			{state === "loading" && (
 				<ul className="space-y-2">
@@ -86,7 +97,7 @@ export default function TrendingTags() {
 								className="flex items-center justify-between rounded px-2 py-1.5 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							>
 								<span className="flex items-center gap-2">
-									<span className="text-xs font-bold text-lime-600 dark:text-lime-400 w-6">
+									<span className="w-6 text-xs font-bold text-lime-600 dark:text-lime-400">
 										#{tag.rank}
 									</span>
 									{tag.emoji && <span aria-hidden="true">{tag.emoji}</span>}
