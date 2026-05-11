@@ -18,17 +18,27 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
 	Bell,
+	ChevronDown,
 	Compass,
 	Feather,
 	FileText,
 	Flame,
 	Home,
+	LogOut,
 	MessageSquare,
 	Search,
+	Settings,
 	User,
 	type LucideIcon,
 } from "lucide-react";
 
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuthNavigation } from "@/hooks";
 import { useUserProfile } from "@/hooks/useUseProfile";
 
@@ -77,7 +87,7 @@ function BrandMark({ size = 22 }: { size?: number }) {
 export default function ALeftNav() {
 	const pathname = usePathname();
 	const { profile } = useUserProfile();
-	const { isAuthenticated } = useAuthNavigation();
+	const { isAuthenticated, handleLogout } = useAuthNavigation();
 
 	const visibleItems = NAV_ITEMS.filter(
 		(it) => !it.requiresAuth || isAuthenticated,
@@ -165,37 +175,77 @@ export default function ALeftNav() {
 				</Link>
 			)}
 
-			<div className="mt-auto flex items-center gap-2 rounded-lg border border-[color:var(--a-border)] p-2">
-				{profile ? (
-					<>
-						<div
-							className="grid size-7 place-items-center rounded-full font-semibold text-white"
-							style={{ background: "hsl(200 70% 32%)", fontSize: 11.5 }}
-							aria-hidden
+			{profile ? (
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<button
+							type="button"
+							aria-label={`${profile.display_name || profile.username} のメニューを開く`}
+							className="mt-auto flex items-center gap-2 rounded-lg border border-[color:var(--a-border)] p-2 transition-colors hover:bg-[color:var(--a-bg-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 						>
-							{(profile.display_name || profile.username)
-								.slice(0, 2)
-								.toUpperCase()}
-						</div>
-						<div className="min-w-0 flex-1 leading-tight">
 							<div
-								className="truncate font-medium text-[color:var(--a-text)]"
-								style={{ fontSize: 12.5 }}
+								className="grid size-7 place-items-center rounded-full font-semibold text-white"
+								style={{ background: "hsl(200 70% 32%)", fontSize: 11.5 }}
+								aria-hidden
 							>
-								{profile.display_name || profile.username}
+								{(profile.display_name || profile.username)
+									.slice(0, 2)
+									.toUpperCase()}
 							</div>
-							<div
-								className="truncate text-[color:var(--a-text-subtle)]"
-								style={{
-									fontSize: 11.5,
-									fontFamily: "var(--a-font-mono)",
-								}}
+							<div className="min-w-0 flex-1 text-left leading-tight">
+								<div
+									className="truncate font-medium text-[color:var(--a-text)]"
+									style={{ fontSize: 12.5 }}
+								>
+									{profile.display_name || profile.username}
+								</div>
+								<div
+									className="truncate text-[color:var(--a-text-subtle)]"
+									style={{
+										fontSize: 11.5,
+										fontFamily: "var(--a-font-mono)",
+									}}
+								>
+									@{profile.username}
+								</div>
+							</div>
+							<ChevronDown
+								className="size-3.5 text-[color:var(--a-text-subtle)]"
+								aria-hidden
+							/>
+						</button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" side="top" className="w-56">
+						<DropdownMenuItem asChild>
+							<Link
+								href={`/u/${profile.username}`}
+								className="flex items-center gap-2"
 							>
-								@{profile.username}
-							</div>
-						</div>
-					</>
-				) : (
+								<User className="size-4" />
+								プロフィール
+							</Link>
+						</DropdownMenuItem>
+						<DropdownMenuItem asChild>
+							<Link
+								href="/settings/profile"
+								className="flex items-center gap-2"
+							>
+								<Settings className="size-4" />
+								設定
+							</Link>
+						</DropdownMenuItem>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem
+							onSelect={() => handleLogout()}
+							className="flex items-center gap-2 text-[color:var(--a-danger)]"
+						>
+							<LogOut className="size-4" />
+							ログアウト
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			) : (
+				<div className="mt-auto flex items-center gap-2 rounded-lg border border-[color:var(--a-border)] p-2">
 					<Link
 						href="/login"
 						className="flex-1 text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)]"
@@ -203,8 +253,8 @@ export default function ALeftNav() {
 					>
 						ログインして始める →
 					</Link>
-				)}
-			</div>
+				</div>
+			)}
 		</aside>
 	);
 }
