@@ -1,8 +1,8 @@
 """Article image confirm サービス (#527 / Phase 6 P6-04).
 
-presigned PUT 完了後、 S3 上の実物を ``head_object`` で再検証してから
-``ArticleImage`` の orphan (article=None) を作成する。 frontend は本 service の
-返却 ``ArticleImage`` の ``url`` を Markdown 本文に ``![](url)`` として埋め込む想定。
+presigned POST で S3 へのアップロード完了後、 実物を ``head_object`` で再検証してから
+``ArticleImage`` の orphan (article=None) を作成する。 frontend は本 service の返却
+``ArticleImage`` の ``url`` を Markdown 本文に ``![](url)`` として埋め込む想定。
 
 責務分離:
 - 入力検証 / S3 確認 / ORM 作成 をこの module に集約する。 view 層は HTTP 変換のみ。
@@ -12,7 +12,6 @@ presigned PUT 完了後、 S3 上の実物を ``head_object`` で再検証して
 from __future__ import annotations
 
 import posixpath
-from typing import Any
 
 from django.contrib.auth.models import AbstractBaseUser
 from django.core.exceptions import ValidationError
@@ -31,7 +30,7 @@ def confirm_image(
     width: int,
     height: int,
 ) -> ArticleImage:
-    """presigned PUT 完了後の画像を確定し、 orphan ``ArticleImage`` を作成する.
+    """presigned POST 完了後の画像を確定し、 orphan ``ArticleImage`` を作成する.
 
     Args:
         user: アップロード実行者 (presign 時の user と一致前提、 view 層で検証済み)。
@@ -46,15 +45,21 @@ def confirm_image(
         作成された orphan ``ArticleImage`` (``article=None``)。
 
     Raises:
-        ValidationError: prefix mismatch / S3 上に実物なし / metadata 不一致 /
-            入力検証失敗。
+        ValidationError: prefix mismatch / s3_key 内に traversal 表記 / S3 上に実物なし /
+            metadata 不一致 / 入力検証失敗。
     """
 
     # 1. s3_key prefix を再検証する。 presign 経由で生成した key だが、 独立コード経由で
     #    confirm 呼びされた場合 / フロントの key 改ざんに対する保険。
-    #    ``posixpath.normpath`` で ``..`` を実際に collapse する (DM HIGH H-1 と同パターン)。
+    #    ``posixpath.normpath`` で ``..`` を実際に collapse し、 元の入力と一致しなければ拒否
+    #    (S3 はキーをリテラル文字列として扱うので、 ``articles/1/../1/foo`` のような形を
+    #    DB に書き込まないようにする)。
     expected_prefix = f"articles/{user.pk}/"
     normalised = posixpath.normpath(s3_key)
+    if normalised != s3_key:
+        raise ValidationError(
+            f"s3_key contains path traversal or non-canonical sequences: {s3_key!r}"
+        )
     if not normalised.startswith(expected_prefix):
         raise ValidationError(f"s3_key must start with '{expected_prefix}': got {s3_key!r}")
 
@@ -89,9 +94,16 @@ def confirm_image(
     )
 
 
-def _validate_dimensions(*, width: Any, height: Any) -> None:
-    """width / height の境界検証 (1..10000 の正整数)."""
+def _validate_dimensions(*, width: int, height: int) -> None:
+    """width / height の境界検証 (1..10000 の正整数).
+
+    serializer 側で同等の検証を行うが、 service が他経路から直接呼ばれた場合の保険。
+    ``isinstance(value, bool)`` を先に弾く: Python は ``bool`` を ``int`` のサブクラスに
+    しているため ``True`` / ``False`` が通過しないように明示する。
+    """
 
     for label, value in (("width", width), ("height", height)):
-        if not isinstance(value, int) or value < 1 or value > 10000:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValidationError(f"{label} must be int (got {type(value).__name__})")
+        if value < 1 or value > 10000:
             raise ValidationError(f"{label} must be 1..10000 (got {value!r})")

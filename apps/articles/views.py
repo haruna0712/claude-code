@@ -59,11 +59,20 @@ class _ArticleWriteThrottle(throttling.UserRateThrottle):
     scope = "article_write"
 
 
-class _ArticleImagePresignThrottle(throttling.ScopedRateThrottle):
+class _ArticleImagePresignThrottle(throttling.UserRateThrottle):
+    """画像 presign URL 発行 throttle (article_image_presign scope).
+
+    NOTE: ``ScopedRateThrottle`` は view 側に ``throttle_scope`` 属性が必要で、
+    クラス属性 ``scope`` だけでは no-op になる。 ``_ArticleWriteThrottle`` と同様に
+    ``UserRateThrottle`` 継承 + クラス属性 ``scope`` で適用される。
+    """
+
     scope = "article_image_presign"
 
 
-class _ArticleImageConfirmThrottle(throttling.ScopedRateThrottle):
+class _ArticleImageConfirmThrottle(throttling.UserRateThrottle):
+    """画像 confirm throttle (article_image_confirm scope).  see notes 上記."""
+
     scope = "article_image_confirm"
 
 
@@ -309,7 +318,7 @@ class PresignArticleImageView(APIView):
 
 
 class ConfirmArticleImageView(APIView):
-    """``POST /api/v1/articles/images/confirm/``: presign で PUT 完了した画像を確定する.
+    """``POST /api/v1/articles/images/confirm/``: presigned POST で完了した画像を確定する.
 
     body: ``{"s3_key", "filename", "mime_type", "size", "width", "height"}``
     response (201): ``ArticleImageOutputSerializer`` 全フィールド (id, s3_key, url, width, height, size, created_at)

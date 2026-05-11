@@ -54,9 +54,12 @@ PRESIGN_EXPIRES_SECONDS: Final[int] = 5 * 60
 #: filename の文字長上限。 安全側で 200 文字 (DM 添付と整合)。
 FILENAME_MAX_LENGTH: Final[int] = 200
 
-#: filename の不許可 character pattern。 制御文字 / NUL / sep / parent traversal を排除。
-#  Unicode (日本語ファイル名) は許可するが ``/`` ``\`` ``..`` はブロック。
-_FILENAME_INVALID_PATTERN: Final[re.Pattern[str]] = re.compile(r"[\x00-\x1f\x7f/\\]|\.\.")
+#: filename の不許可 character pattern。 制御文字 / NUL / path separator を排除。
+#  Unicode (日本語ファイル名) と中間の連続ドット (例: ``photo..backup.png``) は許可する。
+#  パストラバーサルは ``/`` ``\`` をブロックすれば防げる (single component の filename 文脈)。
+#  filename が完全一致で ``..`` のみのケースは別途 :func:`validate_image_request` で弾く
+#  (拡張子チェックで rfind 後の actual_ext が空文字になり ValidationError)。
+_FILENAME_INVALID_PATTERN: Final[re.Pattern[str]] = re.compile(r"[\x00-\x1f\x7f/\\]")
 
 
 # -----------------------------------------------------------------------------
@@ -152,10 +155,10 @@ def validate_image_request(
 # -----------------------------------------------------------------------------
 
 
-def build_s3_key(*, user_id: Any, ext: str) -> str:
+def build_s3_key(*, user_id: int, ext: str) -> str:
     """``articles/<user_id>/<image_uuid>.<ext>`` を生成.
 
-    user_id は path-safe な値であること (int / UUID は問題なし)。
+    user_id は ``User.pk`` (BigAutoField → int) 前提。
     """
 
     return f"articles/{user_id}/{uuid.uuid4()}.{ext}"
@@ -163,7 +166,7 @@ def build_s3_key(*, user_id: Any, ext: str) -> str:
 
 def generate_presigned_image_upload(
     *,
-    user_id: Any,
+    user_id: int,
     mime_type: str,
     size: int,
     filename: str,
@@ -244,6 +247,7 @@ def head_object(*, s3_key: str) -> S3ObjectInfo:
             raise ValidationError(f"object not found: {s3_key}") from exc
         logger.warning(
             "articles.head_object.unexpected",
+            exc_info=exc,
             extra={
                 "event": "articles.head_object.unexpected",
                 "code": code,

@@ -190,6 +190,64 @@ def test_confirm_view_creates_orphan_article_image(settings) -> None:
 
 
 @pytest.mark.django_db
+def test_confirm_view_rejects_content_type_mismatch(settings) -> None:
+    """T5b (spec §5 T6 同等の Content-Type 版): head_object の ContentType が申告と
+    不一致 → 400、 row 作成されない (MIME 偽装防止)."""
+
+    settings.AWS_STORAGE_BUCKET_NAME = "test-bucket"
+    settings.AWS_S3_REGION_NAME = "ap-northeast-1"
+    user = _user("alice")
+    s3_key = f"articles/{user.pk}/abcdef12-3456-7890-abcd-ef1234567890.png"
+
+    with patch("apps.articles.s3_presign._build_s3_client") as build_client:
+        build_client.return_value.head_object.return_value = _fake_head_object(
+            content_length=1024,
+            content_type="image/jpeg",  # 申告は image/png → 不一致
+        )
+        resp = _client_for(user).post(
+            reverse("articles:image-confirm"),
+            {
+                "s3_key": s3_key,
+                "filename": "shot.png",
+                "mime_type": "image/png",
+                "size": 1024,
+                "width": 800,
+                "height": 600,
+            },
+            format="json",
+        )
+
+    assert resp.status_code == 400
+    assert ArticleImage.objects.filter(s3_key=s3_key).count() == 0
+
+
+@pytest.mark.django_db
+def test_confirm_view_rejects_path_traversal_in_key() -> None:
+    """T7b: s3_key に ``..`` を含むと posixpath.normpath で正規化後と元が一致せず 400.
+
+    `articles/<user>/../<user>/foo.png` のような形は、 正規化後は self-prefix に
+    一致してしまうが、 元の文字列に traversal 表記があるので DB 行を作らない。
+    """
+
+    user = _user("alice")
+    s3_key = f"articles/{user.pk}/sub/../malicious.png"
+    resp = _client_for(user).post(
+        reverse("articles:image-confirm"),
+        {
+            "s3_key": s3_key,
+            "filename": "shot.png",
+            "mime_type": "image/png",
+            "size": 1024,
+            "width": 800,
+            "height": 600,
+        },
+        format="json",
+    )
+    assert resp.status_code == 400
+    assert ArticleImage.objects.filter(s3_key=s3_key).count() == 0
+
+
+@pytest.mark.django_db
 def test_confirm_view_rejects_size_mismatch() -> None:
     """T6: head_object の ContentLength が申告と不一致 → 400、 row 作成されない."""
 
