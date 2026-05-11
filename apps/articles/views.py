@@ -361,6 +361,12 @@ class ConfirmArticleImageView(APIView):
             )
         except DjangoValidationError as exc:
             raise DRFValidationError(detail=exc.messages) from exc
+        except IntegrityError as exc:
+            # database-reviewer HIGH H-1: 同一 s3_key で confirm が二重呼び出しされた
+            # 場合 (network retry / 二重 submit) は unique constraint が走り
+            # IntegrityError になる。 そのまま 500 にせず 400 に変換して
+            # 「既に確定済み」 と明示する。 既存 Article CRUD の slug 衝突と同じ流儀。
+            raise DRFValidationError(detail=["この s3_key は既に確定済みです"]) from exc
 
         logger.info(
             "articles.image_confirm.created",

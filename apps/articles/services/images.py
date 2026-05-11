@@ -15,6 +15,7 @@ import posixpath
 
 from django.contrib.auth.models import AbstractBaseUser
 from django.core.exceptions import ValidationError
+from django.db import transaction
 
 from apps.articles import s3_presign as _presign
 from apps.articles.models import ArticleImage
@@ -70,6 +71,14 @@ def confirm_image(
     _validate_dimensions(width=width, height=height)
 
     # 4. S3 で実物を再検証。 frontend の申告は信用しない (security CRITICAL)。
+    #
+    # NOTE (database-reviewer L-1): head_object (外部 I/O) と ArticleImage.create
+    # は ``transaction.atomic`` で包んでいない。 head_object 完了後に DB insert が
+    # 失敗した場合、 S3 上に object が残るが DB row が無い「孤立 S3 object」 になる。
+    # これは presign 発行 → S3 PUT 成功 → confirm 失敗 (size mismatch 等) と同じ
+    # 結果で、 S3 lifecycle rule (365 日、 follow-up issue) で最終的に回収される。
+    # atomic で包むと head_object の I/O 待ちの間 DB connection を保持してしまう
+    # ため意図的に外している。
     info = _presign.head_object(s3_key=s3_key)
     if info.content_length != size:
         raise ValidationError(
@@ -82,16 +91,21 @@ def confirm_image(
         )
 
     # 5. orphan ArticleImage を作成。 後で article 保存時に本文 URL から binding する。
+    # database-reviewer H-1: unique(s3_key) で同一 key 二重 confirm 時 IntegrityError
+    # が走るが、 outer の implicit transaction を broken state にしないため
+    # transaction.atomic で savepoint を切る (caller は IntegrityError を catch して
+    # 400 に変換できる)。
     url = _presign.public_url_for(s3_key=s3_key)
-    return ArticleImage.objects.create(
-        article=None,
-        uploader=user,
-        s3_key=s3_key,
-        url=url,
-        width=width,
-        height=height,
-        size=size,
-    )
+    with transaction.atomic():
+        return ArticleImage.objects.create(
+            article=None,
+            uploader=user,
+            s3_key=s3_key,
+            url=url,
+            width=width,
+            height=height,
+            size=size,
+        )
 
 
 def _validate_dimensions(*, width: int, height: int) -> None:

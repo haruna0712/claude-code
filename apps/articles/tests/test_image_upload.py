@@ -572,6 +572,50 @@ def test_confirm_image_rejects_bool_as_dimension() -> None:
 
 
 # ---------------------------------------------------------------------------
+# IntegrityError → 400 (database-reviewer HIGH H-1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_confirm_view_returns_400_on_duplicate_s3_key(settings) -> None:
+    """H-1: 同一 s3_key で confirm が二重呼び出しされたら 500 ではなく 400 に変換.
+
+    network retry / 二重 submit が起きたケースを想定。 unique constraint で
+    IntegrityError が走るが、 view 層で DRFValidationError に変換する。
+    """
+
+    settings.AWS_STORAGE_BUCKET_NAME = "test-bucket"
+    settings.AWS_S3_REGION_NAME = "ap-northeast-1"
+    user = _user("alice")
+    s3_key = f"articles/{user.pk}/abcdef12-3456-7890-abcd-ef1234567890.png"
+
+    payload = {
+        "s3_key": s3_key,
+        "filename": "shot.png",
+        "mime_type": "image/png",
+        "size": 1024,
+        "width": 800,
+        "height": 600,
+    }
+
+    with patch("apps.articles.s3_presign._build_s3_client") as build_client:
+        build_client.return_value.head_object.return_value = _fake_head_object(
+            content_length=1024,
+            content_type="image/png",
+        )
+        # 1 回目: 201 で確定する
+        resp1 = _client_for(user).post(reverse("articles:image-confirm"), payload, format="json")
+        assert resp1.status_code == 201
+
+        # 2 回目: 既に確定済の s3_key なので 400 (500 にはならない)
+        resp2 = _client_for(user).post(reverse("articles:image-confirm"), payload, format="json")
+
+    assert resp2.status_code == 400
+    # 重複しても DB には 1 行だけ残る
+    assert ArticleImage.objects.filter(s3_key=s3_key).count() == 1
+
+
+# ---------------------------------------------------------------------------
 # Conditions assertion (review MEDIUM-3)
 # ---------------------------------------------------------------------------
 
