@@ -1,13 +1,10 @@
 /**
- * /  ホームページ (Phase 10 A direction POC, #550).
+ * /  ホームページ (Phase B-1-0 #564 で (a)/page.tsx から (template)/page.tsx に移動).
  *
- * 旧 `(template)/page.tsx` を `(a)` 配下に移植。
+ * 未ログイン → ランディング (A direction の light theme)
+ * ログイン済 → HomeFeed (recommended/following タイムライン) + sticky header + AComposeShell
  *
- * 未ログイン → ランディング (A direction の light theme で書き直し)
- * ログイン済 → HomeFeed (recommended/following タイムライン)
- *
- * 既存ロジック (serverFetch + 401 fallback) はそのまま、見た目だけ
- * Linear / Vercel ライクの light + cyan accent に揃える。
+ * 既存ロジック (serverFetch + 401 fallback) はそのまま。
  */
 import type { Metadata } from "next";
 import Link from "next/link";

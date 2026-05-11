@@ -1,35 +1,52 @@
-import LeftNavbar from "@/components/shared/navbar/LeftNavbar";
-import MobileNavbar from "@/components/shared/navbar/MobileNavbar";
-import RightSidebar from "@/components/sidebar/RightSidebar";
-import { cookies } from "next/headers";
-import React from "react";
+/**
+ * (template) route group layout — Phase B-1-0 (#564).
+ *
+ * 旧 LeftNavbar (dark) / MobileNavbar / RightSidebar から
+ * **A direction shell** (ALeftNav + AMobileAppBar + ARightRail + 800px center grid)
+ * に統一する。Phase B-0 で `/` だけだった A direction を全 (template) 配下 page に
+ * 拡大する。
+ *
+ * 3 カラム grid:
+ *   232px (ALeftNav) | 1fr → 800px max (center) | 320px (ARightRail, lg+)
+ *
+ * mobile (< sm): ALeftNav 非表示 → AMobileAppBar の bottom-tab + drawer
+ * tablet (< lg): ARightRail 非表示
+ *
+ * 各 page 本文 (TweetCard 等) は本 PR では未調整。dark theme 残骸が出る場合は
+ * 後続 issue (B-1-1〜) で個別に直す。
+ */
+
+import type { ReactNode } from "react";
+
+import ALeftNav from "@/components/layout-a/ALeftNav";
+import AMobileAppBar from "@/components/layout-a/AMobileShell";
+import ARightRail from "@/components/layout-a/ARightRail";
 
 interface LayoutProps {
-	children: React.ReactNode;
+	children: ReactNode;
 }
 
-export default function layout({ children }: LayoutProps) {
-	// #316: ログイン済かを cookie (`logged_in`) で判定して初期値として RightSidebar
-	// に渡す。#419: layout は CSR 遷移で再 render されないため、RightSidebar 内
-	// の useEffect でも document.cookie から再評価する (initial value にだけ使う)。
-	const initialIsAuthenticated = cookies().get("logged_in")?.value === "true";
-
+export default function TemplateLayout({ children }: LayoutProps) {
 	return (
-		<main className="bg-baby_veryBlack relative">
-			{/* #408: Navbar (logo + 上部固定 bar) を撤去。ロゴは LeftNavbar 上部へ移設。
-			    mobile (< sm) のハンバーガーは左上に独立 fixed で残す。 */}
-			<div className="fixed left-3 top-3 z-50 sm:hidden">
-				<MobileNavbar />
-			</div>
-			<div className="flex">
-				<LeftNavbar />
-				<section className="flex min-h-screen flex-1 flex-col px-4 pb-6 pt-6 sm:px-6 lg:px-8">
-					<div>{children}</div>
-				</section>
-				{/* #316: 全 (template) 配下 page で WhoToFollow / TrendingTags を表示。
-				    lg+ で表示、それ以下では非表示。 */}
-				<RightSidebar initialIsAuthenticated={initialIsAuthenticated} />
-			</div>
-		</main>
+		<div
+			className="grid min-h-screen"
+			style={{
+				background: "var(--a-bg)",
+				color: "var(--a-text)",
+				fontFamily: "var(--a-font-sans)",
+				gridTemplateColumns: "auto 1fr auto",
+			}}
+		>
+			<ALeftNav />
+			<main
+				className="mx-auto flex w-full min-w-0 flex-col sm:border-r sm:border-[color:var(--a-border)]"
+				style={{ maxWidth: 800 }}
+				aria-label="メインコンテンツ"
+			>
+				<AMobileAppBar />
+				{children}
+			</main>
+			<ARightRail />
+		</div>
 	);
 }
