@@ -9,6 +9,8 @@ import { describe, expect, it } from "vitest";
 
 import {
 	ArticleImageUploadError,
+	extractApiMessage,
+	guessExtension,
 	validateImageFile,
 } from "@/lib/api/articleImages";
 
@@ -72,5 +74,42 @@ describe("ArticleImageUploadError", () => {
 		expect(e.message).toBe("msg");
 		expect(e.step).toBe("presign");
 		expect(e).toBeInstanceOf(Error);
+	});
+});
+
+describe("guessExtension", () => {
+	it("maps each allowed mime to its canonical extension", () => {
+		expect(guessExtension("image/jpeg")).toBe("jpg");
+		expect(guessExtension("image/png")).toBe("png");
+		expect(guessExtension("image/webp")).toBe("webp");
+		expect(guessExtension("image/gif")).toBe("gif");
+	});
+
+	it("falls back to 'bin' for unknown mime", () => {
+		expect(guessExtension("application/octet-stream")).toBe("bin");
+		expect(guessExtension("")).toBe("bin");
+	});
+});
+
+describe("extractApiMessage", () => {
+	it("returns axios response.data.detail when present", () => {
+		const err = { response: { data: { detail: "bad request" } } };
+		expect(extractApiMessage(err, "fallback")).toBe("bad request");
+	});
+
+	it("returns first element when first field is an array of strings", () => {
+		const err = { response: { data: { mime_type: ["unsupported"] } } };
+		expect(extractApiMessage(err, "fallback")).toBe("unsupported");
+	});
+
+	it("returns Error.message when no response shape", () => {
+		const err = new Error("network down");
+		expect(extractApiMessage(err, "fallback")).toBe("network down");
+	});
+
+	it("returns fallback for unknown shapes", () => {
+		expect(extractApiMessage(null, "fallback")).toBe("fallback");
+		expect(extractApiMessage(undefined, "fallback")).toBe("fallback");
+		expect(extractApiMessage(42, "fallback")).toBe("fallback");
 	});
 });

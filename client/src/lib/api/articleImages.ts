@@ -222,7 +222,7 @@ export async function requestImageUpload(
 	}
 }
 
-function guessExtension(mime: string): string {
+export function guessExtension(mime: string): string {
 	switch (mime) {
 		case "image/jpeg":
 			return "jpg";
@@ -237,7 +237,7 @@ function guessExtension(mime: string): string {
 	}
 }
 
-function extractApiMessage(err: unknown, fallback: string): string {
+export function extractApiMessage(err: unknown, fallback: string): string {
 	if (err && typeof err === "object") {
 		const e = err as {
 			response?: { data?: { detail?: string; [k: string]: unknown } };
