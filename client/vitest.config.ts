@@ -28,12 +28,19 @@ export default defineConfig({
 				"src/components/reactions/**/*.tsx",
 				"src/components/tweets/RepostButton.tsx",
 				"src/components/tweets/PostDialog.tsx",
+				// P6-13 (#536) ArticleEditor + 画像 upload (typescript-reviewer M-6 反映)
+				"src/components/articles/ArticleEditor.tsx",
+				"src/hooks/useArticleImageUpload.ts",
+				"src/lib/markdown/**/*.tsx",
+				"src/lib/markdown/**/*.ts",
 			],
 			exclude: [
 				"src/lib/api/**/__tests__/**",
 				"src/components/**/__tests__/**",
 				"src/lib/timeline/**/__tests__/**",
 				"src/lib/sanitize/**/__tests__/**",
+				"src/lib/markdown/**/__tests__/**",
+				"src/hooks/__tests__/**",
 				"**/*.d.ts",
 			],
 			thresholds: {
