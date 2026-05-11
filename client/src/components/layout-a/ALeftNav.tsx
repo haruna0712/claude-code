@@ -32,6 +32,7 @@ import {
 	type LucideIcon,
 } from "lucide-react";
 
+import { dispatchAComposeOpen } from "@/components/layout-a/AComposeShell";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -160,10 +161,11 @@ export default function ALeftNav() {
 			)}
 
 			{isAuthenticated && (
-				<Link
-					href="/articles/new"
-					aria-label="ツイート / 記事を書く"
-					className="mt-3.5 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 font-medium text-white transition-opacity hover:opacity-90"
+				<button
+					type="button"
+					onClick={dispatchAComposeOpen}
+					aria-label="ツイートを投稿する"
+					className="mt-3.5 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 					style={{
 						background: "var(--a-accent)",
 						fontSize: 13.5,
@@ -172,7 +174,7 @@ export default function ALeftNav() {
 				>
 					<Feather className="size-3.5" />
 					投稿する
-				</Link>
+				</button>
 			)}
 
 			{profile ? (
