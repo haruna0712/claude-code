@@ -1,18 +1,18 @@
 /**
- * (a) route group layout — Phase 10 Claude Design A direction (#550 POC).
+ * (a) route group layout — Phase 10 Claude Design A direction.
  *
  * Linear / Vercel ベース light theme、3 カラム grid:
  *   232px (ALeftNav) | 1fr (center) | 320px (ARightRail, lg+)
  *
- * mobile (< sm): ALeftNav 非表示 (TODO: AMobileNav は Phase B で別途)
+ * mobile (< sm): ALeftNav 非表示 → AMobileAppBar (上部 app bar + 下部 tab bar
+ *                + drawer) で nav 代替 (#552 Phase B-0-1)
  * tablet (< lg): ARightRail 非表示
- *
- * `(template)` layout とは独立。POC では `/` (home) のみ本 layout を使う。
  */
 
 import type { ReactNode } from "react";
 
 import ALeftNav from "@/components/layout-a/ALeftNav";
+import AMobileAppBar from "@/components/layout-a/AMobileShell";
 import ARightRail from "@/components/layout-a/ARightRail";
 
 interface AppLayoutProps {
@@ -32,9 +32,10 @@ export default function ALayout({ children }: AppLayoutProps) {
 		>
 			<ALeftNav />
 			<main
-				className="flex flex-col overflow-hidden border-r border-[color:var(--a-border)]"
+				className="flex min-w-0 flex-col overflow-hidden sm:border-r sm:border-[color:var(--a-border)]"
 				aria-label="メインコンテンツ"
 			>
+				<AMobileAppBar />
 				{children}
 			</main>
 			<ARightRail />
