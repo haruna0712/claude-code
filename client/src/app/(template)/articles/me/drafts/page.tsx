@@ -13,7 +13,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Edit3, Feather } from "lucide-react";
 
-import { ApiServerError, serverFetch } from "@/lib/api/server";
+import { serverFetch } from "@/lib/api/server";
 import type { ArticleSummary } from "@/lib/api/articles";
 
 export const metadata: Metadata = {
@@ -31,11 +31,11 @@ async function fetchDraftsSSR(): Promise<ArticleSummary[]> {
 	try {
 		const page = await serverFetch<DraftListPage>("/articles/me/drafts/");
 		return page.results ?? [];
-	} catch (err) {
-		// 401 の救済は親の auth guard で済んでいる前提。 ここに 401 が来るのは
-		// 通常時にはあり得ない (cookie はあるのに backend 認証失敗) ので空配列で
-		// fallback する。 5xx 等も同様 — empty state を出して page を死なせない。
-		if (err instanceof ApiServerError) return [];
+	} catch {
+		// reviewer M-3 反映: ApiServerError も network 障害も同じく empty fallback
+		// する設計なので分岐を統合。 page は empty state で生き残らせる (auth guard
+		// が cookie で先に弾いているので、 ここに来るのは backend 不具合 / 一時的
+		// network 障害が主)。 詳細ログは server fetch 側で構造化ログ済。
 		return [];
 	}
 }

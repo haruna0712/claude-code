@@ -50,8 +50,11 @@ export default function ArticleOwnerActions({
 		try {
 			await deleteArticle(slug);
 			toast.success("削除しました");
-			router.push("/articles");
+			// reviewer M-2: 遷移先 (/articles) を新鮮にしてから push する。
+			// 旧コードは push→refresh の順だったが、 push 後の refresh は
+			// 既に離れた現在ページのキャッシュ無効化になり observable 効果なし。
 			router.refresh();
+			router.push("/articles");
 		} catch (err) {
 			toast.error(describeApiError(err, "削除に失敗しました"));
 			setBusy(false);

@@ -9,6 +9,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 
 import ArticleBody from "@/components/articles/ArticleBody";
 import ArticleOwnerActions from "@/components/articles/ArticleOwnerActions";
@@ -21,20 +22,24 @@ interface PageProps {
 }
 
 interface CurrentUserMini {
-	id: number | string;
 	username: string;
 }
 
-async function fetchArticleSSR(slug: string): Promise<ArticleDetail | null> {
-	try {
-		return await serverFetch<ArticleDetail>(`/articles/${slug}/`);
-	} catch (err) {
-		if (err instanceof ApiServerError && err.status === 404) return null;
-		throw err;
-	}
-}
+// generateMetadata と page 本体で同じ slug の article を 2 回 fetch するため、
+// React.cache でリクエスト内 dedupe する (reviewer H-2 反映)。 serverFetch は
+// cache: "no-store" なので React.cache が無いと毎回叩く。
+const fetchArticleSSR = cache(
+	async (slug: string): Promise<ArticleDetail | null> => {
+		try {
+			return await serverFetch<ArticleDetail>(`/articles/${slug}/`);
+		} catch (err) {
+			if (err instanceof ApiServerError && err.status === 404) return null;
+			throw err;
+		}
+	},
+);
 
-async function fetchCurrentUserSSR(): Promise<CurrentUserMini | null> {
+const fetchCurrentUserSSR = cache(async (): Promise<CurrentUserMini | null> => {
 	// 未ログイン (401) でも fetch 不能でも owner 判定は false にしたいので、
 	// 例外は全て swallow して null を返す (page render は継続)。
 	try {
@@ -42,7 +47,7 @@ async function fetchCurrentUserSSR(): Promise<CurrentUserMini | null> {
 	} catch {
 		return null;
 	}
-}
+});
 
 function excerpt(html: string, max = 160): string {
 	// HTML タグを粗く剥がして先頭を返す。OGP description 用。
@@ -88,12 +93,16 @@ function formatDate(iso: string | null): string {
 }
 
 export default async function ArticleDetailPage({ params }: PageProps) {
-	const article = await fetchArticleSSR(params.slug);
+	// article 取得と /users/me/ の取得は互いに独立しているので Promise.all で
+	// 並列化する (reviewer H-1 反映)。 article の null check は resolve 後に行う。
+	const [article, currentUser] = await Promise.all([
+		fetchArticleSSR(params.slug),
+		fetchCurrentUserSSR(),
+	]);
 	if (!article) notFound();
 
 	// owner 判定: handle (== Django username) で比較。 ArticleAuthor.id は serializer
 	// 未公開なので backend 変更回避のため username/handle で照合する。
-	const currentUser = await fetchCurrentUserSSR();
 	const isOwner =
 		currentUser !== null && currentUser.username === article.author.handle;
 
