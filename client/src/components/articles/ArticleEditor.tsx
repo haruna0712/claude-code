@@ -249,6 +249,9 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 					status,
 					tags,
 				});
+				toast.success(
+					status === "published" ? "公開しました" : "下書きを保存しました",
+				);
 				router.push(`/articles/${created.slug}`);
 			} else if (initial) {
 				const updated = await updateArticle(initial.slug, {
@@ -258,6 +261,9 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 					status,
 					tags,
 				});
+				toast.success(
+					status === "published" ? "公開しました" : "下書きを保存しました",
+				);
 				router.push(`/articles/${updated.slug}`);
 			}
 		} catch (err) {
