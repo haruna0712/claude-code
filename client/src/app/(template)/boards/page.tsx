@@ -30,29 +30,46 @@ export default async function BoardsListPage() {
 	const boards = await fetchBoardsSSR();
 
 	return (
-		<main className="mx-auto w-full max-w-3xl px-4 py-6">
-			<header className="mb-6">
-				<h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-					掲示板
-				</h1>
-				<p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-					技術トピックごとに議論する場所です。誰でも閲覧でき、ログインすればスレッドやレスを投稿できます。
-				</p>
+		<>
+			<header
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
+				<div className="min-w-0 flex-1">
+					<h1
+						className="truncate font-semibold tracking-tight"
+						style={{ fontSize: 15, letterSpacing: -0.2 }}
+					>
+						掲示板
+					</h1>
+					<p
+						className="truncate text-[color:var(--a-text-subtle)]"
+						style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
+					>
+						技術トピックごとに議論する場所
+					</p>
+				</div>
 			</header>
 
-			{boards.length === 0 ? (
-				<p className="text-sm text-gray-500 dark:text-gray-400">
-					まだ板がありません。
-				</p>
-			) : (
-				<ul role="list" className="grid gap-3 sm:grid-cols-2">
-					{boards.map((b) => (
-						<li key={b.slug}>
-							<BoardCard board={b} />
-						</li>
-					))}
-				</ul>
-			)}
-		</main>
+			<div className="p-5">
+				{boards.length === 0 ? (
+					<p className="text-sm text-[color:var(--a-text-muted)]">
+						まだ板がありません。
+					</p>
+				) : (
+					<ul role="list" className="grid gap-3 sm:grid-cols-2">
+						{boards.map((b) => (
+							<li key={b.slug}>
+								<BoardCard board={b} />
+							</li>
+						))}
+					</ul>
+				)}
+			</div>
+		</>
 	);
 }
