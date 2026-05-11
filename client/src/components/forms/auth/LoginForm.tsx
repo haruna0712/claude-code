@@ -91,12 +91,12 @@ export default function LoginForm() {
 					isPassword={true}
 					link={{ linkText: "Forgot Password?", linkUrl: "/forgot-password" }}
 				/>
-				<Button
-					type="submit"
-					className="h4-semibold bg-eerieBlack dark:bg-pumpkin w-full text-white"
-					disabled={isLoading}
-				>
-					{isLoading ? <Spinner size="sm" /> : `Sign In`}
+				{/* #609: 以前は `h4-semibold bg-eerieBlack dark:bg-pumpkin text-white`
+				    という未定義 class を使っており、 text-white だけが効いて白文字 / 透明背景
+				    で submit button が見えなかった。 shadcn Button default variant
+				    (bg-primary / text-primary-foreground) を使い、 label も 日本語化。 */}
+				<Button type="submit" className="w-full" disabled={isLoading}>
+					{isLoading ? <Spinner size="sm" /> : "ログイン"}
 				</Button>
 			</form>
 		</main>
