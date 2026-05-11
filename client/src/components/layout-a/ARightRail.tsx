@@ -17,6 +17,7 @@ import { Search } from "lucide-react";
 
 import TrendingTags from "@/components/sidebar/TrendingTags";
 import WhoToFollow from "@/components/sidebar/WhoToFollow";
+import { useAuthNavigation } from "@/hooks";
 
 function APanel({ title, children }: { title: string; children: ReactNode }) {
 	return (
@@ -37,6 +38,7 @@ function APanel({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export default function ARightRail() {
+	const { isAuthenticated } = useAuthNavigation();
 	return (
 		<aside
 			aria-label="右サイドバー"
@@ -84,7 +86,7 @@ export default function ARightRail() {
 
 			<APanel title="Who to follow">
 				<div className="-mx-1">
-					<WhoToFollow />
+					<WhoToFollow isAuthenticated={isAuthenticated} />
 				</div>
 			</APanel>
 
