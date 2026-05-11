@@ -108,6 +108,34 @@
 	--focus-ring-width: 2px;
 	--focus-ring-offset: 2px;
 	--focus-ring-color: hsl(var(--ring)); /* shadcn ring をそのまま使用 */
+
+	/* ---------- A direction tokens (#549 / #550 Phase 10 Claude Design) ---------- */
+	/* Linear / Vercel ベース light theme、cyan / blue accent。
+	 * 既存 shadcn HSL は触らず、A direction 専用に独立した色トークンを追加。
+	 * .a-direction クラス配下で使用する。 */
+	--a-bg: #ffffff;
+	--a-bg-subtle: #fafafa;
+	--a-bg-muted: #f4f4f5;
+	--a-bg-sunken: #f6f7f9;
+	--a-border: #e6e6e8;
+	--a-border-strong: #d4d4d8;
+	--a-text: #0a0a0a;
+	--a-text-muted: #52525b;
+	--a-text-subtle: #a1a1aa;
+	--a-accent: #0ea5e9; /* sky-500 */
+	--a-accent-deep: #0369a1;
+	--a-accent-bg: #e0f2fe;
+	--a-accent-text: #075985;
+	--a-success: #10b981;
+	--a-warning: #f59e0b;
+	--a-danger: #e11d48;
+	--a-font-sans: "Geist", "Noto Sans JP", -apple-system, BlinkMacSystemFont,
+		"Segoe UI", system-ui, sans-serif;
+	--a-font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	--a-radius-sm: 4px;
+	--a-radius-md: 6px;
+	--a-radius-lg: 8px;
+	--a-radius-xl: 12px;
 }
 
 /* Dark theme shadow 調整（ライトと同じ rgb だとダーク上で浮いて見える）*/
