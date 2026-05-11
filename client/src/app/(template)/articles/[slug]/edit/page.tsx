@@ -1,16 +1,22 @@
 /**
  * /articles/<slug>/edit 記事編集ページ (#536 / Phase 6 P6-13).
  *
- * 自分の記事のみ編集可能。draft も含めて見える (backend 側で隠蔽)。
+ * 自分の記事のみ編集可能。 draft も含めて見える (backend 側で隠蔽)。
+ *
+ * #606 で SSR auth + owner gate を追加:
+ *   - anon → /login?next=... に server-side redirect
+ *   - 他人の published 記事 → notFound() で 404 (編集 form を anon に見せない)
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 
 import ArticleEditor from "@/components/articles/ArticleEditor";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { ArticleDetail } from "@/lib/api/articles";
+import type { CurrentUser } from "@/lib/api/users";
 
 interface PageProps {
 	params: { slug: string };
@@ -30,9 +36,32 @@ async function fetchArticle(slug: string): Promise<ArticleDetail | null> {
 	}
 }
 
+type CurrentUserMini = Pick<CurrentUser, "username">;
+
+async function fetchCurrentUserSSR(): Promise<CurrentUserMini | null> {
+	try {
+		return await serverFetch<CurrentUserMini>("/users/me/");
+	} catch {
+		return null;
+	}
+}
+
 export default async function EditArticlePage({ params }: PageProps) {
-	const article = await fetchArticle(params.slug);
+	const isAuthenticated = cookies().get("logged_in")?.value === "true";
+	if (!isAuthenticated) {
+		redirect(`/login?next=/articles/${params.slug}/edit`);
+	}
+
+	const [article, currentUser] = await Promise.all([
+		fetchArticle(params.slug),
+		fetchCurrentUserSSR(),
+	]);
 	if (!article) notFound();
+	// 他人の記事を編集 form として render してはいけない (#606 / gan-evaluator H2)。
+	// owner 判定は detail page と同じく username == author.handle で行う。
+	if (!currentUser || currentUser.username !== article.author.handle) {
+		notFound();
+	}
 	return (
 		<>
 			<header
