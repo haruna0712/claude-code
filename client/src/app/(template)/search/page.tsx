@@ -39,30 +39,54 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 		: { query: "", results: [], count: 0 };
 
 	return (
-		<main className="mx-auto max-w-3xl px-4 py-6">
-			<header className="mb-6">
-				<h1 className="mb-3 text-xl font-semibold text-foreground">検索</h1>
-				<SearchBox initialValue={query} />
+		<>
+			<header
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
+				<div className="min-w-0 flex-1">
+					<h1
+						className="truncate font-semibold tracking-tight"
+						style={{ fontSize: 15, letterSpacing: -0.2 }}
+					>
+						検索
+					</h1>
+					{query && (
+						<p
+							className="truncate text-[color:var(--a-text-subtle)]"
+							style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
+						>
+							「{query}」 — {data.count} 件
+						</p>
+					)}
+				</div>
 			</header>
 
-			{!query && (
-				<p className="text-sm text-muted-foreground">
-					上のボックスにキーワードを入れて検索してください。
-				</p>
-			)}
+			<div className="px-5 py-5">
+				<div className="mb-6">
+					<SearchBox initialValue={query} />
+				</div>
 
-			{query && (
-				<section aria-label="検索結果" className="space-y-3">
-					<p className="text-sm text-muted-foreground">
-						「{query}」の検索結果: {data.count} 件
+				{!query && (
+					<p className="text-sm text-[color:var(--a-text-muted)]">
+						上のボックスにキーワードを入れて検索してください。
 					</p>
-					<TweetCardList
-						tweets={data.results}
-						ariaLabel={`「${query}」の検索結果`}
-						emptyMessage="一致するツイートはありません。"
-					/>
-				</section>
-			)}
-		</main>
+				)}
+
+				{query && (
+					<section aria-label="検索結果" className="space-y-3">
+						<TweetCardList
+							tweets={data.results}
+							ariaLabel={`「${query}」の検索結果`}
+							emptyMessage="一致するツイートはありません。"
+						/>
+					</section>
+				)}
+			</div>
+		</>
 	);
 }
