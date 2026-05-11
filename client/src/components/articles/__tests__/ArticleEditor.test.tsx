@@ -5,9 +5,10 @@
  *   T-EDIT-1 insertImageMarkdown が caret 位置に ![alt](url) を挿入し前後改行を補完
  *   T-EDIT-2 preview pane が rendered HTML (heading) を表示
  *   T-EDIT-3 「画像を追加」 button click で file input が開く + 選択 file が enqueue される
+ *   T-PUBLISH-1..4 (#607) handleSubmit 成功時に toast が出る (create/update × draft/published)
  */
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ArticleEditor, {
@@ -18,9 +19,31 @@ vi.mock("next/navigation", () => ({
 	useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 
-vi.mock("react-toastify", () => ({
-	toast: { success: vi.fn(), error: vi.fn() },
+const { toastSuccessMock, toastErrorMock } = vi.hoisted(() => ({
+	toastSuccessMock: vi.fn(),
+	toastErrorMock: vi.fn(),
 }));
+
+vi.mock("react-toastify", () => ({
+	toast: { success: toastSuccessMock, error: toastErrorMock },
+}));
+
+const { createArticleMock, updateArticleMock } = vi.hoisted(() => ({
+	createArticleMock: vi.fn(),
+	updateArticleMock: vi.fn(),
+}));
+
+vi.mock("@/lib/api/articles", async () => {
+	const actual =
+		await vi.importActual<typeof import("@/lib/api/articles")>(
+			"@/lib/api/articles",
+		);
+	return {
+		...actual,
+		createArticle: createArticleMock,
+		updateArticle: updateArticleMock,
+	};
+});
 
 const { enqueueMock } = vi.hoisted(() => ({
 	enqueueMock: vi.fn(),
@@ -81,6 +104,10 @@ describe("insertImageMarkdown", () => {
 describe("ArticleEditor", () => {
 	beforeEach(() => {
 		enqueueMock.mockReset();
+		toastSuccessMock.mockReset();
+		toastErrorMock.mockReset();
+		createArticleMock.mockReset();
+		updateArticleMock.mockReset();
 	});
 
 	it("T-EDIT-2 preview pane renders heading from body markdown", () => {
@@ -185,5 +212,99 @@ describe("ArticleEditor", () => {
 			dataTransfer: { files: [], types: ["text/html"] },
 		});
 		expect(enqueueMock).not.toHaveBeenCalled();
+	});
+
+	// #607: handleSubmit success path toast (gan-evaluator M1)。
+	// confirm dialog (status=published) は jsdom で auto-deny されるので status=draft で
+	// path をカバー + window.confirm を mock で auto-accept した published path も検証。
+	const fillForm = () => {
+		const titleInput = screen.getByLabelText(/タイトル/, {
+			selector: "input",
+		}) as HTMLInputElement;
+		const bodyInput = screen.getByLabelText(/本文/, {
+			selector: "textarea",
+		}) as HTMLTextAreaElement;
+		fireEvent.change(titleInput, { target: { value: "Hello" } });
+		fireEvent.change(bodyInput, { target: { value: "Hello body" } });
+	};
+
+	type EditableArticle = {
+		id: string;
+		slug: string;
+		title: string;
+		body_markdown: string;
+		body_html: string;
+		status: "draft" | "published";
+		published_at: string | null;
+		view_count: number;
+		author: { handle: string; display_name: string; avatar_url: string };
+		tags: { slug: string; display_name: string }[];
+		like_count: number;
+		comment_count: number;
+		created_at: string;
+		updated_at: string;
+	};
+	const buildInitial = (status: "draft" | "published"): EditableArticle => ({
+		id: "1",
+		slug: "hello",
+		title: "Hello",
+		body_markdown: "body",
+		body_html: "<p>body</p>",
+		status,
+		published_at: status === "published" ? "2026-01-01T00:00:00Z" : null,
+		view_count: 0,
+		author: { handle: "u", display_name: "U", avatar_url: "" },
+		tags: [],
+		like_count: 0,
+		comment_count: 0,
+		created_at: "2026-01-01T00:00:00Z",
+		updated_at: "2026-01-01T00:00:00Z",
+	});
+
+	const submitButton = (name: string) =>
+		screen.getByRole("button", { name }) as HTMLButtonElement;
+
+	it("T-PUBLISH-1 create + draft で「下書きを保存しました」 toast", async () => {
+		createArticleMock.mockResolvedValueOnce({ slug: "hello" });
+		render(<ArticleEditor mode="create" />);
+		fillForm();
+		await act(async () => {
+			fireEvent.click(submitButton("下書き保存"));
+		});
+		expect(createArticleMock).toHaveBeenCalledTimes(1);
+		expect(toastSuccessMock).toHaveBeenCalledWith("下書きを保存しました");
+	});
+
+	it("T-PUBLISH-2 create + published で「公開しました」 toast", async () => {
+		createArticleMock.mockResolvedValueOnce({ slug: "hello" });
+		vi.spyOn(window, "confirm").mockReturnValue(true);
+		render(<ArticleEditor mode="create" />);
+		fillForm();
+		const publishRadio = screen.getByLabelText("公開") as HTMLInputElement;
+		fireEvent.click(publishRadio);
+		await act(async () => {
+			fireEvent.click(submitButton("公開する"));
+		});
+		expect(toastSuccessMock).toHaveBeenCalledWith("公開しました");
+	});
+
+	it("T-PUBLISH-3 edit + draft で「下書きを保存しました」 toast", async () => {
+		updateArticleMock.mockResolvedValueOnce({ slug: "hello" });
+		render(<ArticleEditor mode="edit" initial={buildInitial("draft")} />);
+		await act(async () => {
+			fireEvent.click(submitButton("更新"));
+		});
+		expect(updateArticleMock).toHaveBeenCalledTimes(1);
+		expect(toastSuccessMock).toHaveBeenCalledWith("下書きを保存しました");
+	});
+
+	it("T-PUBLISH-4 edit + published で「公開しました」 toast", async () => {
+		updateArticleMock.mockResolvedValueOnce({ slug: "hello" });
+		vi.spyOn(window, "confirm").mockReturnValue(true);
+		render(<ArticleEditor mode="edit" initial={buildInitial("published")} />);
+		await act(async () => {
+			fireEvent.click(submitButton("更新して公開"));
+		});
+		expect(toastSuccessMock).toHaveBeenCalledWith("公開しました");
 	});
 });
