@@ -107,13 +107,15 @@ export default async function ArticlesListPage({ searchParams }: PageProps) {
 						下書き
 					</Link>
 				)}
+				{/* #608: anon でも /articles/new に飛んで submit 失敗していた誤誘導を
+				    回避。 anon なら /login?next=/articles/new に label 変更で誘導する。 */}
 				<Link
-					href="/articles/new"
+					href={isAuthenticated ? "/articles/new" : "/login?next=/articles/new"}
 					className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 					style={{ background: "var(--a-accent)", fontSize: 12.5 }}
 				>
 					<Feather className="size-3.5" aria-hidden="true" />
-					記事を書く
+					{isAuthenticated ? "記事を書く" : "ログインして書く"}
 				</Link>
 			</header>
 

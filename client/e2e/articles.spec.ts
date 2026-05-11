@@ -145,4 +145,16 @@ test.describe("記事 MVP E2E (#545 / #546)", () => {
 
 		await ctx.close();
 	});
+
+	test("ART-3: anon /articles の CTA は『ログインして書く』 で /login に誘導 (#608)", async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		await page.goto(`${BASE}/articles`);
+		const cta = page.getByRole("link", { name: "ログインして書く" });
+		await expect(cta).toBeVisible({ timeout: 15000 });
+		expect(await cta.getAttribute("href")).toContain("/login?next=");
+		await ctx.close();
+	});
 });
