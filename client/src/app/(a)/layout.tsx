@@ -31,8 +31,10 @@ export default function ALayout({ children }: AppLayoutProps) {
 			}}
 		>
 			<ALeftNav />
+			{/* #554: overflow-hidden を外して body scroll に。これで header の
+			    `position: sticky top-0` が browser viewport 基準で固定される。 */}
 			<main
-				className="flex min-w-0 flex-col overflow-hidden sm:border-r sm:border-[color:var(--a-border)]"
+				className="flex min-w-0 flex-col sm:border-r sm:border-[color:var(--a-border)]"
 				aria-label="メインコンテンツ"
 			>
 				<AMobileAppBar />
