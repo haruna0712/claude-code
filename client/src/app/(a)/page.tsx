@@ -113,8 +113,10 @@ export default async function HomePage({
 
 	return (
 		<>
+			{/* #554: sticky top-0 で scroll しても header が固定。backdrop blur が
+			    こうして初めて機能する (Phase A POC で position:sticky 抜けていた)。 */}
 			<header
-				className="flex items-center gap-4 px-5 py-3"
+				className="sticky top-0 z-10 flex items-center gap-4 px-5 py-3"
 				style={{
 					borderBottom: "1px solid var(--a-border)",
 					background: "rgba(255,255,255,0.85)",
