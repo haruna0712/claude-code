@@ -131,12 +131,29 @@ export async function generateMetadata({
 
 function Tombstoned({ deletedAt }: { deletedAt: string }) {
 	return (
-		<main className="mx-auto max-w-xl px-6 py-16 text-center">
-			<h1 className="mb-4 text-2xl font-bold">このツイートは削除されました</h1>
-			<p className="text-sm text-muted-foreground">
-				削除日時: {new Date(deletedAt).toLocaleString("ja-JP")}
-			</p>
-		</main>
+		<>
+			<header
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
+				<h1
+					className="min-w-0 flex-1 truncate font-semibold tracking-tight"
+					style={{ fontSize: 15, letterSpacing: -0.2 }}
+				>
+					ツイート
+				</h1>
+			</header>
+			<div className="mx-auto max-w-xl px-6 py-16 text-center">
+				<p className="mb-4 text-2xl font-bold">このツイートは削除されました</p>
+				<p className="text-sm text-[color:var(--a-text-muted)]">
+					削除日時: {new Date(deletedAt).toLocaleString("ja-JP")}
+				</p>
+			</div>
+		</>
 	);
 }
 
@@ -171,33 +188,57 @@ export default async function TweetDetailPage({ params }: PageProps) {
 	};
 
 	return (
-		<main className="mx-auto max-w-2xl px-6 py-10">
-			<script
-				type="application/ld+json"
-				// security-reviewer Phase 1 CRITICAL: tweet.body はユーザー生成コンテンツで
-				// `</script>` が含まれうるため stringifyJsonLd で </ をエスケープする。
-				dangerouslySetInnerHTML={{ __html: stringifyJsonLd(jsonLd) }}
-			/>
+		<>
+			<header
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
+				<h1
+					className="min-w-0 flex-1 truncate font-semibold tracking-tight"
+					style={{ fontSize: 15, letterSpacing: -0.2 }}
+				>
+					ツイート
+				</h1>
+				<span
+					className="truncate text-[color:var(--a-text-subtle)]"
+					style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
+				>
+					@{tweet.author_handle}
+				</span>
+			</header>
 
-			{/* #326: ancestor chain (上から古い順) → focal (強調) → replies の縦スレ.
-			    focal は border-l 強調で視覚的に区別する (Twitter conversation view)。 */}
-			{ancestors.length > 0 ? (
-				<section aria-label="親ツイート" className="mb-2">
-					<TweetCardList
-						tweets={ancestors}
-						ariaLabel="親ツイート"
-						currentUserHandle={currentUser?.username}
-					/>
-				</section>
-			) : null}
+			<article className="mx-auto max-w-2xl p-6">
+				<script
+					type="application/ld+json"
+					// security-reviewer Phase 1 CRITICAL: tweet.body はユーザー生成コンテンツで
+					// `</script>` が含まれうるため stringifyJsonLd で </ をエスケープする。
+					dangerouslySetInnerHTML={{ __html: stringifyJsonLd(jsonLd) }}
+				/>
 
-			{/* #337: focal + replies を client component に切り出して、reply 投稿時
-			    に即時 append できるようにする (リロード不要)。 */}
-			<ConversationReplies
-				focal={tweet}
-				initialReplies={replies}
-				currentUserHandle={currentUser?.username}
-			/>
-		</main>
+				{/* #326: ancestor chain (上から古い順) → focal (強調) → replies の縦スレ.
+				    focal は border-l 強調で視覚的に区別する (Twitter conversation view)。 */}
+				{ancestors.length > 0 ? (
+					<section aria-label="親ツイート" className="mb-2">
+						<TweetCardList
+							tweets={ancestors}
+							ariaLabel="親ツイート"
+							currentUserHandle={currentUser?.username}
+						/>
+					</section>
+				) : null}
+
+				{/* #337: focal + replies を client component に切り出して、reply 投稿時
+				    に即時 append できるようにする (リロード不要)。 */}
+				<ConversationReplies
+					focal={tweet}
+					initialReplies={replies}
+					currentUserHandle={currentUser?.username}
+				/>
+			</article>
+		</>
 	);
 }

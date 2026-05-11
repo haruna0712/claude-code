@@ -57,112 +57,133 @@ export default function ThreadView({
 	}, []);
 
 	return (
-		<main className="mx-auto w-full max-w-3xl px-4 py-6">
-			<header className="mb-4">
-				<p className="text-xs text-gray-500 dark:text-gray-400">
-					<Link href={`/boards/${thread.board}`} className="hover:underline">
-						← {thread.board} 板
-					</Link>
-				</p>
-				<h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">
-					{thread.title}
-					{thread.locked && (
-						<span
-							className="ml-2 rounded bg-gray-200 px-2 py-0.5 text-sm text-gray-700 dark:bg-gray-700 dark:text-gray-300"
-							aria-label="ロック済"
-						>
-							🔒 ロック済
-						</span>
-					)}
-				</h1>
-				<p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-					{threadState.post_count} / 1000 レス
-				</p>
+		<>
+			<header
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
+				<Link
+					href={`/boards/${thread.board}`}
+					className="rounded text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+					style={{ fontSize: 12.5 }}
+				>
+					← {thread.board}
+				</Link>
+				<div className="ml-2 min-w-0 flex-1">
+					<h1
+						className="truncate font-semibold tracking-tight"
+						style={{ fontSize: 15, letterSpacing: -0.2 }}
+					>
+						{thread.title}
+						{thread.locked && (
+							<span
+								className="ml-2 inline-block rounded bg-[color:var(--a-bg-muted)] px-2 py-0.5 text-xs text-[color:var(--a-text-muted)]"
+								aria-label="ロック済"
+							>
+								🔒
+							</span>
+						)}
+					</h1>
+					<p
+						className="truncate text-[color:var(--a-text-subtle)]"
+						style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
+					>
+						{threadState.post_count} / 1000 レス
+					</p>
+				</div>
 			</header>
 
-			{threadState.locked && (
-				<div
-					role="alert"
-					className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
-				>
-					このスレはレス上限 (1000)
-					に達しました。新しいスレッドを立ててください。
-				</div>
-			)}
-			{!threadState.locked && threadState.approaching_limit && (
-				<div
-					role="status"
-					className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
-				>
-					残りわずかです (現在 {threadState.post_count}{" "}
-					レス)。新スレッドの作成を検討してください。
-				</div>
-			)}
-
-			<section aria-labelledby="post-list-heading">
-				<h2 id="post-list-heading" className="sr-only">
-					レス一覧
-				</h2>
-				{posts.length === 0 ? (
-					<p className="text-sm text-gray-500 dark:text-gray-400">
-						まだレスがありません。
-					</p>
-				) : (
-					<ol
-						role="list"
-						className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
+			<div className="p-5">
+				{threadState.locked && (
+					<div
+						role="alert"
+						className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
 					>
-						{posts.map((p) => (
-							<ThreadPostItem
-								key={p.id}
-								post={p}
-								currentUserHandle={currentUserHandle}
-								isAdmin={isAdmin}
-								onDelete={handleDeleted}
-							/>
-						))}
-					</ol>
+						このスレはレス上限 (1000)
+						に達しました。新しいスレッドを立ててください。
+					</div>
+				)}
+				{!threadState.locked && threadState.approaching_limit && (
+					<div
+						role="status"
+						className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+					>
+						残りわずかです (現在 {threadState.post_count}{" "}
+						レス)。新スレッドの作成を検討してください。
+					</div>
 				)}
 
-				<nav
-					aria-label="ページネーション"
-					className="mt-4 flex items-center justify-between text-sm"
-				>
-					{initialPosts.previous ? (
-						<a
-							href={`/threads/${thread.id}?p=${page - 1}`}
-							className="text-blue-600 hover:underline dark:text-blue-400"
-						>
-							← 前のページ
-						</a>
+				<section aria-labelledby="post-list-heading">
+					<h2 id="post-list-heading" className="sr-only">
+						レス一覧
+					</h2>
+					{posts.length === 0 ? (
+						<p className="text-sm text-[color:var(--a-text-muted)]">
+							まだレスがありません。
+						</p>
 					) : (
-						<span />
-					)}
-					<span className="text-gray-500 dark:text-gray-400">
-						全 {initialPosts.count} レス
-					</span>
-					{initialPosts.next ? (
-						<a
-							href={`/threads/${thread.id}?p=${page + 1}`}
-							className="text-blue-600 hover:underline dark:text-blue-400"
+						<ol
+							role="list"
+							className="rounded-lg border border-[color:var(--a-border)] bg-[color:var(--a-bg)]"
 						>
-							次のページ →
-						</a>
-					) : (
-						<span />
+							{posts.map((p) => (
+								<ThreadPostItem
+									key={p.id}
+									post={p}
+									currentUserHandle={currentUserHandle}
+									isAdmin={isAdmin}
+									onDelete={handleDeleted}
+								/>
+							))}
+						</ol>
 					)}
-				</nav>
-			</section>
 
-			<section className="mt-6">
-				<PostComposer
-					threadId={thread.id}
-					isAuthenticated={isAuthenticated}
-					threadState={threadState}
-					boardSlug={thread.board}
-					onPosted={handlePosted}
-				/>
-			</section>
-		</main>
+					<nav
+						aria-label="ページネーション"
+						className="mt-4 flex items-center justify-between text-sm"
+					>
+						{initialPosts.previous ? (
+							<a
+								href={`/threads/${thread.id}?p=${page - 1}`}
+								className="rounded hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+								style={{ color: "var(--a-accent)" }}
+							>
+								← 前のページ
+							</a>
+						) : (
+							<span />
+						)}
+						<span className="text-[color:var(--a-text-muted)]">
+							全 {initialPosts.count} レス
+						</span>
+						{initialPosts.next ? (
+							<a
+								href={`/threads/${thread.id}?p=${page + 1}`}
+								className="rounded hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+								style={{ color: "var(--a-accent)" }}
+							>
+								次のページ →
+							</a>
+						) : (
+							<span />
+						)}
+					</nav>
+				</section>
+
+				<section className="mt-6">
+					<PostComposer
+						threadId={thread.id}
+						isAuthenticated={isAuthenticated}
+						threadState={threadState}
+						boardSlug={thread.board}
+						onPosted={handlePosted}
+					/>
+				</section>
+			</div>
+		</>
 	);
 }
