@@ -18,6 +18,7 @@
 
 import type { ReactNode } from "react";
 
+import AComposeDialogHost from "@/components/layout-a/AComposeDialogHost";
 import ALeftNav from "@/components/layout-a/ALeftNav";
 import AMobileAppBar from "@/components/layout-a/AMobileShell";
 import ARightRail from "@/components/layout-a/ARightRail";
@@ -47,6 +48,13 @@ export default function TemplateLayout({ children }: LayoutProps) {
 				{children}
 			</main>
 			<ARightRail />
+			{/*
+			 * #595: ALeftNav 「投稿する」 button / AComposeShell の inline 行から
+			 * dispatch される `a-compose-open` window event を listen して
+			 * ComposeTweetDialog を開く。 (template) 配下の全ページで 1 つだけ存在
+			 * すれば良いので layout レベルに置く。 home 以外でも投稿 button が動く。
+			 */}
+			<AComposeDialogHost />
 		</div>
 	);
 }

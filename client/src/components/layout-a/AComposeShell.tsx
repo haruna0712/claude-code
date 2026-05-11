@@ -1,45 +1,27 @@
 "use client";
 
 /**
- * A direction Compose Shell (#555 Phase B-0-4).
+ * A direction Compose Shell (#555 Phase B-0-4, refactor #595).
  *
- * gan-evaluator Blocker 5 への対応。home-a の inline compose 行を実装し、
- * ALeftNav の「投稿する」 button からも同じ ComposeTweetDialog を起こす wiring。
+ * home (`/`) でだけ表示する **inline compose 行**:
+ *   avatar + 「いま何を作っていますか？」 prompt + IconBtns + char counter (180) +
+ *   cyan「ツイート」 button
  *
- * - inline compose 行: avatar + 「いま何を作っていますか？」 prompt + IconBtns +
- *   char counter (180 limit) + cyan「ツイート」 button
- * - click で既存 ComposeTweetDialog (root tweet 投稿) を開く
- * - ALeftNav から `window.dispatchEvent('a-compose-open')` でも開く (左ナビ
- *   「投稿する」 button を /articles/new に飛ばさず本 shell が掴む)
- *
- * 設計: ComposeTweetDialog は元々 dialog の open/close を親が握る方式なので、
- * 本 shell が open state を保有してそれを渡す。
+ * click で `dispatchAComposeOpen()` を呼んで `AComposeDialogHost` 経由で
+ * `ComposeTweetDialog` を開く。 dialog state / listener / dialog 本体は本
+ * component には居ない (#595 で AComposeDialogHost に切り出した — home 以外でも
+ * ALeftNav の「投稿する」 button が動くようにするため、 (template)/layout.tsx 側に
+ * host を 1 つ埋めた)。
  */
 
 import { Code, Hash, Sparkles } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
-import ComposeTweetDialog from "@/components/tweets/ComposeTweetDialog";
+import { dispatchAComposeOpen } from "@/components/layout-a/AComposeDialogHost";
 import { useUserProfile } from "@/hooks/useUseProfile";
-
-const COMPOSE_OPEN_EVENT = "a-compose-open";
-
-/** ALeftNav 等の外部 trigger から呼ぶための window event 名 (export して共有). */
-export function dispatchAComposeOpen(): void {
-	if (typeof window !== "undefined") {
-		window.dispatchEvent(new CustomEvent(COMPOSE_OPEN_EVENT));
-	}
-}
 
 export default function AComposeShell() {
 	const { profile } = useUserProfile();
-	const [open, setOpen] = useState(false);
-
-	useEffect(() => {
-		const handler = () => setOpen(true);
-		window.addEventListener(COMPOSE_OPEN_EVENT, handler);
-		return () => window.removeEventListener(COMPOSE_OPEN_EVENT, handler);
-	}, []);
 
 	// 未ログイン時は inline compose を出さない (CTA は landing 側で出している)
 	if (!profile) return null;
@@ -49,59 +31,56 @@ export default function AComposeShell() {
 		.toUpperCase();
 
 	return (
-		<>
-			<button
-				type="button"
-				aria-label="ツイートを投稿する"
-				onClick={() => setOpen(true)}
-				className="flex w-full items-start gap-2.5 border-b px-5 py-3 text-left transition-colors hover:bg-[color:var(--a-bg-subtle)] focus-visible:bg-[color:var(--a-bg-subtle)] focus-visible:outline-none"
-				style={{ borderColor: "var(--a-border)" }}
+		<button
+			type="button"
+			aria-label="ツイートを投稿する"
+			onClick={() => dispatchAComposeOpen()}
+			className="flex w-full items-start gap-2.5 border-b px-5 py-3 text-left transition-colors hover:bg-[color:var(--a-bg-subtle)] focus-visible:bg-[color:var(--a-bg-subtle)] focus-visible:outline-none"
+			style={{ borderColor: "var(--a-border)" }}
+		>
+			<div
+				className="grid size-8 shrink-0 place-items-center rounded-full font-semibold text-white"
+				style={{ background: "hsl(200 70% 32%)", fontSize: 12 }}
+				aria-hidden
 			>
+				{initials}
+			</div>
+			<div className="flex-1">
 				<div
-					className="grid size-8 shrink-0 place-items-center rounded-full font-semibold text-white"
-					style={{ background: "hsl(200 70% 32%)", fontSize: 12 }}
-					aria-hidden
+					className="text-[color:var(--a-text-subtle)]"
+					style={{ fontSize: 14, padding: "6px 0 8px" }}
 				>
-					{initials}
+					いま何を作っていますか？
 				</div>
-				<div className="flex-1">
-					<div
-						className="text-[color:var(--a-text-subtle)]"
-						style={{ fontSize: 14, padding: "6px 0 8px" }}
+				<div className="mt-1 flex items-center gap-1.5">
+					<IconBtn>
+						<Code className="size-3.5" />
+					</IconBtn>
+					<IconBtn>
+						<Hash className="size-3.5" />
+					</IconBtn>
+					<IconBtn>
+						<Sparkles className="size-3.5" />
+					</IconBtn>
+					<span
+						className="ml-auto text-[color:var(--a-text-subtle)]"
+						style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
 					>
-						いま何を作っていますか？
-					</div>
-					<div className="mt-1 flex items-center gap-1.5">
-						<IconBtn>
-							<Code className="size-3.5" />
-						</IconBtn>
-						<IconBtn>
-							<Hash className="size-3.5" />
-						</IconBtn>
-						<IconBtn>
-							<Sparkles className="size-3.5" />
-						</IconBtn>
-						<span
-							className="ml-auto text-[color:var(--a-text-subtle)]"
-							style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
-						>
-							180
-						</span>
-						<span
-							className="rounded-md px-3 py-1 font-medium text-white"
-							style={{
-								background: "var(--a-accent)",
-								fontSize: 12.5,
-								fontFamily: "inherit",
-							}}
-						>
-							ツイート
-						</span>
-					</div>
+						180
+					</span>
+					<span
+						className="rounded-md px-3 py-1 font-medium text-white"
+						style={{
+							background: "var(--a-accent)",
+							fontSize: 12.5,
+							fontFamily: "inherit",
+						}}
+					>
+						ツイート
+					</span>
 				</div>
-			</button>
-			<ComposeTweetDialog open={open} onOpenChange={setOpen} />
-		</>
+			</div>
+		</button>
 	);
 }
 
