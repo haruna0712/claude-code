@@ -6,6 +6,7 @@
  */
 
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 
@@ -66,80 +67,104 @@ export default async function BoardDetailPage({
 	const isAuthenticated = cookies().get("logged_in")?.value === "true";
 
 	return (
-		<main className="mx-auto w-full max-w-3xl px-4 py-6">
-			<header className="mb-6 flex items-start gap-3">
-				<div
-					className="mt-2 h-2 w-2 shrink-0 rounded-full"
+		<>
+			<header
+				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				style={{
+					borderBottom: "1px solid var(--a-border)",
+					background: "rgba(255,255,255,0.85)",
+					backdropFilter: "blur(8px)",
+				}}
+			>
+				<Link
+					href="/boards"
+					className="rounded text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+					style={{ fontSize: 12.5 }}
+				>
+					← 掲示板
+				</Link>
+				<span
+					className="size-2 shrink-0 rounded-full"
 					style={{ backgroundColor: board.color }}
 					aria-hidden="true"
 				/>
-				<div>
-					<h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+				<div className="min-w-0 flex-1">
+					<h1
+						className="truncate font-semibold tracking-tight"
+						style={{ fontSize: 15, letterSpacing: -0.2 }}
+					>
 						{board.name}
 					</h1>
 					{board.description && (
-						<p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+						<p
+							className="truncate text-[color:var(--a-text-subtle)]"
+							style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
+						>
 							{board.description}
 						</p>
 					)}
 				</div>
 			</header>
 
-			<section className="mb-6">
-				<ThreadComposer
-					boardSlug={board.slug}
-					isAuthenticated={isAuthenticated}
-				/>
-			</section>
+			<div className="p-5">
+				<section className="mb-6">
+					<ThreadComposer
+						boardSlug={board.slug}
+						isAuthenticated={isAuthenticated}
+					/>
+				</section>
 
-			<section aria-labelledby="thread-list-heading">
-				<h2 id="thread-list-heading" className="sr-only">
-					スレッド一覧
-				</h2>
-				{threads.count === 0 ? (
-					<p className="text-sm text-gray-500 dark:text-gray-400">
-						まだスレッドがありません。
-					</p>
-				) : (
-					<ul
-						role="list"
-						className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
+				<section aria-labelledby="thread-list-heading">
+					<h2 id="thread-list-heading" className="sr-only">
+						スレッド一覧
+					</h2>
+					{threads.count === 0 ? (
+						<p className="text-sm text-[color:var(--a-text-muted)]">
+							まだスレッドがありません。
+						</p>
+					) : (
+						<ul
+							role="list"
+							className="rounded-lg border border-[color:var(--a-border)] bg-[color:var(--a-bg)]"
+						>
+							{threads.results.map((t) => (
+								<ThreadRow key={t.id} thread={t} />
+							))}
+						</ul>
+					)}
+
+					<nav
+						aria-label="ページネーション"
+						className="mt-4 flex items-center justify-between text-sm"
 					>
-						{threads.results.map((t) => (
-							<ThreadRow key={t.id} thread={t} />
-						))}
-					</ul>
-				)}
-
-				<nav
-					aria-label="ページネーション"
-					className="mt-4 flex items-center justify-between text-sm"
-				>
-					{threads.previous ? (
-						<a
-							href={`/boards/${board.slug}?page=${page - 1}`}
-							className="text-blue-600 hover:underline dark:text-blue-400"
-						>
-							← 前のページ
-						</a>
-					) : (
-						<span />
-					)}
-					<span className="text-gray-500 dark:text-gray-400">
-						全 {threads.count} 件
-					</span>
-					{threads.next ? (
-						<a
-							href={`/boards/${board.slug}?page=${page + 1}`}
-							className="text-blue-600 hover:underline dark:text-blue-400"
-						>
-							次のページ →
-						</a>
-					) : (
-						<span />
-					)}
-				</nav>
-			</section>
-		</main>
+						{threads.previous ? (
+							<Link
+								href={`/boards/${board.slug}?page=${page - 1}`}
+								className="rounded hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+								style={{ color: "var(--a-accent)" }}
+							>
+								← 前のページ
+							</Link>
+						) : (
+							<span />
+						)}
+						<span className="text-[color:var(--a-text-muted)]">
+							全 {threads.count} 件
+						</span>
+						{threads.next ? (
+							<Link
+								href={`/boards/${board.slug}?page=${page + 1}`}
+								className="rounded hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+								style={{ color: "var(--a-accent)" }}
+							>
+								次のページ →
+							</Link>
+						) : (
+							<span />
+						)}
+					</nav>
+				</section>
+			</div>
+		</>
 	);
 }
