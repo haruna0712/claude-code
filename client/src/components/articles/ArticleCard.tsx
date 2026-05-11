@@ -22,12 +22,12 @@ function formatDate(iso: string | null): string {
 export default function ArticleCard({ article }: ArticleCardProps) {
 	const authorName = article.author.display_name || article.author.handle;
 	return (
-		<article className="rounded-lg border border-border bg-background p-4 transition hover:border-primary/40 hover:shadow-sm">
+		<article className="rounded-lg border border-[color:var(--a-border)] bg-[color:var(--a-bg)] p-4 transition-colors hover:border-[color:var(--a-border-strong)]">
 			<Link
 				href={`/articles/${article.slug}`}
-				className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+				className="block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 			>
-				<h2 className="text-base font-semibold leading-snug line-clamp-2">
+				<h2 className="line-clamp-2 text-base font-semibold leading-snug">
 					{article.title}
 				</h2>
 			</Link>
@@ -48,7 +48,7 @@ export default function ArticleCard({ article }: ArticleCardProps) {
 			<footer className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
 				<Link
 					href={`/u/${article.author.handle}`}
-					className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+					className="rounded hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 				>
 					<span className="font-medium text-foreground">{authorName}</span>
 					<span className="ml-1">@{article.author.handle}</span>

@@ -198,7 +198,7 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 					<span className="block text-sm font-medium">プレビュー</span>
 					<div
 						aria-label="本文プレビュー"
-						className="mt-1 h-[28rem] overflow-y-auto rounded border border-border bg-muted/20 p-4 text-sm whitespace-pre-wrap"
+						className="mt-1 h-[28rem] overflow-y-auto whitespace-pre-wrap rounded border border-border bg-muted/20 p-4 text-sm"
 					>
 						{body || (
 							<span className="text-muted-foreground">
