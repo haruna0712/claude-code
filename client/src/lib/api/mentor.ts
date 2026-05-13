@@ -140,3 +140,57 @@ export async function acceptMentorProposal(
 	);
 	return res.data;
 }
+
+// --- /mentors/ (Phase 11-B) ---
+
+export type MentorPlanBilling = "one_time" | "monthly";
+
+export interface MentorPlanSummary {
+	id: number;
+	title: string;
+	description: string;
+	price_jpy: number;
+	billing_cycle: MentorPlanBilling;
+	is_active: boolean;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface MentorProfileDetail {
+	id: number;
+	user: MentorMiniUser;
+	headline: string;
+	bio: string;
+	experience_years: number;
+	is_accepting: boolean;
+	skill_tags: MentorTagSlim[];
+	plans: MentorPlanSummary[];
+	proposal_count: number;
+	contract_count: number;
+	avg_rating: string | null;
+	review_count: number;
+	created_at: string;
+	updated_at: string;
+}
+
+export async function listMentors(
+	params: { tag?: string; accepting?: "all"; cursor?: string } = {},
+	client: AxiosInstance = api,
+): Promise<PageResponse<MentorProfileDetail>> {
+	const qs = new URLSearchParams();
+	if (params.tag) qs.set("tag", params.tag);
+	if (params.accepting) qs.set("accepting", params.accepting);
+	if (params.cursor) qs.set("cursor", params.cursor);
+	const path =
+		qs.toString().length > 0 ? `/mentors/?${qs.toString()}` : "/mentors/";
+	const res = await client.get<PageResponse<MentorProfileDetail>>(path);
+	return res.data;
+}
+
+export async function getMentorByHandle(
+	handle: string,
+	client: AxiosInstance = api,
+): Promise<MentorProfileDetail> {
+	const res = await client.get<MentorProfileDetail>(`/mentors/${handle}/`);
+	return res.data;
+}

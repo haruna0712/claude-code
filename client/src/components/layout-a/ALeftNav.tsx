@@ -31,6 +31,7 @@ import {
 	Search,
 	Settings,
 	User,
+	Users,
 	type LucideIcon,
 } from "lucide-react";
 
@@ -78,6 +79,8 @@ const NAV_ITEMS: NavItemDef[] = [
 	// 用、 X 風レイアウト) には追加済だが、 home が使う ALeftNav は別 list を持つ
 	// (#550 POC) ため、 ここにも明示する。
 	{ href: "/mentor/wanted", label: "メンター募集", Icon: Handshake },
+	// Phase 11-B (P11-14): mentor 検索 (anon 可)。 「募集」 と区別する label。
+	{ href: "/mentors", label: "メンターを探す", Icon: Users },
 ];
 
 function BrandMark({ size = 22 }: { size?: number }) {
