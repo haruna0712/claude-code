@@ -6,6 +6,7 @@ export type LeftNavIconName =
 	| "Search"
 	| "MessageSquare"
 	| "User"
+	| "UserSearch"
 	| "Bell"
 	| "MessagesSquare"
 	| "FileText"

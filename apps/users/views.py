@@ -2,10 +2,12 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from djoser.social.views import ProviderAuthView
 from rest_framework import serializers, status
-from rest_framework.generics import RetrieveAPIView
+from rest_framework.generics import ListAPIView, RetrieveAPIView
+from rest_framework.pagination import CursorPagination
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -761,3 +763,63 @@ class UserResidenceByHandleView(APIView):
         if residence is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(UserResidenceSerializer(residence).data, status=status.HTTP_200_OK)
+
+
+# ---------------------------------------------------------------------------
+# Phase 12 P12-04: 汎用ユーザー検索 (handle / display_name / bio に部分一致)
+# ---------------------------------------------------------------------------
+
+
+class UserFullTextSerializer(serializers.ModelSerializer):
+    """汎用ユーザー検索結果。 ``UserSearchSerializer`` (handle autocomplete) と
+    別物で、 search card UI 用に ``display_name`` と ``bio`` を追加する。
+    PII は引き続き出さない。
+    """
+
+    user_id = serializers.UUIDField(source="id", read_only=True)
+
+    class Meta:
+        model = User
+        fields = (
+            "user_id",
+            "username",
+            "display_name",
+            "bio",
+            "avatar_url",
+        )
+        read_only_fields = fields
+
+
+class UserSearchCursorPagination(CursorPagination):
+    """user search 用の cursor pagination。 page_size=20。 ordering は username。"""
+
+    page_size = 20
+    max_page_size = 50
+    ordering = "username"
+    cursor_query_param = "cursor"
+
+
+class UserFullTextSearchView(ListAPIView):
+    """``GET /api/v1/users/search/?q=<text>&cursor=...``: 汎用ユーザー検索 (P12-04)。
+
+    - anon 閲覧可 (`AllowAny`)。 handle harvest は既存 autocomplete endpoint
+      (``UserSearchView``) で制限する分業。
+    - case-insensitive 部分一致 (``__icontains``) を handle / display_name / bio に。
+    - ``is_active=False`` を除外。
+    - cursor pagination (page_size=20)。 ``ordering="username"`` で安定。
+    - 空 q は空配列 (lookup 空打ちさせない)。
+    """
+
+    serializer_class = UserFullTextSerializer
+    permission_classes = [AllowAny]
+    pagination_class = UserSearchCursorPagination
+
+    def get_queryset(self):
+        q = (self.request.query_params.get("q") or "").strip()
+        if not q:
+            return User.objects.none()
+        return (
+            User.objects.filter(is_active=True)
+            .filter(Q(username__icontains=q) | Q(display_name__icontains=q) | Q(bio__icontains=q))
+            .order_by("username")
+        )

@@ -31,6 +31,7 @@ import {
 	Search,
 	Settings,
 	User,
+	UserSearch,
 	Users,
 	type LucideIcon,
 } from "lucide-react";
@@ -59,6 +60,8 @@ const NAV_ITEMS: NavItemDef[] = [
 	{ href: "/", label: "ホーム", Icon: Home },
 	{ href: "/explore", label: "Explore", Icon: Hash },
 	{ href: "/search", label: "検索", Icon: Search },
+	// Phase 12 (P12-04 / #676): 汎用ユーザー検索。 既存「検索」 は tweet 用なので別 link。
+	{ href: "/search/users", label: "ユーザー検索", Icon: UserSearch },
 	{
 		href: "/notifications",
 		label: "通知",

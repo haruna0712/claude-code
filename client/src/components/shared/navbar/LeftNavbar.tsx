@@ -20,6 +20,7 @@ import {
 	Plus,
 	Search,
 	User,
+	UserSearch,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -35,6 +36,7 @@ const ICON_MAP: Record<
 	Search,
 	MessageSquare,
 	User,
+	UserSearch,
 	Bell,
 	MessagesSquare,
 	FileText,

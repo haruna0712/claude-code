@@ -5,7 +5,8 @@
 管理する。
 
 ルーティング:
-- ``GET                /api/v1/users/``                          → UserSearchView (#480)
+- ``GET                /api/v1/users/``                          → UserSearchView (#480, handle 前方一致 autocomplete)
+- ``GET                /api/v1/users/search/``                   → UserFullTextSearchView (P12-04, anon 可、 full-text + pagination)
 - ``GET/PATCH          /api/v1/users/me/``                       → MeView
 - ``POST               /api/v1/users/me/avatar-upload-url/``     → AvatarUploadUrlView (P1-04)
 - ``POST               /api/v1/users/me/header-upload-url/``     → HeaderUploadUrlView (P1-04)
@@ -27,6 +28,7 @@ from .views import (
     MeView,
     MyUserResidenceView,
     PublicProfileView,
+    UserFullTextSearchView,
     UserResidenceByHandleView,
     UserSearchView,
 )
@@ -35,6 +37,13 @@ urlpatterns = [
     # Issue #480: handle 前方一致検索 (autocomplete 用)。
     # 静的 path として `<str:username>/` より先に登録する (greedy 対策)。
     path("", UserSearchView.as_view(), name="users-search"),
+    # P12-04: 汎用ユーザー検索 page 用 full-text endpoint (anon 可)。
+    # 静的 path なので `<str:username>/` より前。
+    path(
+        "search/",
+        UserFullTextSearchView.as_view(),
+        name="users-fulltext-search",
+    ),
     path("me/", MeView.as_view(), name="users-me"),
     # P1-04: avatar / header 画像 S3 presigned URL 発行。
     path(
