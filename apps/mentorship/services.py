@@ -11,7 +11,7 @@ spec: ``docs/specs/phase-11-mentor-board-spec.md`` §3.2, §6.2
 from __future__ import annotations
 
 from django.contrib.auth.models import AbstractBaseUser
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
@@ -101,3 +101,87 @@ def get_proposal_or_404(pk: int) -> MentorProposal:
     if proposal is None:
         raise NotFound("MentorProposal not found")
     return proposal
+
+
+# --- contract state transitions (P11-17) ---
+
+
+def get_contract_or_404(pk: int) -> MentorshipContract:
+    contract = (
+        MentorshipContract.objects.select_related("mentee", "mentor", "room").filter(pk=pk).first()
+    )
+    if contract is None:
+        raise NotFound("MentorshipContract not found")
+    return contract
+
+
+def complete_contract(
+    *,
+    contract: MentorshipContract,
+    by_user: AbstractBaseUser,
+) -> MentorshipContract:
+    """契約を COMPLETED に。 mentee / mentor どちらでも実行可。
+
+    既に COMPLETED なら冪等。 CANCELED は不可 (PermissionDenied 相当の
+    ValidationError)。 完了時に DMRoom.is_archived=True にして read-only UI 用 flag を
+    立てる (P11-19 で frontend が消費)。
+    """
+
+    if by_user.pk not in {contract.mentee_id, contract.mentor_id}:
+        raise PermissionDenied("契約当事者のみ完了できます")
+
+    if contract.status == MentorshipContract.Status.COMPLETED:
+        return contract
+    if contract.status == MentorshipContract.Status.CANCELED:
+        raise ValidationError("キャンセル済の契約は完了できません")
+
+    with transaction.atomic():
+        now = timezone.now()
+        contract.status = MentorshipContract.Status.COMPLETED
+        contract.completed_at = now
+        contract.save(update_fields=["status", "completed_at", "updated_at"])
+
+        # DMRoom を archived に (composer 無効 + 「契約完了」 banner 用)。
+        room = contract.room
+        if not room.is_archived:
+            room.is_archived = True
+            room.save(update_fields=["is_archived", "updated_at"])
+
+        # mentor profile の集計 (contract_count) を atomic に +1。
+        from apps.mentorship.models import MentorProfile  # 局所 import (循環回避)
+
+        MentorProfile.objects.filter(user=contract.mentor).update(
+            contract_count=models.F("contract_count") + 1,
+        )
+
+    return contract
+
+
+def cancel_contract(
+    *,
+    contract: MentorshipContract,
+    by_user: AbstractBaseUser,
+) -> MentorshipContract:
+    """契約をキャンセル。 mentee / mentor どちらでも実行可。
+
+    既に CANCELED なら冪等。 COMPLETED は不可 (一度完了した契約は取り消せない)。
+    DMRoom も archived に。
+    """
+
+    if by_user.pk not in {contract.mentee_id, contract.mentor_id}:
+        raise PermissionDenied("契約当事者のみキャンセルできます")
+
+    if contract.status == MentorshipContract.Status.CANCELED:
+        return contract
+    if contract.status == MentorshipContract.Status.COMPLETED:
+        raise ValidationError("完了済の契約はキャンセルできません")
+
+    with transaction.atomic():
+        contract.status = MentorshipContract.Status.CANCELED
+        contract.save(update_fields=["status", "updated_at"])
+        room = contract.room
+        if not room.is_archived:
+            room.is_archived = True
+            room.save(update_fields=["is_archived", "updated_at"])
+
+    return contract

@@ -1,7 +1,6 @@
 """URL routing for /api/v1/mentor/... endpoints.
 
-P11-03: MentorRequest CRUD + close を配線。
-spec §6.1
+spec §6.1, §6.2, §6.4
 """
 
 from django.urls import path
@@ -12,6 +11,10 @@ from apps.mentorship.views import (
     MentorRequestCloseView,
     MentorRequestDetailView,
     MentorRequestListCreateView,
+    MentorshipContractCancelView,
+    MentorshipContractCompleteView,
+    MentorshipContractDetailView,
+    MentorshipContractMeListView,
 )
 
 urlpatterns = [
@@ -41,5 +44,26 @@ urlpatterns = [
         "proposals/<int:pk>/accept/",
         MentorProposalAcceptView.as_view(),
         name="mentor-proposal-accept",
+    ),
+    # P11-17: contract list / detail / complete / cancel
+    path(
+        "contracts/me/",
+        MentorshipContractMeListView.as_view(),
+        name="mentor-contract-me-list",
+    ),
+    path(
+        "contracts/<int:pk>/",
+        MentorshipContractDetailView.as_view(),
+        name="mentor-contract-detail",
+    ),
+    path(
+        "contracts/<int:pk>/complete/",
+        MentorshipContractCompleteView.as_view(),
+        name="mentor-contract-complete",
+    ),
+    path(
+        "contracts/<int:pk>/cancel/",
+        MentorshipContractCancelView.as_view(),
+        name="mentor-contract-cancel",
     ),
 ]
