@@ -3,6 +3,7 @@
 from django.contrib import admin
 
 from apps.mentorship.models import (
+    MentorProfile,
     MentorProposal,
     MentorRequest,
     MentorshipContract,
@@ -34,3 +35,28 @@ class MentorshipContractAdmin(admin.ModelAdmin):
     search_fields = ("mentee__username", "mentor__username")
     raw_id_fields = ("proposal", "mentee", "mentor", "room")
     readonly_fields = ("started_at", "completed_at", "updated_at", "plan_snapshot")
+
+
+@admin.register(MentorProfile)
+class MentorProfileAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user",
+        "headline",
+        "is_accepting",
+        "avg_rating",
+        "review_count",
+        "contract_count",
+    )
+    list_filter = ("is_accepting",)
+    search_fields = ("headline", "bio", "user__username")
+    raw_id_fields = ("user",)
+    filter_horizontal = ("skill_tags",)
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "proposal_count",
+        "contract_count",
+        "avg_rating",
+        "review_count",
+    )
