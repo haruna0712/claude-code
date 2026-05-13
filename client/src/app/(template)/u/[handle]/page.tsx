@@ -8,6 +8,7 @@ import FollowButton from "@/components/follows/FollowButton";
 import ProfileKebab from "@/components/moderation/ProfileKebab";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
+import type { MentorProfileDetail } from "@/lib/api/mentor";
 import type { TweetSummary } from "@/lib/api/tweets";
 import type { CurrentUser } from "@/lib/api/users";
 import { stringifyJsonLd } from "@/lib/json-ld";
@@ -39,11 +40,12 @@ interface PublicProfile {
 	user_id: string;
 }
 
-type ProfileTab = "tweets" | "likes" | "favorites";
+type ProfileTab = "tweets" | "likes" | "favorites" | "mentor";
 
 function resolveTab(raw: string | undefined): ProfileTab {
 	if (raw === "likes") return "likes";
 	if (raw === "favorites") return "favorites";
+	if (raw === "mentor") return "mentor";
 	return "tweets";
 }
 
@@ -99,6 +101,18 @@ async function loadCurrentUser(): Promise<CurrentUser | null> {
 	}
 }
 
+async function loadMentorProfile(
+	handle: string,
+): Promise<MentorProfileDetail | null> {
+	// P11-16: profile が無ければ null (mentor 登録していない user)。 anon 可 endpoint。
+	try {
+		return await serverFetch<MentorProfileDetail>(`/mentors/${handle}/`);
+	} catch (err) {
+		if (err instanceof ApiServerError && err.status === 404) return null;
+		return null;
+	}
+}
+
 export async function generateMetadata({
 	params,
 }: PageProps): Promise<Metadata> {
@@ -137,12 +151,14 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 	if (!profile) notFound();
 
 	const tab = resolveTab(searchParams?.tab);
-	const [tweets, likedTweets, currentUser] = await Promise.all([
+	const [tweets, likedTweets, currentUser, mentorProfile] = await Promise.all([
 		tab === "tweets" ? loadTweets(profile.username) : Promise.resolve([]),
 		tab === "likes" ? loadLikedTweets(profile.username) : Promise.resolve([]),
 		loadCurrentUser(),
+		loadMentorProfile(profile.username),
 	]);
 	const isOwnProfile = currentUser?.username === profile.username;
+	const hasMentorProfile = mentorProfile !== null;
 
 	const jsonLd = {
 		"@context": "https://schema.org",
@@ -298,42 +314,42 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 					aria-label="プロフィール タブ"
 					className="mt-6 flex border-b border-border px-4"
 				>
-					{(
-						(isOwnProfile
-							? [
-									{
-										key: "tweets",
-										label: "ポスト",
-										href: `/u/${profile.username}`,
-									},
-									{
-										key: "likes",
-										label: "いいね",
-										href: `/u/${profile.username}?tab=likes`,
-									},
-									{
-										key: "favorites",
-										label: "お気に入り",
-										href: `/u/${profile.username}?tab=favorites`,
-									},
-								]
-							: [
-									{
-										key: "tweets",
-										label: "ポスト",
-										href: `/u/${profile.username}`,
-									},
-									{
-										key: "likes",
-										label: "いいね",
-										href: `/u/${profile.username}?tab=likes`,
-									},
-								]) as ReadonlyArray<{
+					{(() => {
+						const base: { key: ProfileTab; label: string; href: string }[] = [
+							{
+								key: "tweets",
+								label: "ポスト",
+								href: `/u/${profile.username}`,
+							},
+							{
+								key: "likes",
+								label: "いいね",
+								href: `/u/${profile.username}?tab=likes`,
+							},
+						];
+						if (isOwnProfile) {
+							base.push({
+								key: "favorites",
+								label: "お気に入り",
+								href: `/u/${profile.username}?tab=favorites`,
+							});
+						}
+						// P11-16: mentor profile を持っている user (own + 他人 両方) で
+						// mentor tab を出す。 他人 view では「メンタープロフィール」 を
+						// 公開閲覧する動線、 own view では編集動線にもなる。
+						if (hasMentorProfile) {
+							base.push({
+								key: "mentor",
+								label: "メンター",
+								href: `/u/${profile.username}?tab=mentor`,
+							});
+						}
+						return base as ReadonlyArray<{
 							key: ProfileTab;
 							label: string;
 							href: string;
-						}>
-					).map((t) => (
+						}>;
+					})().map((t) => (
 						<Link
 							key={t.key}
 							href={t.href}
@@ -362,13 +378,17 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 							? "いいねした投稿"
 							: tab === "favorites"
 								? "お気に入り"
-								: "ツイート"}
+								: tab === "mentor"
+									? "メンター情報"
+									: "ツイート"}
 					</h2>
 					{tab === "favorites" && isOwnProfile ? (
-						/* #499: 自分のお気に入り (Google ブックマーク風 folder ツリー)。
-					    他人プロフィールでは tab 自体非表示にしているが、
-					    URL 直叩きで来たケースに備えて isOwnProfile gate を二重化。 */
 						<FavoritesTab currentUserHandle={profile.username} />
+					) : tab === "mentor" && mentorProfile ? (
+						<MentorTabContent
+							mentor={mentorProfile}
+							isOwnProfile={isOwnProfile}
+						/>
 					) : tab === "likes" ? (
 						<TweetCardList
 							tweets={likedTweets}
@@ -377,9 +397,6 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 							currentUserHandle={currentUser?.username}
 						/>
 					) : (
-						/* #298: 旧 plain link 列挙を TweetCard ベースに置換。
-					    リアクション (P2-14) / RT (P2-15) / 「もっと見る」展開 (P2-18)
-					    が本配線される。HomeFeed と同 ARIA feed pattern。 */
 						<TweetCardList
 							tweets={tweets}
 							ariaLabel={`@${profile.username} のツイート`}
@@ -390,5 +407,105 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 				</section>
 			</div>
 		</>
+	);
+}
+
+function MentorTabContent({
+	mentor,
+	isOwnProfile,
+}: {
+	mentor: MentorProfileDetail;
+	isOwnProfile: boolean;
+}) {
+	const rating =
+		mentor.avg_rating !== null ? Number(mentor.avg_rating).toFixed(1) : null;
+	return (
+		<div className="space-y-6">
+			<div className="flex items-center justify-between gap-3">
+				<div className="text-xs text-[color:var(--a-text-muted)]">
+					経験 {mentor.experience_years} 年
+					{rating
+						? ` · ★ ${rating} (${mentor.review_count})`
+						: " · レビュー無し"}
+				</div>
+				{isOwnProfile ? (
+					<Link
+						href="/mentors/me/edit"
+						className="rounded-md border border-[color:var(--a-border)] px-3 py-1.5 text-xs text-[color:var(--a-text-muted)] hover:bg-[color:var(--a-bg-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+					>
+						プロフィールを編集
+					</Link>
+				) : (
+					<Link
+						href={`/mentors/${mentor.user.handle}`}
+						className="rounded-md border border-[color:var(--a-border)] px-3 py-1.5 text-xs text-[color:var(--a-text-muted)] hover:bg-[color:var(--a-bg-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+					>
+						メンターページを開く
+					</Link>
+				)}
+			</div>
+
+			{!mentor.is_accepting && (
+				<p
+					role="status"
+					className="rounded border border-yellow-400/60 bg-yellow-50/80 px-3 py-2 text-sm text-yellow-900 dark:border-yellow-500/30 dark:bg-yellow-900/20 dark:text-yellow-100"
+				>
+					このメンターは現在新規受付を停止しています。
+				</p>
+			)}
+
+			<div>
+				<h3 className="mb-1 text-sm font-semibold">紹介</h3>
+				<p className="whitespace-pre-wrap text-sm">{mentor.headline}</p>
+			</div>
+
+			<div>
+				<h3 className="mb-1 text-sm font-semibold">プロフィール</h3>
+				<p className="whitespace-pre-wrap text-sm">{mentor.bio}</p>
+			</div>
+
+			{mentor.skill_tags.length > 0 && (
+				<div>
+					<h3 className="mb-1 text-sm font-semibold">スキル</h3>
+					<ul className="flex flex-wrap gap-1">
+						{mentor.skill_tags.map((t) => (
+							<li
+								key={t.name}
+								className="rounded-full bg-[color:var(--a-bg-muted)] px-2 py-0.5 text-xs text-[color:var(--a-text-muted)]"
+							>
+								#{t.display_name}
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
+
+			{mentor.plans.length > 0 && (
+				<div>
+					<h3 className="mb-1 text-sm font-semibold">提供 plan</h3>
+					<ul role="list" className="grid gap-2">
+						{mentor.plans.map((p) => (
+							<li
+								key={p.id}
+								className="rounded border border-[color:var(--a-border)] p-3"
+							>
+								<div className="flex items-baseline justify-between gap-3">
+									<span className="font-semibold">{p.title}</span>
+									<span className="text-xs text-[color:var(--a-text-muted)]">
+										{p.billing_cycle === "monthly" ? "月額" : "単発"}
+										{p.price_jpy > 0
+											? ` · ¥${p.price_jpy.toLocaleString()}`
+											: " · 無償ベータ"}
+									</span>
+								</div>
+								<p className="mt-1 whitespace-pre-wrap text-xs text-[color:var(--a-text-muted)]">
+									{p.description}
+								</p>
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
+		</div>
 	);
 }
