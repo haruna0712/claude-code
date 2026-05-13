@@ -5,10 +5,14 @@
 管理する。
 
 ルーティング:
-- ``GET/PATCH /api/v1/users/me/``                    → MeView
-- ``POST      /api/v1/users/me/avatar-upload-url/``  → AvatarUploadUrlView (P1-04)
-- ``POST      /api/v1/users/me/header-upload-url/``  → HeaderUploadUrlView (P1-04)
-- ``GET       /api/v1/users/<handle>/``              → PublicProfileView
+- ``GET                /api/v1/users/``                          → UserSearchView (#480)
+- ``GET/PATCH          /api/v1/users/me/``                       → MeView
+- ``POST               /api/v1/users/me/avatar-upload-url/``     → AvatarUploadUrlView (P1-04)
+- ``POST               /api/v1/users/me/header-upload-url/``     → HeaderUploadUrlView (P1-04)
+- ``POST               /api/v1/users/me/complete_onboarding/``   → CompleteOnboardingView (P1-14)
+- ``GET/PATCH/DELETE   /api/v1/users/me/residence/``             → MyUserResidenceView (P12-01)
+- ``GET                /api/v1/users/<handle>/``                 → PublicProfileView
+- ``GET                /api/v1/users/<handle>/residence/``       → UserResidenceByHandleView (P12-01)
 
 NOTE: ``<str:username>`` は greedy に ``me`` にもマッチしてしまうため、
 ``me/`` 配下のエンドポイントは public profile より先に定義して優先させる。

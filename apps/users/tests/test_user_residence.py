@@ -50,6 +50,26 @@ class TestMyUserResidence:
         # Cookie + CSRF 経由のときは 403、 JWT 経由なら 401 を返す。 どちらも認証不足扱い。
         assert res.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
 
+    def test_patch_requires_auth(self, api_client: APIClient, me_residence_url: str) -> None:
+        res = api_client.patch(me_residence_url, VALID_BODY, format="json")
+        assert res.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+    def test_delete_requires_auth(self, api_client: APIClient, me_residence_url: str) -> None:
+        res = api_client.delete(me_residence_url)
+        assert res.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+    def test_patch_rejects_incomplete_payload(
+        self, api_client: APIClient, user_factory, me_residence_url: str
+    ) -> None:
+        """必須 field の片落ち (radius_m だけ送る等) は 400."""
+        user = user_factory()
+        api_client.force_authenticate(user=user)
+
+        res = api_client.patch(me_residence_url, {"radius_m": 1000}, format="json")
+
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert "latitude" in res.data and "longitude" in res.data
+
     def test_get_returns_404_when_not_set(
         self, api_client: APIClient, user_factory, me_residence_url: str
     ) -> None:
