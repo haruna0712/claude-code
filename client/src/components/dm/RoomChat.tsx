@@ -187,6 +187,18 @@ export default function RoomChat({ roomId, currentUserId }: RoomChatProps) {
 					/>
 				</div>
 			</header>
+			{/* P11-08: メンタリング契約 room に banner。 contract.status=ACTIVE 中は
+			    composer を残し、 完了 (is_archived=true) なら別 UI で disable する想定
+			    (P11-19 で実装)。 ここでは識別 banner だけ。 */}
+			{roomQuery.data?.kind === "mentorship" ? (
+				<div
+					role="status"
+					aria-label="メンタリング契約 room"
+					className="border-baby_grey/10 bg-baby_blue/10 text-baby_blue border-b px-4 py-1.5 text-xs"
+				>
+					🤝 メンタリング契約中の room です。
+				</div>
+			) : null}
 			<MessageList
 				messages={merged}
 				currentUserId={currentUserId}
