@@ -85,6 +85,8 @@ urlpatterns = [
     path("api/v1/search/", include("apps.search.urls")),
     # P2-08: タイムライン (home / following / explore)
     path("api/v1/timeline/", include("apps.timeline.urls")),
+    # P11-01: メンターマッチング (Phase 11)。 endpoint は P11-03 以降で追加。
+    path("api/v1/mentor/", include("apps.mentorship.urls")),
 ]
 
 # Sentry smoke test endpoint (P0-06). DEBUG=True の環境だけ URL 登録すること自体を

@@ -119,6 +119,8 @@ LOCAL_APPS = [
     "apps.bots",
     "apps.billing",
     "apps.search",
+    # Phase 11: メンターマッチング (P11-01)。 model 実装は P11-02 以降。
+    "apps.mentorship",
 ]
 
 # --- Channels / Daphne (P3-02 / Issue #227) ---
