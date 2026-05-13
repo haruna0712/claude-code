@@ -454,3 +454,71 @@ class MentorPlanDetailView(APIView):
             plan.is_active = False
             plan.save(update_fields=["is_active", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# --- MentorshipContract list / detail / complete / cancel (P11-17) ---
+
+
+class MentorshipContractMeListView(APIView):
+    """`GET /mentor/contracts/me/` — 自分が当事者の契約一覧 (mentee + mentor 両方)。
+
+    `?role=mentee` or `?role=mentor` で絞り込み可。
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        from django.db.models import Q
+
+        from apps.mentorship.models import MentorshipContract
+
+        role = request.query_params.get("role")
+        qs = MentorshipContract.objects.select_related("mentee", "mentor", "room")
+        if role == "mentee":
+            qs = qs.filter(mentee=request.user)
+        elif role == "mentor":
+            qs = qs.filter(mentor=request.user)
+        else:
+            qs = qs.filter(Q(mentee=request.user) | Q(mentor=request.user))
+        qs = qs.order_by("-started_at")
+        return Response(MentorshipContractDetailSerializer(qs, many=True).data)
+
+
+class MentorshipContractDetailView(APIView):
+    """`GET /mentor/contracts/<id>/` — 契約詳細 (mentee or mentor のみ可)。"""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request: Request, pk: int) -> Response:
+        from apps.mentorship.services import get_contract_or_404
+
+        contract = get_contract_or_404(pk)
+        if request.user.pk not in {contract.mentee_id, contract.mentor_id}:
+            raise PermissionDenied("契約当事者のみ閲覧できます")
+        return Response(MentorshipContractDetailSerializer(contract).data)
+
+
+class MentorshipContractCompleteView(APIView):
+    """`POST /mentor/contracts/<id>/complete/`。"""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request: Request, pk: int) -> Response:
+        from apps.mentorship.services import complete_contract, get_contract_or_404
+
+        contract = get_contract_or_404(pk)
+        contract = complete_contract(contract=contract, by_user=request.user)
+        return Response(MentorshipContractDetailSerializer(contract).data)
+
+
+class MentorshipContractCancelView(APIView):
+    """`POST /mentor/contracts/<id>/cancel/`。"""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request: Request, pk: int) -> Response:
+        from apps.mentorship.services import cancel_contract, get_contract_or_404
+
+        contract = get_contract_or_404(pk)
+        contract = cancel_contract(contract=contract, by_user=request.user)
+        return Response(MentorshipContractDetailSerializer(contract).data)
