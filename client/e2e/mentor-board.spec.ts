@@ -103,10 +103,11 @@ test.describe("Phase 11 11-A mentor board (#624)", () => {
 		await mentor.goto(`${BASE}/mentor/wanted/${requestId}`);
 		await mentor.getByLabel(/^提案文/).fill("E2E でテストする mentor です。");
 		await mentor.getByRole("button", { name: "提案を送る" }).click();
-		await expect(mentor.getByRole("status")).toContainText(
-			"提案を送信しました",
-			{ timeout: 10000 },
-		);
+		// follow-up #670: role=status は sr-only aria-live + 表示 panel の 2 個が
+		// 同時 DOM にあるので filter で 1 個に絞る。
+		await expect(
+			mentor.getByRole("status").filter({ hasText: /提案を送信しました/ }),
+		).toBeVisible({ timeout: 10000 });
 
 		// --- mentee が proposal リストで accept ---
 		await mentee.reload();

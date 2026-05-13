@@ -70,6 +70,21 @@ def accept_proposal(
         DMRoomMembership.objects.create(room=room, user=request.mentee)
         DMRoomMembership.objects.create(room=room, user=proposal.mentor)
 
+        # P11 follow-up #669: mentor が proposal を送って accept されたら mentor
+        # activity あり判定なので、 MentorProfile が未作成なら placeholder で
+        # auto-create する。 これがないと review が投稿されても /mentors/<handle>
+        # が 404 になって review が表示先を失う (orphan review 問題)。
+        from apps.mentorship.models import MentorProfile  # 循環回避の局所 import
+
+        MentorProfile.objects.get_or_create(
+            user=proposal.mentor,
+            defaults={
+                "headline": "メンター",
+                "bio": "プロフィールは未設定です。 /mentors/me/edit から編集できます。",
+                "experience_years": 0,
+            },
+        )
+
         # contract row。 plan_snapshot は P11-12 で plan 連携時に詳細を埋める。
         contract = MentorshipContract.objects.create(
             proposal=proposal,

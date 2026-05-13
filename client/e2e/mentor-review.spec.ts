@@ -136,10 +136,12 @@ test.describe("Phase 11-D review flow (#641)", () => {
 		await menteePage
 			.getByRole("button", { name: /レビューを投稿|レビューを更新/ })
 			.click();
-		await expect(menteePage.getByRole("status")).toContainText(
-			"レビューを送信しました",
-			{ timeout: 10000 },
-		);
+		// follow-up #670: filter で sr-only aria-live と panel を区別する。
+		await expect(
+			menteePage
+				.getByRole("status")
+				.filter({ hasText: /レビューを送信しました/ }),
+		).toBeVisible({ timeout: 10000 });
 
 		// --- 6) /mentors/<USER2 handle>/ で review が公開表示されるか確認 (anon でも OK) ---
 		const anon = await browser.newContext();
