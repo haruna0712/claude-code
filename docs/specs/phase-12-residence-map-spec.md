@@ -253,6 +253,35 @@ cd client && npx vitest run src/lib/api/__tests__/userSearch.test.ts src/compone
 PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/near-me-search.spec.ts
 ```
 
+### 7.6 サインアップ wizard 統合 (P12-03)
+
+step 1 (`/onboarding`) の display_name + bio 入力後に step 2 (`/onboarding/residence`)
+の prompt を挟む。 prompt 自体は presentational で API call なし、 「今すぐ設定」
+は `/settings/residence` (Leaflet editor、 P12-02 と同じ画面)、 「あとで設定」
+は `/` に飛ばす。 既存 `useOnboardingGuard` は step 1 完了で `needs_onboarding=False`
+が立つので step 2 は anytime 訪問可能な普通の page。
+
+vitest:
+
+- `OnboardingForm.test.tsx` (3 cases): submit 成功で `/onboarding/residence` に
+  redirect / submit 失敗で redirect なし / form の input 表示
+- `app/onboarding/residence/__tests__/page.test.tsx` (3 cases): heading / 2 つの
+  link href / step indicator が「居住地 (任意)」 を current にする
+
+E2E (`client/e2e/onboarding-residence.spec.ts` 3 cases):
+
+- ONBOARD-RES-1 (anon): /onboarding/residence は anon でも 200 (prompt は
+  public、 link 先で auth gate される)
+- ONBOARD-RES-2 (skip): 「あとで設定する」 → `/` 遷移
+- ONBOARD-RES-3 (golden): 「今すぐ設定する」 → /settings/residence の保存 button
+
+実行:
+
+```bash
+cd client && npx vitest run src/components/forms/onboarding/__tests__/ src/app/onboarding/residence/__tests__/
+PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/onboarding-residence.spec.ts
+```
+
 ---
 
 ## 8. ロールアウト順序
@@ -260,7 +289,7 @@ PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/near-me-sea
 1. ✅ **P12-01** (#678 merged): model + API + tests
 2. ✅ **P12-02** (#679 merged): 設定 UI + プロフィール map 表示 (Leaflet + OSM)
 3. ✅ **P12-04** (#680 merged): 汎用 user search page (full-text、 cursor pagination)
-4. **P12-05** (本 PR): 近所検索 (haversine SQL, near_me=1 / near=lat,lng)
-5. P12-03: signup wizard 統合 (任意フェーズ、 完成度的に最後)
+4. ✅ **P12-05** (#681 merged): 近所検索 (haversine SQL, near_me=1 / near=lat,lng)
+5. **P12-03** (本 PR): signup wizard step 2 (居住地 prompt) — Phase 12 完了
 
 各段階で `gan-evaluator` agent に採点させて UX を確認 (新 route 追加なので Phase 11 同様の必須運用)。
