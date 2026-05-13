@@ -72,7 +72,7 @@ def test_anon_cannot_propose(alice, bob):
     req = _open_request(alice)
     c = APIClient()
     res = c.post(
-        reverse("mentor-proposal-create", args=[req.pk]),
+        reverse("mentor-proposal-list", args=[req.pk]),
         {"body": "I can mentor you"},
         format="json",
     )
@@ -83,7 +83,7 @@ def test_anon_cannot_propose(alice, bob):
 def test_self_proposal_forbidden(alice):
     req = _open_request(alice)
     res = _auth(alice).post(
-        reverse("mentor-proposal-create", args=[req.pk]),
+        reverse("mentor-proposal-list", args=[req.pk]),
         {"body": "I propose to myself"},
         format="json",
     )
@@ -94,7 +94,7 @@ def test_self_proposal_forbidden(alice):
 @pytest.mark.django_db
 def test_404_when_request_missing(bob):
     res = _auth(bob).post(
-        reverse("mentor-proposal-create", args=[999_999]),
+        reverse("mentor-proposal-list", args=[999_999]),
         {"body": "hi"},
         format="json",
     )
@@ -105,7 +105,7 @@ def test_404_when_request_missing(bob):
 def test_empty_body_rejected(alice, bob):
     req = _open_request(alice)
     res = _auth(bob).post(
-        reverse("mentor-proposal-create", args=[req.pk]),
+        reverse("mentor-proposal-list", args=[req.pk]),
         {"body": ""},
         format="json",
     )
@@ -127,7 +127,7 @@ def test_empty_body_rejected(alice, bob):
 def test_cannot_propose_to_non_open_request(alice, bob, status_value):
     req = _open_request(alice, status=status_value)
     res = _auth(bob).post(
-        reverse("mentor-proposal-create", args=[req.pk]),
+        reverse("mentor-proposal-list", args=[req.pk]),
         {"body": "hi"},
         format="json",
     )
@@ -141,7 +141,7 @@ def test_cannot_propose_to_non_open_request(alice, bob, status_value):
 def test_create_proposal_success(alice, bob):
     req = _open_request(alice)
     res = _auth(bob).post(
-        reverse("mentor-proposal-create", args=[req.pk]),
+        reverse("mentor-proposal-list", args=[req.pk]),
         {"body": "I can help. AWS infra で 10 年経験あります。"},
         format="json",
     )
@@ -159,7 +159,7 @@ def test_proposal_count_incremented(alice, bob):
     req = _open_request(alice)
     assert req.proposal_count == 0
     _auth(bob).post(
-        reverse("mentor-proposal-create", args=[req.pk]),
+        reverse("mentor-proposal-list", args=[req.pk]),
         {"body": "x"},
         format="json",
     )
@@ -174,14 +174,14 @@ def test_proposal_count_incremented(alice, bob):
 def test_unique_request_mentor_pair(alice, bob):
     req = _open_request(alice)
     res1 = _auth(bob).post(
-        reverse("mentor-proposal-create", args=[req.pk]),
+        reverse("mentor-proposal-list", args=[req.pk]),
         {"body": "first"},
         format="json",
     )
     assert res1.status_code == 201
     # 2 回目は unique 違反で 400
     res2 = _auth(bob).post(
-        reverse("mentor-proposal-create", args=[req.pk]),
+        reverse("mentor-proposal-list", args=[req.pk]),
         {"body": "second"},
         format="json",
     )
@@ -195,12 +195,12 @@ def test_unique_request_mentor_pair(alice, bob):
 def test_different_mentors_can_propose_to_same_request(alice, bob, carol):
     req = _open_request(alice)
     res_bob = _auth(bob).post(
-        reverse("mentor-proposal-create", args=[req.pk]),
+        reverse("mentor-proposal-list", args=[req.pk]),
         {"body": "from bob"},
         format="json",
     )
     res_carol = _auth(carol).post(
-        reverse("mentor-proposal-create", args=[req.pk]),
+        reverse("mentor-proposal-list", args=[req.pk]),
         {"body": "from carol"},
         format="json",
     )
