@@ -159,14 +159,29 @@ GET /api/v1/users/?near_me=1&radius_km=N # 近所検索 (haversine, 認証必須
 docker compose -f local.yml exec api pytest apps/users/tests/test_user_residence.py -v --no-cov
 ```
 
-### 7.2 E2E (Playwright, P12-02 以降で追加)
+### 7.2 frontend vitest (P12-02)
+
+`client/src/lib/api/__tests__/residence.test.ts` で 6 cases:
+
+- 定数 `RESIDENCE_MIN_RADIUS_M` / `RESIDENCE_MAX_RADIUS_M` 露出
+- `fetchMyResidence` 200 / 404 (null) / 500 (rethrow)
+- `saveMyResidence` PATCH + CSRF bootstrap
+- `deleteMyResidence` DELETE + CSRF bootstrap
+
+実行:
+
+```bash
+cd client && npx vitest run src/lib/api/__tests__/residence.test.ts
+```
+
+### 7.3 E2E (Playwright, P12-02 で追加)
 
 `client/e2e/residence.spec.ts` で stg 検証:
 
-- RESIDENCE-1 (golden): ログイン → /settings/residence → 地図クリック → slider 1km → 保存 → プロフィール page に円が表示される
-- RESIDENCE-2 (anon view): 他人のプロフィール page を anon で踏んで円が表示される
-- RESIDENCE-3 (min enforce): radius<500 を frontend bypass で投げて 400 が返る
-- USER-SEARCH-1: /search/users で text 検索 → 結果クリックでプロフィール page
+- RESIDENCE-1 (golden): ログイン → API で設定 → /u/<self> で `.leaflet-container` 描画確認 →
+  /settings/residence で「保存する」 button が見える (ログイン経路の確認)
+- RESIDENCE-2 (anon view): 別 user のプロフィール page を anon で踏んで「居住地」 region が見える
+- RESIDENCE-3 (min enforce): radius=100 を API に投げて 400 が返る (frontend slider すり抜け不可)
 
 実行:
 
@@ -178,8 +193,8 @@ PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/residence.s
 
 ## 8. ロールアウト順序
 
-1. **P12-01** (本 PR): model + API + tests → 単体マージ可能
-2. P12-02: 設定 UI + プロフィール map 表示 (Leaflet UI)
+1. ✅ **P12-01** (#678 merged): model + API + tests
+2. **P12-02** (本 PR): 設定 UI + プロフィール map 表示 (Leaflet + OSM)
 3. P12-03: signup wizard 統合
 4. P12-04: 汎用 user search page
 5. P12-05: 近所検索 (haversine SQL)
