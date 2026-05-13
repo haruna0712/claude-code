@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from apps.mentorship.models import MentorRequest
+from apps.mentorship.models import MentorProposal, MentorRequest
 from apps.tags.models import Tag
 
 
@@ -101,3 +101,36 @@ class MentorRequestInputSerializer(serializers.Serializer):
             missing = sorted(set(normalized) - found)
             raise serializers.ValidationError(f"未登録 / 未承認のタグ: {', '.join(missing)}")
         return tags
+
+
+# --- MentorProposal (P11-04) ---
+
+
+class _MentorMiniSerializer(_MenteeMiniSerializer):
+    """mentor の最小 representation。 mentee と同じ shape (User 共通)。"""
+
+
+class MentorProposalDetailSerializer(serializers.ModelSerializer):
+    """proposal 詳細 (request owner のみ閲覧、 mentor 自身も自分のは見える)。"""
+
+    mentor = _MentorMiniSerializer(read_only=True)
+
+    class Meta:
+        model = MentorProposal
+        fields = (
+            "id",
+            "request",
+            "mentor",
+            "body",
+            "status",
+            "responded_at",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+
+class MentorProposalInputSerializer(serializers.Serializer):
+    """`POST /requests/<id>/proposals/` の入力 schema。"""
+
+    body = serializers.CharField(min_length=1, max_length=2000)

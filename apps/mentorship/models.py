@@ -80,3 +80,58 @@ class MentorRequest(models.Model):
 
     def __str__(self) -> str:
         return f"MentorRequest({self.mentee_id}, {self.title[:30]}, {self.status})"
+
+
+class MentorProposal(models.Model):
+    """mentor が `MentorRequest` に対して出す提案 (P11-04)。
+
+    spec §4.4。 1 request に対し 1 mentor は 1 proposal のみ (UniqueConstraint)。
+    self-proposal (mentor == request.mentee) は serializer 層で禁止 (CheckConstraint は
+    cross-table FK で書けないため)。
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "保留中"
+        ACCEPTED = "accepted", "承認済"
+        REJECTED = "rejected", "却下"
+        WITHDRAWN = "withdrawn", "取下げ"
+
+    request = models.ForeignKey(
+        MentorRequest,
+        on_delete=models.CASCADE,
+        related_name="proposals",
+    )
+    mentor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="proposals_sent",
+    )
+    body = models.TextField(max_length=2000)
+    # plan FK は P11-12 で MentorPlan model 追加時に add_field migration で後付け。
+    # 本 P11-04 では plan 連携なしで運用 (proposal は本文だけ送る形)。
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    # accept / reject / withdraw した時刻 (PENDING のうちは null)。
+    responded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["request", "mentor"],
+                name="unique_request_mentor_proposal",
+            ),
+        ]
+        indexes = [
+            # request 詳細で proposals を status 別 group 表示する用。
+            models.Index(fields=["request", "status"]),
+            # mentor 視点 (自分が出した提案一覧、 新着順)。
+            models.Index(fields=["mentor", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"MentorProposal(req={self.request_id}, mentor={self.mentor_id}, {self.status})"
