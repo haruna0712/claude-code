@@ -159,8 +159,13 @@ export default function ALeftNav() {
 			</div>
 
 			{visibleItems.map((item) => {
+				// nested route (例: `/search/users`) で親 (`/search`) と二重 active に
+				// ならないよう、 完全一致 or `/<seg>/...` のときだけ active にする
+				// (P12-04 HIGH 修正)。
 				const isActive =
-					item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+					item.href === "/"
+						? pathname === "/"
+						: pathname === item.href || pathname.startsWith(`${item.href}/`);
 				const badgeCount = itemBadgeCount(item.badgeKey);
 				return (
 					<Link

@@ -82,4 +82,10 @@ describe("userSearch API", () => {
 		expect(page.previous).toBeNull();
 		expect(page.results[0].user_id).toBe("u2");
 	});
+
+	it("fetchUserSearch rethrows non-2xx errors (no silent swallow)", async () => {
+		const { client, mock } = stub();
+		mock.onGet("/users/search/").reply(500, { detail: "boom" });
+		await expect(fetchUserSearch("alice", {}, client)).rejects.toThrow();
+	});
 });

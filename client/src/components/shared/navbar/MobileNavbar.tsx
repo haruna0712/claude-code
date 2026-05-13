@@ -102,8 +102,11 @@ function LeftNavContent() {
 						</span>
 					);
 				}
+				// path-prefix match: nested route (`/search/users`) で親 (`/search`) と
+				// 二重に active になる substring match を避ける (P12-04 HIGH 修正)。
 				const isActive =
-					(pathname.includes(href) && href.length > 1) || pathname === href;
+					pathname === href ||
+					(href.length > 1 && pathname.startsWith(`${href}/`));
 				return (
 					<SheetClose asChild key={linkItem.label}>
 						<Link
