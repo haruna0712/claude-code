@@ -71,6 +71,32 @@ test.describe("Phase 12 P12-05 near-me search (#677)", () => {
 		await ctx.close();
 	});
 
+	test("NEAR-2: 居住地未設定で near_me=1 → /settings/residence の link が出る", async ({
+		browser,
+	}) => {
+		requireEnv();
+		// USER1 の residence を一旦削除して未設定状態を作る
+		const ctx = await browser.newContext();
+		const { csrf } = await loginViaApi(ctx.request, USER1);
+		await ctx.request.delete(`${BASE}/api/v1/users/me/residence/`, {
+			headers: {
+				"X-CSRFToken": csrf,
+				Referer: `${BASE}/settings/residence`,
+			},
+		});
+
+		const page = await ctx.newPage();
+		await page.goto(`${BASE}/search/users?near_me=1&radius_km=10`);
+		await expect(page.getByText(/居住地が未設定/)).toBeVisible({
+			timeout: 15000,
+		});
+		const settingsLink = page.getByRole("link", {
+			name: /地図を設定する/,
+		});
+		await expect(settingsLink).toBeVisible();
+		await ctx.close();
+	});
+
 	test("NEAR-3: 設定済 user の near_me=1 で 近所の人が距離バッジ付きで出る", async ({
 		browser,
 	}) => {

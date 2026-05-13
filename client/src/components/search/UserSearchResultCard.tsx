@@ -60,7 +60,7 @@ export default function UserSearchResultCard({
 						>
 							@{handle}
 						</span>
-						{user.distance_km !== null && user.distance_km !== undefined && (
+						{user.distance_km != null && (
 							<span
 								className="ml-auto shrink-0 rounded-full bg-[color:var(--a-bg-muted)] px-2 py-0.5 text-[color:var(--a-text-muted)]"
 								style={{ fontSize: 11 }}

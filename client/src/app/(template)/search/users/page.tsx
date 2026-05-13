@@ -16,7 +16,6 @@ import NearMeFilter from "@/components/search/NearMeFilter";
 import UserSearchBox from "@/components/search/UserSearchBox";
 import UserSearchResultCard from "@/components/search/UserSearchResultCard";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
-import type { UserResidence } from "@/lib/api/residence";
 import {
 	PROXIMITY_RADIUS_DEFAULT_KM,
 	PROXIMITY_RADIUS_MAX_KM,
@@ -69,18 +68,10 @@ async function loadCurrentUser(): Promise<CurrentUser | null> {
 	}
 }
 
-async function loadMyResidence(): Promise<UserResidence | null> {
-	try {
-		return await serverFetch<UserResidence>("/users/me/residence/");
-	} catch (error) {
-		if (error instanceof ApiServerError) return null;
-		return null;
-	}
-}
-
 type SearchOutcome =
 	| { kind: "results"; page: UserSearchPageData }
 	| { kind: "missing_residence" }
+	| { kind: "needs_login" }
 	| { kind: "error"; message: string };
 
 async function loadUserSearch(query: SearchQuery): Promise<SearchOutcome> {
@@ -102,10 +93,13 @@ async function loadUserSearch(query: SearchQuery): Promise<SearchOutcome> {
 			if (error.status === 400 && query.nearMe) {
 				return { kind: "missing_residence" };
 			}
-			if (error.status === 403 || error.status === 401) {
-				// 未ログインで near_me=1 を踏んだケース。 page 側 CTA で誘導
-				return { kind: "missing_residence" };
+			// 401 = anon ユーザーが near_me=1 を踏んだ
+			if (error.status === 401) {
+				return { kind: "needs_login" };
 			}
+			// 403 = auth 済みだが permission denied (将来 admin only 機能等)。
+			// 「ログインが必要」 では誤誘導なので、 generic error として出す。
+			// typescript-reviewer HIGH (#681) 指摘: 401/403 conflation を解消。
 			return { kind: "error", message: `エラー (${error.status})` };
 		}
 		throw error;
@@ -145,10 +139,7 @@ export default async function UserSearchPage({
 	searchParams,
 }: SearchPageProps) {
 	const query = parseSearchParams(searchParams);
-	const [currentUser, myResidence] = await Promise.all([
-		loadCurrentUser(),
-		query.nearMe ? loadMyResidence() : Promise.resolve(null),
-	]);
+	const currentUser = await loadCurrentUser();
 	const loggedIn = currentUser !== null;
 	// 何も指定がなければ検索しない
 	const hasAnyQuery = query.q.length > 0 || query.nearMe;
@@ -198,7 +189,12 @@ export default async function UserSearchPage({
 					<UserSearchBox initialValue={query.q} />
 				</div>
 				<div className="mb-6">
+					{/* key で URL 状態が変わるたびに NearMeFilter を remount し、
+					    `useState(initialXxx)` の初回 seed を最新値に強制する
+					    (typescript-reviewer HIGH 修正、 client component が
+					    Server Component の re-render で remount されない問題)。*/}
 					<NearMeFilter
+						key={`${query.nearMe}-${query.radiusKm}`}
 						query={query.q}
 						initialNearMe={query.nearMe}
 						initialRadiusKm={query.radiusKm}
@@ -218,27 +214,28 @@ export default async function UserSearchPage({
 						role="status"
 						className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-6 text-sm text-[color:var(--a-text-muted)]"
 					>
-						{loggedIn && myResidence === null ? (
-							<>
-								居住地が未設定なので近所検索できません。{" "}
-								<Link
-									href="/settings/residence"
-									className="text-[color:var(--a-accent)] hover:underline"
-								>
-									/settings/residence で地図を設定する
-								</Link>
-							</>
-						) : (
-							<>
-								近所検索にはログインが必要です。{" "}
-								<Link
-									href={`/login?next=${encodeURIComponent(buildSearchHref(query))}`}
-									className="text-[color:var(--a-accent)] hover:underline"
-								>
-									ログイン
-								</Link>
-							</>
-						)}
+						居住地が未設定なので近所検索できません。{" "}
+						<Link
+							href="/settings/residence"
+							className="text-[color:var(--a-accent)] hover:underline"
+						>
+							/settings/residence で地図を設定する
+						</Link>
+					</p>
+				)}
+
+				{outcome.kind === "needs_login" && (
+					<p
+						role="status"
+						className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-6 text-sm text-[color:var(--a-text-muted)]"
+					>
+						近所検索にはログインが必要です。{" "}
+						<Link
+							href={`/login?next=${encodeURIComponent(buildSearchHref(query))}`}
+							className="text-[color:var(--a-accent)] hover:underline"
+						>
+							ログイン
+						</Link>
 					</p>
 				)}
 

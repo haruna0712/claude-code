@@ -67,9 +67,11 @@ export default function NearMeFilter({
 							setNearMe(checked);
 							navigate({ nearMe: checked, radiusKm });
 						}}
-						aria-label="自分の近所で絞り込む"
 					/>
-					<span>近所で絞り込む</span>
+					{/* 視覚ラベルと screen reader 名称を一致させる: 単一の <span> が
+					    wrapping <label> で checkbox の accessible name になるので
+					    別途 aria-label を付けない。 */}
+					<span>自分の近所で絞り込む</span>
 				</label>
 
 				{!loggedIn && (
@@ -101,7 +103,22 @@ export default function NearMeFilter({
 							onMouseUp={() => navigate({ nearMe, radiusKm })}
 							onTouchEnd={() => navigate({ nearMe, radiusKm })}
 							onKeyUp={(e) => {
-								if (e.key === "Enter" || e.key === " ") {
+								// 矢印キー = slider 値変更後の commit。 Enter / Space
+								// = 明示 commit。 PageUp / PageDown / Home / End も
+								// native range の操作に含まれるので拾う。
+								const commitKeys = [
+									"Enter",
+									" ",
+									"ArrowLeft",
+									"ArrowRight",
+									"ArrowUp",
+									"ArrowDown",
+									"PageUp",
+									"PageDown",
+									"Home",
+									"End",
+								];
+								if (commitKeys.includes(e.key)) {
 									navigate({ nearMe, radiusKm });
 								}
 							}}
