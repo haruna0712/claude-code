@@ -6,9 +6,11 @@ import FavoritesTab from "@/components/boxes/FavoritesTab";
 import StartDMButton from "@/components/dm/StartDMButton";
 import FollowButton from "@/components/follows/FollowButton";
 import ProfileKebab from "@/components/moderation/ProfileKebab";
+import ResidenceMapPreview from "@/components/profile/residence/ResidenceMapPreview";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { MentorProfileDetail } from "@/lib/api/mentor";
+import type { UserResidence } from "@/lib/api/residence";
 import type { TweetSummary } from "@/lib/api/tweets";
 import type { CurrentUser } from "@/lib/api/users";
 import { stringifyJsonLd } from "@/lib/json-ld";
@@ -113,6 +115,16 @@ async function loadMentorProfile(
 	}
 }
 
+async function loadResidence(handle: string): Promise<UserResidence | null> {
+	// P12-02: handle の居住地 (未設定 / unknown は null)。 anon 可 endpoint。
+	try {
+		return await serverFetch<UserResidence>(`/users/${handle}/residence/`);
+	} catch (err) {
+		if (err instanceof ApiServerError && err.status === 404) return null;
+		return null;
+	}
+}
+
 export async function generateMetadata({
 	params,
 }: PageProps): Promise<Metadata> {
@@ -151,12 +163,14 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 	if (!profile) notFound();
 
 	const tab = resolveTab(searchParams?.tab);
-	const [tweets, likedTweets, currentUser, mentorProfile] = await Promise.all([
-		tab === "tweets" ? loadTweets(profile.username) : Promise.resolve([]),
-		tab === "likes" ? loadLikedTweets(profile.username) : Promise.resolve([]),
-		loadCurrentUser(),
-		loadMentorProfile(profile.username),
-	]);
+	const [tweets, likedTweets, currentUser, mentorProfile, residence] =
+		await Promise.all([
+			tab === "tweets" ? loadTweets(profile.username) : Promise.resolve([]),
+			tab === "likes" ? loadLikedTweets(profile.username) : Promise.resolve([]),
+			loadCurrentUser(),
+			loadMentorProfile(profile.username),
+			loadResidence(profile.username),
+		]);
 	const isOwnProfile = currentUser?.username === profile.username;
 	const hasMentorProfile = mentorProfile !== null;
 
@@ -269,6 +283,40 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 
 				{profile.bio && (
 					<p className="mt-4 whitespace-pre-wrap px-4 text-sm">{profile.bio}</p>
+				)}
+
+				{residence && (
+					<section aria-label="居住地" className="mt-4 px-4">
+						<h2 className="mb-2 text-sm font-semibold">居住地</h2>
+						<ResidenceMapPreview residence={residence} height={220} />
+						{isOwnProfile && (
+							<div className="mt-2 text-right">
+								<Link
+									href="/settings/residence"
+									className="text-[color:var(--a-accent)] hover:underline"
+									style={{ fontSize: 12.5 }}
+								>
+									地図を編集
+								</Link>
+							</div>
+						)}
+					</section>
+				)}
+				{!residence && isOwnProfile && (
+					<section aria-label="居住地" className="mt-4 px-4">
+						<p
+							className="rounded-lg border border-dashed px-3 py-2 text-[color:var(--a-text-muted)]"
+							style={{ borderColor: "var(--a-border)", fontSize: 12.5 }}
+						>
+							居住地マップが未設定です。{" "}
+							<Link
+								href="/settings/residence"
+								className="text-[color:var(--a-accent)] hover:underline"
+							>
+								地図を設定する
+							</Link>
+						</p>
+					</section>
 				)}
 
 				<ul className="mt-3 flex flex-wrap gap-3 px-4 text-sm">

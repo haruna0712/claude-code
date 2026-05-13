@@ -21,6 +21,7 @@ import {
 	Ban,
 	Bell,
 	LogOut,
+	MapPin,
 	Monitor,
 	Moon,
 	Settings,
@@ -103,6 +104,13 @@ export default function SettingsMenu({
 					>
 						<Bell className="size-4" aria-hidden="true" />
 						<span>通知の設定</span>
+					</Link>
+				</DropdownMenuItem>
+				{/* Phase 12 (P12-02): 居住地マップの設定 */}
+				<DropdownMenuItem asChild className="cursor-pointer gap-2">
+					<Link href="/settings/residence" className="flex items-center gap-2">
+						<MapPin className="size-4" aria-hidden="true" />
+						<span>居住地マップ</span>
 					</Link>
 				</DropdownMenuItem>
 				{/* Phase 4B (#450): ブロック / ミュート 一覧 */}
