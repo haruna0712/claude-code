@@ -2,7 +2,7 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.shortcuts import get_object_or_404
 from djoser.social.views import ProviderAuthView
 from rest_framework import serializers, status
@@ -799,6 +799,18 @@ class UserSearchCursorPagination(CursorPagination):
     cursor_query_param = "cursor"
 
 
+class UserSearchAnonThrottle(AnonRateThrottle):
+    """``/users/search/`` 専用 throttle (anon).
+
+    python-reviewer (P12-04 HIGH) 指摘:
+    既定 ``anon`` (200/day) は SearchBox の keystroke で簡単に枯渇する。
+    text-search 用には分単位の bucket が適切。 rate は settings.base の
+    ``_THROTTLE_RATES_BASE['user_search_anon']`` で管理。
+    """
+
+    scope = "user_search_anon"
+
+
 class UserFullTextSearchView(ListAPIView):
     """``GET /api/v1/users/search/?q=<text>&cursor=...``: 汎用ユーザー検索 (P12-04)。
 
@@ -808,13 +820,18 @@ class UserFullTextSearchView(ListAPIView):
     - ``is_active=False`` を除外。
     - cursor pagination (page_size=20)。 ``ordering="username"`` で安定。
     - 空 q は空配列 (lookup 空打ちさせない)。
+
+    パフォーマンス: ``username`` / ``display_name`` / ``bio`` には pg_trgm の
+    ``gin_trgm_ops`` GIN index を貼って ``ILIKE '%q%'`` を index 利用可にする
+    (apps/users/migrations/0006_user_search_gin_indexes.py)。
     """
 
     serializer_class = UserFullTextSerializer
     permission_classes = [AllowAny]
     pagination_class = UserSearchCursorPagination
+    throttle_classes = [UserSearchAnonThrottle]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         q = (self.request.query_params.get("q") or "").strip()
         if not q:
             return User.objects.none()

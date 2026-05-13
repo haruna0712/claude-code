@@ -478,6 +478,11 @@ _THROTTLE_RATES_BASE = {
     # 30/hour は記事 1 本に画像 10 枚貼っても 3 本/時 = 通常運用十分。
     "article_image_presign": "30/hour" if not _IS_STG else "300/hour",
     "article_image_confirm": "30/hour" if not _IS_STG else "300/hour",
+    # Phase 12 user search (P12-04 / #676):
+    # 共有 anon (200/day) は keystroke search で簡単に枯渇するので
+    # /api/v1/users/search/ 専用の per-minute scope を切る。
+    # 60/min = SearchBox を 1 秒間隔で叩いても 1 分は持つ余裕。 bot 抑止としても十分。
+    "user_search_anon": "60/min" if not _IS_STG else "600/min",
 }
 
 REST_FRAMEWORK = {
