@@ -3,6 +3,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.translation import gettext_lazy as _
 
+from apps.users.models import UserResidence
+
 from .forms import UserChangeForm, UserCreationForm
 
 User = get_user_model()
@@ -89,3 +91,11 @@ class UserAdmin(BaseUserAdmin):
             },
         ),
     )
+
+
+@admin.register(UserResidence)
+class UserResidenceAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "latitude", "longitude", "radius_m", "updated_at")
+    search_fields = ("user__username",)
+    raw_id_fields = ("user",)
+    readonly_fields = ("created_at", "updated_at")

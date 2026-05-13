@@ -1,6 +1,7 @@
 import uuid
 from typing import Any
 
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.core import validators
 from django.core.validators import URLValidator
@@ -194,3 +195,52 @@ class User(AbstractUser):
         別名 ``full_name`` として公開する (python-reviewer HIGH)。
         """
         return f"{self.first_name} {self.last_name}".strip()
+
+
+# --- Phase 12 (P12-01): UserResidence ---
+
+
+class UserResidence(models.Model):
+    """User の居住地 (Phase 12 P12-01)。
+
+    プライバシー配慮で **必ず円** で表現 (ピンポイント禁止)。 最低半径は 500m。
+    proximity 検索は haversine SQL で計算 (PostGIS 不要、 MVP 規模)。
+
+    spec: 「ユーザーが住所をざっくり示せる」 + 「ピンポイント公開は防ぐ (min 500m)」。
+    """
+
+    MIN_RADIUS_M = 500
+    MAX_RADIUS_M = 50_000  # 50km cap (それ以上は意味なし)
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="residence",
+    )
+    # WGS84 (世界測地系) で lat/lng を保存。 precision 7 = 1.1cm 単位だが、
+    # 個人居住地はそんなに精密に保存しないので precision 6 (11cm) で十分。
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    # 半径 (メートル)。 MIN_RADIUS_M 以上必須 (validator + serializer 二重 enforce)。
+    radius_m = models.PositiveIntegerField(default=MIN_RADIUS_M)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(latitude__gte=-90, latitude__lte=90),
+                name="user_residence_lat_range",
+            ),
+            models.CheckConstraint(
+                check=models.Q(longitude__gte=-180, longitude__lte=180),
+                name="user_residence_lng_range",
+            ),
+            models.CheckConstraint(
+                check=models.Q(radius_m__gte=500, radius_m__lte=50_000),
+                name="user_residence_radius_range",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"UserResidence(user={self.user_id}, ({self.latitude},{self.longitude}) r={self.radius_m}m)"

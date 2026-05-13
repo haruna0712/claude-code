@@ -17,11 +17,14 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.common.cookie_auth import CookieAuthentication, CSRFEnforcingAuthentication
+from apps.users.models import UserResidence
 from apps.users.s3_presign import generate_presigned_upload_url
 from apps.users.serializers import (
     CustomUserSerializer,
     PublicProfileSerializer,
     UploadUrlRequestSerializer,
+    UserResidenceSerializer,
+    UserResidenceWriteSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -695,3 +698,66 @@ class UserSearchView(APIView):
         )
         results = UserSearchSerializer(qs, many=True).data
         return Response({"results": results}, status=status.HTTP_200_OK)
+
+
+# ---------------------------------------------------------------------------
+# Phase 12 P12-01: UserResidence CRUD API
+# ---------------------------------------------------------------------------
+
+
+class MyUserResidenceView(APIView):
+    """``/api/v1/users/me/residence/`` — 自分の居住地 CRUD.
+
+    - ``GET``: 取得 (未設定なら 404)
+    - ``PATCH``: 作成 or 更新 (upsert)。 min 500m radius enforce。
+    - ``DELETE``: 削除 (居住地非公開化)
+
+    プライバシー観点で:
+      - radius_m は MIN_RADIUS_M (500m) 以上必須 (serializer + model 二重 enforce)
+      - 認証必須 (Cookie + CSRF)
+      - 他人の residence は ``/users/<handle>/residence/`` で別 endpoint
+    """
+
+    authentication_classes = [CSRFEnforcingAuthentication, CookieAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "patch", "delete", "head", "options"]
+
+    def get(self, request: Request, *args, **kwargs) -> Response:
+        residence = UserResidence.objects.filter(user=request.user).first()
+        if residence is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(UserResidenceSerializer(residence).data, status=status.HTTP_200_OK)
+
+    def patch(self, request: Request, *args, **kwargs) -> Response:
+        serializer = UserResidenceWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        residence, _created = UserResidence.objects.update_or_create(
+            user=request.user,
+            defaults=serializer.validated_data,
+        )
+        return Response(UserResidenceSerializer(residence).data, status=status.HTTP_200_OK)
+
+    def delete(self, request: Request, *args, **kwargs) -> Response:
+        UserResidence.objects.filter(user=request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class UserResidenceByHandleView(APIView):
+    """``/api/v1/users/<handle>/residence/`` — 他人の居住地 (anon 閲覧可).
+
+    プロフィール page で map を表示するため、 未ログインでも GET 200 を返す。
+    radius は本人がコントロールしている (min 500m) のでプライバシーは保たれる。
+    未設定なら 404 を返して frontend で「未設定」 を出す。
+    """
+
+    permission_classes = [AllowAny]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, request: Request, username: str, *args, **kwargs) -> Response:
+        user = User.objects.filter(is_active=True, username__iexact=username).first()
+        if user is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        residence = UserResidence.objects.filter(user=user).first()
+        if residence is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(UserResidenceSerializer(residence).data, status=status.HTTP_200_OK)

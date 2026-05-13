@@ -21,7 +21,9 @@ from .views import (
     CompleteOnboardingView,
     HeaderUploadUrlView,
     MeView,
+    MyUserResidenceView,
     PublicProfileView,
+    UserResidenceByHandleView,
     UserSearchView,
 )
 
@@ -48,5 +50,19 @@ urlpatterns = [
         CompleteOnboardingView.as_view(),
         name="users-me-complete-onboarding",
     ),
+    # P12-01: 自分の居住地 CRUD (map 用)。 me/ 系の静的 path として
+    # <str:username>/ より前に登録する (greedy 回避)。
+    path(
+        "me/residence/",
+        MyUserResidenceView.as_view(),
+        name="users-me-residence",
+    ),
     path("<str:username>/", PublicProfileView.as_view(), name="users-public-profile"),
+    # P12-01: 他人の居住地参照 (anon 閲覧可)。 PublicProfileView より長い path なので
+    # この順で問題なし。
+    path(
+        "<str:username>/residence/",
+        UserResidenceByHandleView.as_view(),
+        name="users-public-residence",
+    ),
 ]

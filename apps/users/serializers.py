@@ -1,9 +1,12 @@
+from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
 from djoser.serializers import UserCreateSerializer, UserSerializer
 from rest_framework import serializers
 
+from apps.users.models import UserResidence
 from apps.users.s3_presign import ALLOWED_CONTENT_TYPES, MAX_CONTENT_LENGTH
 from apps.users.validators import validate_handle, validate_media_url
 
@@ -198,3 +201,53 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         # ときに他方まで壊れる可能性がある。独立コピーを持たせる
         # (P1-03 review HIGH 対応)。
         read_only_fields = list(fields)
+
+
+# ---------------------------------------------------------------------------
+# Phase 12 P12-01: UserResidence (居住地マップ) — プライバシー保護のため
+# サーバ側で min 500m radius を二重 enforce する。
+# ---------------------------------------------------------------------------
+
+
+class UserResidenceSerializer(serializers.ModelSerializer):
+    """UserResidence の読み出し用 (anon でも公開可)。
+
+    ``latitude`` / ``longitude`` は数値 (Decimal) で返す。 frontend は Leaflet に
+    そのまま渡せる。 ``radius_m`` は常に MIN_RADIUS_M 以上を満たすので、
+    クライアントは生値を信頼してよい。
+    """
+
+    class Meta:
+        model = UserResidence
+        fields = ["latitude", "longitude", "radius_m", "updated_at"]
+        read_only_fields = list(fields)
+
+
+_LAT_MIN = Decimal("-90")
+_LAT_MAX = Decimal("90")
+_LNG_MIN = Decimal("-180")
+_LNG_MAX = Decimal("180")
+
+
+class UserResidenceWriteSerializer(serializers.ModelSerializer):
+    """``PATCH /api/v1/users/me/residence/`` 用の書き込み serializer。
+
+    min 500m radius と lat/lng レンジを **serializer + model CheckConstraint** の
+    二重で enforce する (security-reviewer 観点でクライアント側の slider min を
+    弄って 1m radius にすり抜けられないように)。
+    """
+
+    latitude = serializers.DecimalField(
+        max_digits=9, decimal_places=6, min_value=_LAT_MIN, max_value=_LAT_MAX
+    )
+    longitude = serializers.DecimalField(
+        max_digits=9, decimal_places=6, min_value=_LNG_MIN, max_value=_LNG_MAX
+    )
+    radius_m = serializers.IntegerField(
+        min_value=UserResidence.MIN_RADIUS_M,
+        max_value=UserResidence.MAX_RADIUS_M,
+    )
+
+    class Meta:
+        model = UserResidence
+        fields = ["latitude", "longitude", "radius_m"]
