@@ -2,7 +2,11 @@
 
 from django.contrib import admin
 
-from apps.mentorship.models import MentorProposal, MentorRequest
+from apps.mentorship.models import (
+    MentorProposal,
+    MentorRequest,
+    MentorshipContract,
+)
 
 
 @admin.register(MentorRequest)
@@ -21,3 +25,12 @@ class MentorProposalAdmin(admin.ModelAdmin):
     search_fields = ("body", "mentor__username")
     raw_id_fields = ("request", "mentor")
     readonly_fields = ("created_at", "updated_at", "responded_at")
+
+
+@admin.register(MentorshipContract)
+class MentorshipContractAdmin(admin.ModelAdmin):
+    list_display = ("id", "mentee", "mentor", "status", "started_at", "completed_at")
+    list_filter = ("status", "is_paid")
+    search_fields = ("mentee__username", "mentor__username")
+    raw_id_fields = ("proposal", "mentee", "mentor", "room")
+    readonly_fields = ("started_at", "completed_at", "updated_at", "plan_snapshot")

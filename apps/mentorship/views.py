@@ -32,7 +32,9 @@ from apps.mentorship.serializers import (
     MentorRequestDetailSerializer,
     MentorRequestInputSerializer,
     MentorRequestSummarySerializer,
+    MentorshipContractDetailSerializer,
 )
+from apps.mentorship.services import accept_proposal, get_proposal_or_404
 
 
 class _MentorRequestListPagination(CursorPagination):
@@ -230,5 +232,23 @@ class MentorProposalCreateView(APIView):
 
         return Response(
             MentorProposalDetailSerializer(proposal).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MentorProposalAcceptView(APIView):
+    """`POST /mentor/proposals/<id>/accept/` — mentee が proposal を accept する。
+
+    spec §6.2 / §3.2。 service 層 `accept_proposal()` に委譲、
+    `MentorshipContract` + DMRoom (kind=MENTORSHIP) を atomic に作成。
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request: Request, pk: int) -> Response:
+        proposal = get_proposal_or_404(pk)
+        contract = accept_proposal(proposal=proposal, by_user=request.user)
+        return Response(
+            MentorshipContractDetailSerializer(contract).data,
             status=status.HTTP_201_CREATED,
         )
