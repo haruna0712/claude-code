@@ -260,3 +260,37 @@ class MentorProfileInputSerializer(serializers.Serializer):
             missing = sorted(set(normalized) - found)
             raise serializers.ValidationError(f"未登録 / 未承認のタグ: {', '.join(missing)}")
         return tags
+
+
+# --- MentorReview (Phase 11-D P11-20) ---
+
+
+class MentorReviewSerializer(serializers.ModelSerializer):
+    """review 出力 (mentor profile reviews tab で表示)。"""
+
+    mentee = _MenteeMiniSerializer(read_only=True)
+    mentor = _MentorMiniSerializer(read_only=True)
+
+    class Meta:
+        from apps.mentorship.models import MentorReview as _MR
+
+        model = _MR
+        fields = (
+            "id",
+            "contract",
+            "mentor",
+            "mentee",
+            "rating",
+            "comment",
+            "is_visible",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+
+class MentorReviewInputSerializer(serializers.Serializer):
+    """POST 契約 review の入力。"""
+
+    rating = serializers.IntegerField(min_value=1, max_value=5)
+    comment = serializers.CharField(min_length=1, max_length=2000)

@@ -290,3 +290,50 @@ class MentorPlan(models.Model):
 
     def __str__(self) -> str:
         return f"MentorPlan(profile={self.profile_id}, {self.title[:30]}, {self.billing_cycle})"
+
+
+class MentorReview(models.Model):
+    """契約完了後の mentee → mentor 評価 (P11-20)。
+
+    spec §4.6。 1 contract 1 review (OneToOne)。 rating 1-5、 comment 必須 (1-2000)。
+    投稿時に MentorProfile の avg_rating / review_count を atomic に集計更新する
+    (service 層 `submit_review` で実装)。
+    """
+
+    contract = models.OneToOneField(
+        MentorshipContract,
+        on_delete=models.CASCADE,
+        related_name="review",
+    )
+    mentor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="reviews_received",
+    )
+    # mentee は退会で SET_NULL (review は残るが author 表示は「退会済ユーザー」)。
+    mentee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="reviews_written",
+    )
+    rating = models.PositiveSmallIntegerField()  # 1-5 (CheckConstraint)
+    comment = models.TextField(max_length=2000)
+    # 通報対応で隠す用 (Phase 4B Report と連動、 P11-25 で wire)。
+    is_visible = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(rating__gte=1, rating__lte=5),
+                name="mentor_review_rating_1_to_5",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["mentor", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"MentorReview(contract={self.contract_id}, mentor={self.mentor_id}, ★{self.rating})"

@@ -12,6 +12,7 @@ from apps.mentorship.views import (
     MentorPlanDetailView,
     MentorPlanListCreateView,
     MentorProfileMeView,
+    MentorReviewsByHandleView,
 )
 
 urlpatterns = [
@@ -41,5 +42,11 @@ urlpatterns = [
         "<str:handle>/",
         MentorDetailView.as_view(),
         name="mentor-detail",
+    ),
+    # P11-20: 公開 review 一覧 (anon 可)。
+    path(
+        "<str:handle>/reviews/",
+        MentorReviewsByHandleView.as_view(),
+        name="mentor-reviews",
     ),
 ]

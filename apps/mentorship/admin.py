@@ -7,6 +7,7 @@ from apps.mentorship.models import (
     MentorProfile,
     MentorProposal,
     MentorRequest,
+    MentorReview,
     MentorshipContract,
 )
 
@@ -76,4 +77,13 @@ class MentorPlanAdmin(admin.ModelAdmin):
     list_filter = ("billing_cycle", "is_active")
     search_fields = ("title", "description", "profile__user__username")
     raw_id_fields = ("profile",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(MentorReview)
+class MentorReviewAdmin(admin.ModelAdmin):
+    list_display = ("id", "mentor", "mentee", "rating", "is_visible", "created_at")
+    list_filter = ("rating", "is_visible")
+    search_fields = ("comment", "mentor__username", "mentee__username")
+    raw_id_fields = ("contract", "mentor", "mentee")
     readonly_fields = ("created_at", "updated_at")
