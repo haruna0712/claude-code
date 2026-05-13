@@ -5,10 +5,14 @@
 管理する。
 
 ルーティング:
-- ``GET/PATCH /api/v1/users/me/``                    → MeView
-- ``POST      /api/v1/users/me/avatar-upload-url/``  → AvatarUploadUrlView (P1-04)
-- ``POST      /api/v1/users/me/header-upload-url/``  → HeaderUploadUrlView (P1-04)
-- ``GET       /api/v1/users/<handle>/``              → PublicProfileView
+- ``GET                /api/v1/users/``                          → UserSearchView (#480)
+- ``GET/PATCH          /api/v1/users/me/``                       → MeView
+- ``POST               /api/v1/users/me/avatar-upload-url/``     → AvatarUploadUrlView (P1-04)
+- ``POST               /api/v1/users/me/header-upload-url/``     → HeaderUploadUrlView (P1-04)
+- ``POST               /api/v1/users/me/complete_onboarding/``   → CompleteOnboardingView (P1-14)
+- ``GET/PATCH/DELETE   /api/v1/users/me/residence/``             → MyUserResidenceView (P12-01)
+- ``GET                /api/v1/users/<handle>/``                 → PublicProfileView
+- ``GET                /api/v1/users/<handle>/residence/``       → UserResidenceByHandleView (P12-01)
 
 NOTE: ``<str:username>`` は greedy に ``me`` にもマッチしてしまうため、
 ``me/`` 配下のエンドポイントは public profile より先に定義して優先させる。
@@ -21,7 +25,9 @@ from .views import (
     CompleteOnboardingView,
     HeaderUploadUrlView,
     MeView,
+    MyUserResidenceView,
     PublicProfileView,
+    UserResidenceByHandleView,
     UserSearchView,
 )
 
@@ -48,5 +54,19 @@ urlpatterns = [
         CompleteOnboardingView.as_view(),
         name="users-me-complete-onboarding",
     ),
+    # P12-01: 自分の居住地 CRUD (map 用)。 me/ 系の静的 path として
+    # <str:username>/ より前に登録する (greedy 回避)。
+    path(
+        "me/residence/",
+        MyUserResidenceView.as_view(),
+        name="users-me-residence",
+    ),
     path("<str:username>/", PublicProfileView.as_view(), name="users-public-profile"),
+    # P12-01: 他人の居住地参照 (anon 閲覧可)。 PublicProfileView より長い path なので
+    # この順で問題なし。
+    path(
+        "<str:username>/residence/",
+        UserResidenceByHandleView.as_view(),
+        name="users-public-residence",
+    ),
 ]
