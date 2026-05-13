@@ -192,7 +192,7 @@ export default async function UserSearchPage({
 					{/* key で URL 状態が変わるたびに NearMeFilter を remount し、
 					    `useState(initialXxx)` の初回 seed を最新値に強制する
 					    (typescript-reviewer HIGH 修正、 client component が
-					    Server Component の re-render で remount されない問題)。*/}
+					    Server Component の re-render で remount されない問題)。 */}
 					<NearMeFilter
 						key={`${query.nearMe}-${query.radiusKm}`}
 						query={query.q}
