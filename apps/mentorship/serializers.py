@@ -9,6 +9,8 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.mentorship.models import (
+    MentorPlan,
+    MentorProfile,
     MentorProposal,
     MentorRequest,
     MentorshipContract,
@@ -167,3 +169,94 @@ class MentorshipContractDetailSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+
+# --- MentorProfile (P11-11) + MentorPlan (P11-12) ---
+
+
+class MentorPlanSerializer(serializers.ModelSerializer):
+    """Plan の出力 + Patch 用 (read/write 共通、 profile FK は server 側で set)。"""
+
+    class Meta:
+        model = MentorPlan
+        fields = (
+            "id",
+            "title",
+            "description",
+            "price_jpy",
+            "billing_cycle",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("id", "is_active", "created_at", "updated_at")
+
+
+class MentorPlanInputSerializer(serializers.Serializer):
+    """POST / PATCH の入力 (title / description / price_jpy / billing_cycle)。"""
+
+    title = serializers.CharField(min_length=1, max_length=60)
+    description = serializers.CharField(min_length=1, max_length=1000)
+    price_jpy = serializers.IntegerField(min_value=0, max_value=10_000_000, default=0)
+    billing_cycle = serializers.ChoiceField(
+        choices=MentorPlan.BillingCycle.choices,
+    )
+
+
+class MentorProfileSerializer(serializers.ModelSerializer):
+    """mentor profile の公開出力 (anon が /mentors/<handle>/ で見る)。"""
+
+    user = _MenteeMiniSerializer(read_only=True)
+    skill_tags = _TagSlimSerializer(many=True, read_only=True)
+    plans = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MentorProfile
+        fields = (
+            "id",
+            "user",
+            "headline",
+            "bio",
+            "experience_years",
+            "is_accepting",
+            "skill_tags",
+            "plans",
+            "proposal_count",
+            "contract_count",
+            "avg_rating",
+            "review_count",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+    def get_plans(self, obj):
+        """is_active=True の plan のみを返す (削除済は hide)。"""
+        active = obj.plans.filter(is_active=True).order_by("created_at")
+        return MentorPlanSerializer(active, many=True).data
+
+
+class MentorProfileInputSerializer(serializers.Serializer):
+    """PATCH /mentors/me/ の入力 (auto-create if not exists)。"""
+
+    headline = serializers.CharField(min_length=1, max_length=80)
+    bio = serializers.CharField(min_length=1, max_length=2000)
+    experience_years = serializers.IntegerField(min_value=0, max_value=80, default=0)
+    is_accepting = serializers.BooleanField(default=True)
+    skill_tag_names = serializers.ListField(
+        child=serializers.CharField(max_length=50),
+        max_length=10,
+        required=False,
+        default=list,
+    )
+
+    def validate_skill_tag_names(self, value: list[str]) -> list[Tag]:
+        normalized = list({v.strip().lower() for v in value if v.strip()})
+        if not normalized:
+            return []
+        tags = list(Tag.objects.filter(name__in=normalized))
+        if len(tags) != len(normalized):
+            found = {t.name for t in tags}
+            missing = sorted(set(normalized) - found)
+            raise serializers.ValidationError(f"未登録 / 未承認のタグ: {', '.join(missing)}")
+        return tags
