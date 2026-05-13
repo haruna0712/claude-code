@@ -111,7 +111,7 @@ test.describe("Phase 11 11-A mentor board (#624)", () => {
 		// --- mentee が proposal リストで accept ---
 		await mentee.reload();
 		const acceptBtn = mentee.getByRole("button", {
-			name: new RegExp(`@${USER2.handle} の提案を accept`),
+			name: new RegExp(`@${USER2.handle} の提案を承諾する`),
 		});
 		await expect(acceptBtn).toBeVisible({ timeout: 10000 });
 		await acceptBtn.click();
@@ -149,7 +149,10 @@ test.describe("Phase 11 11-A mentor board (#624)", () => {
 		const page = await ctx.newPage();
 		await page.goto(`${BASE}/mentor/wanted/new`);
 		await page.waitForURL(/\/login(\?.*)?/, { timeout: 15000 });
-		expect(page.url()).toContain("next=%2Fmentor%2Fwanted%2Fnew");
+		// URL は raw / encoded どちらの形でも next=/mentor/wanted/new に
+		// なっていれば仕様通り (Next.js は redirect target を raw で URL に乗せる)。
+		const decoded = decodeURIComponent(page.url());
+		expect(decoded).toContain("next=/mentor/wanted/new");
 		await ctx.close();
 	});
 });

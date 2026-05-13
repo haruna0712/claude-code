@@ -101,9 +101,9 @@ export default function MentorProposalList({
 								onClick={() => handleAccept(p.id)}
 								disabled={acceptingId !== null}
 								className="shrink-0 rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-								aria-label={`@${p.mentor.handle} の提案を accept`}
+								aria-label={`@${p.mentor.handle} の提案を承諾する`}
 							>
-								{acceptingId === p.id ? "成立中…" : "accept"}
+								{acceptingId === p.id ? "成立中…" : "承諾する"}
 							</button>
 						)}
 					</div>
