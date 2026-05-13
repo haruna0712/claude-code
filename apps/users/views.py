@@ -1,11 +1,14 @@
 import logging
+import math
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db.models import Q, QuerySet
+from django.db.models import FloatField, Q, QuerySet
+from django.db.models.expressions import RawSQL
 from django.shortcuts import get_object_or_404
 from djoser.social.views import ProviderAuthView
 from rest_framework import serializers, status
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.pagination import CursorPagination
 from rest_framework.parsers import JSONParser
@@ -842,12 +845,18 @@ _NEAR_RADIUS_KM_MAX = 200.0
 
 
 def _parse_near_param(value: str) -> tuple[float, float] | None:
-    """``"35.681,139.767"`` 形式の文字列を (lat, lng) に分解。 範囲外 / 不正は None。"""
+    """``"35.681,139.767"`` 形式の文字列を (lat, lng) に分解。 範囲外 / 不正は None。
+
+    OverflowError も catch: ``float("1e999")`` は ``OverflowError`` を投げるので
+    ``ValueError`` だけだと unhandled になる。
+    """
     try:
         lat_str, lng_str = value.split(",", 1)
         lat = float(lat_str)
         lng = float(lng_str)
-    except (ValueError, AttributeError):
+    except (ValueError, AttributeError, OverflowError):
+        return None
+    if not (math.isfinite(lat) and math.isfinite(lng)):
         return None
     if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lng <= 180.0):
         return None
@@ -918,13 +927,11 @@ class UserFullTextSearchView(ListAPIView):
             if not self.request.user.is_authenticated:
                 # 401/403 は DRF の permission レイヤで返したいが、 ここまで来た時点で
                 # AllowAny なので明示的に PermissionDenied で 403 を返す。
-                from rest_framework.exceptions import PermissionDenied
-
+                # (near=lat,lng は anon 可なので permission_classes は AllowAny の
+                # まま、 near_me のみ in-method で auth を要求する pragmatic 分岐)
                 raise PermissionDenied("near_me には認証が必要です")
             residence = UserResidence.objects.filter(user=self.request.user).first()
             if residence is None:
-                from rest_framework.exceptions import ValidationError
-
                 raise ValidationError(
                     {
                         "near_me": "自分の residence が未設定です。 /settings/residence で設定してください。"
@@ -934,8 +941,6 @@ class UserFullTextSearchView(ListAPIView):
         elif near_raw is not None:
             parsed = _parse_near_param(near_raw)
             if parsed is None:
-                from rest_framework.exceptions import ValidationError
-
                 raise ValidationError(
                     {"near": "near は 'lat,lng' 形式で、 lat∈[-90,90] / lng∈[-180,180] が必要です"}
                 )
@@ -959,24 +964,29 @@ class UserFullTextSearchView(ListAPIView):
         radius_km = _parse_radius_km(params.get("radius_km"))
 
         # User → UserResidence (OneToOne, related_name="residence") を JOIN。
-        # residence 未設定 user は除外。 self は除外 (自分が結果に出るのは違和感)。
+        # residence 未設定 user は除外。 self は除外 (自分が結果に出るのは違和感、
+        # near_me だけでなく ?near=lat,lng でも self は除外で一貫させる)。
         qs = qs.filter(residence__isnull=False)
         if self.request.user.is_authenticated:
             qs = qs.exclude(pk=self.request.user.pk)
 
-        # 6371 = earth radius (km)。 LEAST(1.0, ...) は浮動小数点誤差で acos の domain
-        # を超える保険。 columns は users_userresidence.{latitude,longitude}。
+        # 6371 = earth radius (km)。
+        # acos の domain は [-1, 1]。 浮動小数点誤差で範囲外になるのを
+        # LEAST(1.0, GREATEST(-1.0, ...)) で両端クランプ (片側だけだと NaN 経路あり)。
+        # columns は users_userresidence.{latitude,longitude}。
+        # output_field=FloatField で annotation を明示的に float8 として扱う
+        # (cursor pagination が annotation を string 比較するときの安定性のため)。
         haversine_sql = (
-            "6371 * acos(LEAST(1.0, "
+            "6371 * acos(LEAST(1.0, GREATEST(-1.0, "
             "cos(radians(%s)) * cos(radians(users_userresidence.latitude)) "
             "* cos(radians(users_userresidence.longitude) - radians(%s)) "
             "+ sin(radians(%s)) * sin(radians(users_userresidence.latitude))"
-            "))"
+            ")))"
         )
-        from django.db.models.expressions import RawSQL
-
         qs = qs.annotate(
-            _distance_km=RawSQL(haversine_sql, (lat, lng, lat)),
+            _distance_km=RawSQL(haversine_sql, (lat, lng, lat), output_field=FloatField()),
         ).filter(_distance_km__lte=radius_km)
 
+        # paginator (UserSearchProximityCursorPagination) も同じ ordering を持つので
+        # 上書きされるが、 get_queryset 単体で使う pytest 経路でも安定するよう明示する。
         return qs.order_by("_distance_km", "username")

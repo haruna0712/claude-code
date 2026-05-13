@@ -186,3 +186,22 @@ class TestNearMeSearch:
         res = api_client.get(search_url, {"near_me": "1", "radius_km": "10"})
         usernames = [r["username"] for r in res.data["results"]]
         assert "ghost" not in usernames
+
+    def test_distance_km_is_null_on_text_only_search(
+        self, api_client: APIClient, user_factory, search_url: str
+    ) -> None:
+        """`?q=` のみのときは distance_km は None (= 座標は露出しない)。
+        将来 annotate を誤って付けるリグレッションを catch する。"""
+        user_factory(username="alice", display_name="Alice")
+        res = api_client.get(search_url, {"q": "alice"})
+        assert res.status_code == status.HTTP_200_OK
+        for result in res.data["results"]:
+            assert result["distance_km"] is None
+
+    def test_invalid_float_in_near_does_not_500(
+        self, api_client: APIClient, search_url: str
+    ) -> None:
+        """OverflowError / NaN / Inf を投げても 400 で返る (500 にならない)."""
+        for bad in ("1e999,0", "0,1e999", "nan,nan", "inf,0", "0,inf"):
+            res = api_client.get(search_url, {"near": bad, "radius_km": "10"})
+            assert res.status_code == status.HTTP_400_BAD_REQUEST
