@@ -17,6 +17,7 @@ function makeUser(
 		display_name: "Alice",
 		bio: "Engineer in Tokyo",
 		avatar_url: "https://cdn.example.com/avatar.png",
+		distance_km: null,
 		...overrides,
 	};
 }
@@ -77,5 +78,20 @@ describe("UserSearchResultCard", () => {
 		render(<UserSearchResultCard user={makeUser({ bio: "" })} />);
 		// bio は描画されないので testing-library の検索でも null
 		expect(screen.queryByText("Engineer in Tokyo")).toBeNull();
+	});
+
+	it("shows distance_km badge when proximity search returns it", () => {
+		render(<UserSearchResultCard user={makeUser({ distance_km: 3.42 })} />);
+		expect(screen.getByText(/約 3.42 km/)).toBeInTheDocument();
+	});
+
+	it("hides distance_km badge when null (non-proximity search)", () => {
+		render(<UserSearchResultCard user={makeUser({ distance_km: null })} />);
+		expect(screen.queryByText(/km/)).toBeNull();
+	});
+
+	it("shows distance_km even when value is 0", () => {
+		render(<UserSearchResultCard user={makeUser({ distance_km: 0 })} />);
+		expect(screen.getByText(/約 0 km/)).toBeInTheDocument();
 	});
 });

@@ -1,44 +1,112 @@
 /**
- * /search/users — 汎用ユーザー検索 page (Phase 12 P12-04)。
+ * /search/users — 汎用ユーザー検索 page (Phase 12 P12-04 / P12-05)。
  *
  * spec: docs/specs/phase-12-residence-map-spec.md / phase-12 milestone #15
  *
  * - anon 閲覧可。 SSR で結果を取得。
- * - GET /api/v1/users/search/?q= の cursor pagination を消費。
- *   本 page は 1 page のみ render し、 「次の 20 件 →」 link で page 遷移。
+ * - GET /api/v1/users/search/?q=&near_me=1&radius_km=N の cursor pagination を消費。
+ * - P12-05: ?near_me=1 toggle + radius slider で「自分の近所」 にフィルタ。
+ *   未ログイン or residence 未設定なら page 上で説明 + CTA。
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import NearMeFilter from "@/components/search/NearMeFilter";
 import UserSearchBox from "@/components/search/UserSearchBox";
 import UserSearchResultCard from "@/components/search/UserSearchResultCard";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
-import type { UserSearchPage as UserSearchPageData } from "@/lib/api/userSearch";
+import type { UserResidence } from "@/lib/api/residence";
+import {
+	PROXIMITY_RADIUS_DEFAULT_KM,
+	PROXIMITY_RADIUS_MAX_KM,
+	PROXIMITY_RADIUS_MIN_KM,
+	type UserSearchPage as UserSearchPageData,
+} from "@/lib/api/userSearch";
+import type { CurrentUser } from "@/lib/api/users";
 
 interface SearchPageProps {
-	searchParams: { q?: string; cursor?: string };
+	searchParams: {
+		q?: string;
+		cursor?: string;
+		near_me?: string;
+		radius_km?: string;
+	};
 }
 
 export const metadata: Metadata = {
 	title: "ユーザー検索 — エンジニア SNS",
-	description: "ユーザー名 / 表示名 / 自己紹介で検索する。",
+	description: "ユーザー名 / 表示名 / 自己紹介 / 居住地で検索する。",
 };
 
-async function loadUserSearch(
-	query: string,
-	cursor?: string,
-): Promise<UserSearchPageData> {
+interface SearchQuery {
+	q: string;
+	cursor?: string;
+	nearMe: boolean;
+	radiusKm: number;
+}
+
+function parseSearchParams(sp: SearchPageProps["searchParams"]): SearchQuery {
+	const q = (sp.q ?? "").trim();
+	const nearMe = sp.near_me === "1";
+	const radiusParsed = Number(sp.radius_km);
+	const radiusKm =
+		Number.isFinite(radiusParsed) && radiusParsed > 0
+			? Math.min(
+					Math.max(radiusParsed, PROXIMITY_RADIUS_MIN_KM),
+					PROXIMITY_RADIUS_MAX_KM,
+				)
+			: PROXIMITY_RADIUS_DEFAULT_KM;
+	return { q, cursor: sp.cursor, nearMe, radiusKm };
+}
+
+async function loadCurrentUser(): Promise<CurrentUser | null> {
+	try {
+		return await serverFetch<CurrentUser>("/users/me/");
+	} catch (error) {
+		if (error instanceof ApiServerError) return null;
+		return null;
+	}
+}
+
+async function loadMyResidence(): Promise<UserResidence | null> {
+	try {
+		return await serverFetch<UserResidence>("/users/me/residence/");
+	} catch (error) {
+		if (error instanceof ApiServerError) return null;
+		return null;
+	}
+}
+
+type SearchOutcome =
+	| { kind: "results"; page: UserSearchPageData }
+	| { kind: "missing_residence" }
+	| { kind: "error"; message: string };
+
+async function loadUserSearch(query: SearchQuery): Promise<SearchOutcome> {
 	const params = new URLSearchParams();
-	if (query) params.set("q", query);
-	if (cursor) params.set("cursor", cursor);
+	if (query.q) params.set("q", query.q);
+	if (query.cursor) params.set("cursor", query.cursor);
+	if (query.nearMe) {
+		params.set("near_me", "1");
+		params.set("radius_km", String(query.radiusKm));
+	}
 	const qs = params.toString();
 	const url = qs ? `/users/search/?${qs}` : "/users/search/";
 	try {
-		return await serverFetch<UserSearchPageData>(url);
+		const page = await serverFetch<UserSearchPageData>(url);
+		return { kind: "results", page };
 	} catch (error) {
 		if (error instanceof ApiServerError) {
-			return { results: [], next: null, previous: null };
+			// near_me で residence 未設定 → backend 400 + {near_me: "..."}
+			if (error.status === 400 && query.nearMe) {
+				return { kind: "missing_residence" };
+			}
+			if (error.status === 403 || error.status === 401) {
+				// 未ログインで near_me=1 を踏んだケース。 page 側 CTA で誘導
+				return { kind: "missing_residence" };
+			}
+			return { kind: "error", message: `エラー (${error.status})` };
 		}
 		throw error;
 	}
@@ -51,23 +119,50 @@ function extractCursor(absoluteUrl: string | null): string | null {
 		const u = new URL(absoluteUrl);
 		return u.searchParams.get("cursor");
 	} catch {
-		// URL constructor が失敗するケース (相対 URL) は素朴に search を切り出す
+		// URL constructor が失敗するケース (ベース URL 無しの相対 URL 等) は素朴に search を切り出す
 		const m = /[?&]cursor=([^&]+)/.exec(absoluteUrl);
 		return m ? decodeURIComponent(m[1]) : null;
 	}
 }
 
+function buildSearchHref(
+	query: SearchQuery,
+	overrides: { cursor?: string | null } = {},
+): string {
+	const params = new URLSearchParams();
+	if (query.q) params.set("q", query.q);
+	if (query.nearMe) {
+		params.set("near_me", "1");
+		params.set("radius_km", String(query.radiusKm));
+	}
+	const cursor = overrides.cursor;
+	if (cursor) params.set("cursor", cursor);
+	const qs = params.toString();
+	return qs ? `/search/users?${qs}` : "/search/users";
+}
+
 export default async function UserSearchPage({
 	searchParams,
 }: SearchPageProps) {
-	const query = (searchParams.q ?? "").trim();
-	const cursor = searchParams.cursor;
-	const page = query
-		? await loadUserSearch(query, cursor)
-		: { results: [], next: null, previous: null };
+	const query = parseSearchParams(searchParams);
+	const [currentUser, myResidence] = await Promise.all([
+		loadCurrentUser(),
+		query.nearMe ? loadMyResidence() : Promise.resolve(null),
+	]);
+	const loggedIn = currentUser !== null;
+	// 何も指定がなければ検索しない
+	const hasAnyQuery = query.q.length > 0 || query.nearMe;
+	const outcome = hasAnyQuery
+		? await loadUserSearch(query)
+		: ({
+				kind: "results",
+				page: { results: [], next: null, previous: null },
+			} as SearchOutcome);
 
-	const nextCursor = extractCursor(page.next);
-	const prevCursor = extractCursor(page.previous);
+	const nextCursor =
+		outcome.kind === "results" ? extractCursor(outcome.page.next) : null;
+	const prevCursor =
+		outcome.kind === "results" ? extractCursor(outcome.page.previous) : null;
 
 	return (
 		<>
@@ -86,41 +181,91 @@ export default async function UserSearchPage({
 					>
 						ユーザー検索
 					</h1>
-					{query && (
+					{(query.q || query.nearMe) && (
 						<p
 							className="truncate text-[color:var(--a-text-subtle)]"
 							style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
 						>
-							「{query}」
+							{query.q && `「${query.q}」`}
+							{query.nearMe && ` · 半径 ${query.radiusKm}km`}
 						</p>
 					)}
 				</div>
 			</header>
 
 			<div className="px-5 py-5">
+				<div className="mb-3">
+					<UserSearchBox initialValue={query.q} />
+				</div>
 				<div className="mb-6">
-					<UserSearchBox initialValue={query} />
+					<NearMeFilter
+						query={query.q}
+						initialNearMe={query.nearMe}
+						initialRadiusKm={query.radiusKm}
+						loggedIn={loggedIn}
+					/>
 				</div>
 
-				{!query && (
+				{!hasAnyQuery && (
 					<p className="text-sm text-[color:var(--a-text-muted)]">
 						ユーザー名 / 表示名 / 自己紹介 (bio) で部分一致検索できます。
+						ログイン中は「近所で絞り込む」 で居住地の近い人だけに絞れます。
 					</p>
 				)}
 
-				{query && page.results.length === 0 && (
+				{outcome.kind === "missing_residence" && (
 					<p
 						role="status"
-						className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-10 text-center text-sm text-[color:var(--a-text-muted)]"
+						className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-6 text-sm text-[color:var(--a-text-muted)]"
 					>
-						「{query}」 に一致するユーザーは見つかりませんでした。
+						{loggedIn && myResidence === null ? (
+							<>
+								居住地が未設定なので近所検索できません。{" "}
+								<Link
+									href="/settings/residence"
+									className="text-[color:var(--a-accent)] hover:underline"
+								>
+									/settings/residence で地図を設定する
+								</Link>
+							</>
+						) : (
+							<>
+								近所検索にはログインが必要です。{" "}
+								<Link
+									href={`/login?next=${encodeURIComponent(buildSearchHref(query))}`}
+									className="text-[color:var(--a-accent)] hover:underline"
+								>
+									ログイン
+								</Link>
+							</>
+						)}
 					</p>
 				)}
 
-				{query && page.results.length > 0 && (
+				{outcome.kind === "error" && (
+					<p
+						role="alert"
+						className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-6 text-sm text-[color:var(--a-text-muted)]"
+					>
+						検索に失敗しました: {outcome.message}
+					</p>
+				)}
+
+				{outcome.kind === "results" &&
+					hasAnyQuery &&
+					outcome.page.results.length === 0 && (
+						<p
+							role="status"
+							className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-10 text-center text-sm text-[color:var(--a-text-muted)]"
+						>
+							条件に一致するユーザーは見つかりませんでした。
+						</p>
+					)}
+
+				{outcome.kind === "results" && outcome.page.results.length > 0 && (
 					<section aria-label="検索結果">
 						<ul role="list" className="space-y-2">
-							{page.results.map((u) => (
+							{outcome.page.results.map((u) => (
 								<UserSearchResultCard key={u.user_id} user={u} />
 							))}
 						</ul>
@@ -131,7 +276,7 @@ export default async function UserSearchPage({
 						>
 							{prevCursor ? (
 								<Link
-									href={`/search/users?q=${encodeURIComponent(query)}&cursor=${encodeURIComponent(prevCursor)}`}
+									href={buildSearchHref(query, { cursor: prevCursor })}
 									className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
 								>
 									← 前の 20 件
@@ -141,7 +286,7 @@ export default async function UserSearchPage({
 							)}
 							{nextCursor ? (
 								<Link
-									href={`/search/users?q=${encodeURIComponent(query)}&cursor=${encodeURIComponent(nextCursor)}`}
+									href={buildSearchHref(query, { cursor: nextCursor })}
 									className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
 								>
 									次の 20 件 →

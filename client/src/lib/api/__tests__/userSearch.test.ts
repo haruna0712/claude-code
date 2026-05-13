@@ -88,4 +88,40 @@ describe("userSearch API", () => {
 		mock.onGet("/users/search/").reply(500, { detail: "boom" });
 		await expect(fetchUserSearch("alice", {}, client)).rejects.toThrow();
 	});
+
+	it("fetchUserSearch sends near_me=1 + radius_km when proximity enabled", async () => {
+		const { client, mock } = stub();
+		mock.onGet("/users/search/").reply((config) => {
+			expect(config.params).toEqual({ near_me: "1", radius_km: "15" });
+			return [200, { results: [], next: null, previous: null }];
+		});
+		await fetchUserSearch("", { nearMe: true, radiusKm: 15 }, client);
+	});
+
+	it("fetchUserSearch combines q + near_me + cursor", async () => {
+		const { client, mock } = stub();
+		mock.onGet("/users/search/").reply((config) => {
+			expect(config.params).toEqual({
+				q: "rust",
+				cursor: "abc",
+				near_me: "1",
+				radius_km: "10",
+			});
+			return [200, { results: [], next: null, previous: null }];
+		});
+		await fetchUserSearch(
+			"rust",
+			{ nearMe: true, radiusKm: 10, cursor: "abc" },
+			client,
+		);
+	});
+
+	it("fetchUserSearch defaults radiusKm to 10 when nearMe with no radius", async () => {
+		const { client, mock } = stub();
+		mock.onGet("/users/search/").reply((config) => {
+			expect(config.params).toEqual({ near_me: "1", radius_km: "10" });
+			return [200, { results: [], next: null, previous: null }];
+		});
+		await fetchUserSearch("", { nearMe: true }, client);
+	});
 });
