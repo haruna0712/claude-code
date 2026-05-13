@@ -23,6 +23,7 @@ import {
 	Feather,
 	FileText,
 	Flame,
+	Handshake,
 	Hash,
 	Home,
 	LogOut,
@@ -72,6 +73,11 @@ const NAV_ITEMS: NavItemDef[] = [
 	},
 	{ href: "/articles", label: "記事", Icon: FileText },
 	{ href: "/boards", label: "掲示板", Icon: Flame },
+	// Phase 11 11-A (P11-09 follow-up): home (A direction) でも「メンター募集」 を
+	// 1 click 到達できるようにする。 既存 `leftNavLinks` (LeftNavbar / MobileNavbar
+	// 用、 X 風レイアウト) には追加済だが、 home が使う ALeftNav は別 list を持つ
+	// (#550 POC) ため、 ここにも明示する。
+	{ href: "/mentor/wanted", label: "メンター募集", Icon: Handshake },
 ];
 
 function BrandMark({ size = 22 }: { size?: number }) {

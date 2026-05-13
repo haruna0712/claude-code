@@ -59,7 +59,7 @@ describe("MentorProposalList (P11-07)", () => {
 			<MentorProposalList proposals={[makeProposal(1)]} requestStatus="open" />,
 		);
 		expect(
-			screen.getByRole("button", { name: /@mentor1 の提案を accept/ }),
+			screen.getByRole("button", { name: /@mentor1 の提案を承諾する/ }),
 		).toBeInTheDocument();
 	});
 
@@ -71,7 +71,7 @@ describe("MentorProposalList (P11-07)", () => {
 			/>,
 		);
 		expect(
-			screen.queryByRole("button", { name: /accept/ }),
+			screen.queryByRole("button", { name: /承諾する/ }),
 		).not.toBeInTheDocument();
 	});
 
@@ -82,7 +82,7 @@ describe("MentorProposalList (P11-07)", () => {
 		);
 		await act(async () => {
 			fireEvent.click(
-				screen.getByRole("button", { name: /@mentor1 の提案を accept/ }),
+				screen.getByRole("button", { name: /@mentor1 の提案を承諾する/ }),
 			);
 		});
 		expect(acceptMock).toHaveBeenCalledWith(1);
