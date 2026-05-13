@@ -194,3 +194,75 @@ export async function getMentorByHandle(
 	const res = await client.get<MentorProfileDetail>(`/mentors/${handle}/`);
 	return res.data;
 }
+
+// --- /mentors/me/ self-edit (Phase 11-B P11-15) ---
+
+export interface UpdateMentorProfileInput {
+	headline: string;
+	bio: string;
+	experience_years: number;
+	is_accepting: boolean;
+	skill_tag_names?: string[];
+}
+
+export async function getMyMentorProfile(
+	client: AxiosInstance = api,
+): Promise<MentorProfileDetail | null> {
+	try {
+		const res = await client.get<MentorProfileDetail>("/mentors/me/");
+		return res.data;
+	} catch (err) {
+		const e = err as { response?: { status?: number } };
+		if (e.response?.status === 404) return null;
+		throw err;
+	}
+}
+
+export async function updateMyMentorProfile(
+	input: UpdateMentorProfileInput,
+	client: AxiosInstance = api,
+): Promise<MentorProfileDetail> {
+	const res = await client.patch<MentorProfileDetail>("/mentors/me/", input);
+	return res.data;
+}
+
+export interface MentorPlanInput {
+	title: string;
+	description: string;
+	price_jpy?: number;
+	billing_cycle: MentorPlanBilling;
+}
+
+export async function listMyMentorPlans(
+	client: AxiosInstance = api,
+): Promise<MentorPlanSummary[]> {
+	const res = await client.get<MentorPlanSummary[]>("/mentors/me/plans/");
+	return res.data;
+}
+
+export async function createMyMentorPlan(
+	input: MentorPlanInput,
+	client: AxiosInstance = api,
+): Promise<MentorPlanSummary> {
+	const res = await client.post<MentorPlanSummary>("/mentors/me/plans/", input);
+	return res.data;
+}
+
+export async function updateMyMentorPlan(
+	planId: number,
+	input: Partial<MentorPlanInput>,
+	client: AxiosInstance = api,
+): Promise<MentorPlanSummary> {
+	const res = await client.patch<MentorPlanSummary>(
+		`/mentors/me/plans/${planId}/`,
+		input,
+	);
+	return res.data;
+}
+
+export async function deleteMyMentorPlan(
+	planId: number,
+	client: AxiosInstance = api,
+): Promise<void> {
+	await client.delete(`/mentors/me/plans/${planId}/`);
+}
