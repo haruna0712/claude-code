@@ -173,27 +173,40 @@ class MentorRequestCloseView(APIView):
         return Response(MentorRequestDetailSerializer(req).data)
 
 
-# --- MentorProposal (P11-04) ---
+# --- MentorProposal (P11-04 + P11-07 list) ---
 
 
-class MentorProposalCreateView(APIView):
-    """`POST /mentor/requests/<request_id>/proposals/` — mentor が提案を出す。
+class MentorProposalListCreateView(APIView):
+    """`/mentor/requests/<request_id>/proposals/` — GET (owner only) + POST (auth)。
 
     spec §6.2。
-    - auth 必須
-    - mentor == request.mentee は禁止 (自分の募集に提案できない)
-    - request.status == OPEN のみ受付
-    - 1 request に 1 mentor は 1 proposal のみ (unique constraint)
-    - 提案投稿成功で request.proposal_count を atomic に +1
+    - GET: owner (request.mentee) のみ可視、 新着順 proposal list
+    - POST: auth 必須、 self-proposal 禁止、 request.status==OPEN のみ受付、
+      1 request 1 mentor 1 proposal の unique constraint、 成功で proposal_count +1
     """
 
     permission_classes = [permissions.IsAuthenticated]
 
-    def post(self, request: Request, request_id: int) -> Response:
+    def _get_request(self, request_id: int) -> MentorRequest:
         try:
-            mentor_request = MentorRequest.objects.select_related("mentee").get(pk=request_id)
+            return MentorRequest.objects.select_related("mentee").get(pk=request_id)
         except MentorRequest.DoesNotExist as exc:
             raise NotFound("MentorRequest not found") from exc
+
+    def get(self, request: Request, request_id: int) -> Response:
+        mentor_request = self._get_request(request_id)
+        _ensure_owner(mentor_request, request.user)
+        proposals = (
+            MentorProposal.objects.select_related("mentor")
+            .filter(request=mentor_request)
+            .order_by("-created_at")
+        )
+        return Response(
+            MentorProposalDetailSerializer(proposals, many=True).data,
+        )
+
+    def post(self, request: Request, request_id: int) -> Response:
+        mentor_request = self._get_request(request_id)
 
         # 自分の募集には提案できない
         if mentor_request.mentee_id == request.user.pk:

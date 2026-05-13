@@ -8,7 +8,7 @@ from django.urls import path
 
 from apps.mentorship.views import (
     MentorProposalAcceptView,
-    MentorProposalCreateView,
+    MentorProposalListCreateView,
     MentorRequestCloseView,
     MentorRequestDetailView,
     MentorRequestListCreateView,
@@ -30,11 +30,11 @@ urlpatterns = [
         MentorRequestCloseView.as_view(),
         name="mentor-request-close",
     ),
-    # P11-04: mentor が提案を出す。
+    # P11-04/P11-07: GET = owner が proposal list を取得 / POST = mentor が提案投稿
     path(
         "requests/<int:request_id>/proposals/",
-        MentorProposalCreateView.as_view(),
-        name="mentor-proposal-create",
+        MentorProposalListCreateView.as_view(),
+        name="mentor-proposal-list",
     ),
     # P11-05: mentee が proposal を accept → Contract + DMRoom 自動作成。
     path(
