@@ -185,3 +185,57 @@ def cancel_contract(
             room.save(update_fields=["is_archived", "updated_at"])
 
     return contract
+
+
+# --- review submission (P11-20) ---
+
+
+def submit_review(
+    *,
+    contract: MentorshipContract,
+    by_user: AbstractBaseUser,
+    rating: int,
+    comment: str,
+):
+    """contract.mentee のみが、 COMPLETED 契約に対して 1 回だけ review 投稿可能。
+
+    投稿後に MentorProfile.avg_rating / review_count を atomic に再集計。
+    """
+
+    from apps.mentorship.models import MentorProfile, MentorReview
+
+    if contract.mentee_id != by_user.pk:
+        raise PermissionDenied("レビューは mentee のみ投稿できます")
+    if contract.status != MentorshipContract.Status.COMPLETED:
+        raise ValidationError("完了済の契約のみレビュー可能です")
+    if rating < 1 or rating > 5:
+        raise ValidationError("rating は 1-5 の範囲です")
+
+    with transaction.atomic():
+        review, created = MentorReview.objects.get_or_create(
+            contract=contract,
+            defaults={
+                "mentor": contract.mentor,
+                "mentee": contract.mentee,
+                "rating": rating,
+                "comment": comment,
+            },
+        )
+        if not created:
+            # 既存 review を上書き編集 (mentee は同じ contract に 1 件しか持てない)。
+            review.rating = rating
+            review.comment = comment
+            review.save(update_fields=["rating", "comment", "updated_at"])
+
+        # MentorProfile 集計を再計算 (review_count + avg_rating)。
+        profile = MentorProfile.objects.filter(user=contract.mentor).first()
+        if profile is not None:
+            agg = MentorReview.objects.filter(mentor=contract.mentor, is_visible=True).aggregate(
+                count=models.Count("id"),
+                avg=models.Avg("rating"),
+            )
+            profile.review_count = agg["count"] or 0
+            profile.avg_rating = agg["avg"]
+            profile.save(update_fields=["review_count", "avg_rating", "updated_at"])
+
+    return review

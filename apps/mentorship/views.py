@@ -522,3 +522,47 @@ class MentorshipContractCancelView(APIView):
         contract = get_contract_or_404(pk)
         contract = cancel_contract(contract=contract, by_user=request.user)
         return Response(MentorshipContractDetailSerializer(contract).data)
+
+
+# --- MentorReview (Phase 11-D P11-20) ---
+
+
+class MentorshipContractReviewView(APIView):
+    """`POST /mentor/contracts/<id>/review/` — mentee が COMPLETED 契約に review。"""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request: Request, pk: int) -> Response:
+        from apps.mentorship.serializers import (
+            MentorReviewInputSerializer,
+            MentorReviewSerializer,
+        )
+        from apps.mentorship.services import get_contract_or_404, submit_review
+
+        contract = get_contract_or_404(pk)
+        serializer = MentorReviewInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        review = submit_review(
+            contract=contract,
+            by_user=request.user,
+            rating=serializer.validated_data["rating"],
+            comment=serializer.validated_data["comment"],
+        )
+        return Response(MentorReviewSerializer(review).data, status=201)
+
+
+class MentorReviewsByHandleView(APIView):
+    """`GET /mentors/<handle>/reviews/` — anon 可、 mentor の受領 review 一覧。"""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request: Request, handle: str) -> Response:
+        from apps.mentorship.models import MentorReview
+        from apps.mentorship.serializers import MentorReviewSerializer
+
+        reviews = (
+            MentorReview.objects.select_related("mentor", "mentee")
+            .filter(mentor__username=handle, is_visible=True)
+            .order_by("-created_at")
+        )
+        return Response(MentorReviewSerializer(reviews, many=True).data)

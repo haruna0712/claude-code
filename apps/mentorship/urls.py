@@ -15,6 +15,7 @@ from apps.mentorship.views import (
     MentorshipContractCompleteView,
     MentorshipContractDetailView,
     MentorshipContractMeListView,
+    MentorshipContractReviewView,
 )
 
 urlpatterns = [
@@ -65,5 +66,11 @@ urlpatterns = [
         "contracts/<int:pk>/cancel/",
         MentorshipContractCancelView.as_view(),
         name="mentor-contract-cancel",
+    ),
+    # P11-20: mentee が COMPLETED 契約に review 投稿。
+    path(
+        "contracts/<int:pk>/review/",
+        MentorshipContractReviewView.as_view(),
+        name="mentor-contract-review",
     ),
 ]
