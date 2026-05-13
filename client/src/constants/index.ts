@@ -27,6 +27,13 @@ export const leftNavLinks: LeftNavLink[] = [
 		iconName: "Search",
 	},
 	{
+		// Phase 12 (P12-04 / #676): 汎用ユーザー検索 page。 既存 /search は tweet
+		// 用、 こちらは handle / display_name / bio の部分一致で人を探す。
+		path: "/search/users",
+		label: "ユーザー検索",
+		iconName: "UserSearch",
+	},
+	{
 		// #412 / Phase 4A: 通知
 		path: "/notifications",
 		label: "通知",

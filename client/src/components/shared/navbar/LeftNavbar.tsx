@@ -20,6 +20,7 @@ import {
 	Plus,
 	Search,
 	User,
+	UserSearch,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -35,6 +36,7 @@ const ICON_MAP: Record<
 	Search,
 	MessageSquare,
 	User,
+	UserSearch,
 	Bell,
 	MessagesSquare,
 	FileText,
@@ -128,8 +130,12 @@ export default function LeftNavbar() {
 							</span>
 						);
 					}
+					// path-prefix match: 「`/search` が `/search/users` も active 化させる」
+					// 問題 (typescript-reviewer P12-04 HIGH) を回避するため、完全一致または
+					// `/<segment>/...` で始まるかどうかを active 扱いにする。
 					const isActive =
-						(pathname.includes(href) && href.length > 1) || pathname === href;
+						pathname === href ||
+						(href.length > 1 && pathname.startsWith(`${href}/`));
 					return (
 						<Link
 							href={href}

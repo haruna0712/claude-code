@@ -189,14 +189,40 @@ cd client && npx vitest run src/lib/api/__tests__/residence.test.ts
 PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/residence.spec.ts
 ```
 
+### 7.4 ユーザー検索 (P12-04)
+
+backend pytest (`apps/users/tests/test_user_search_fulltext.py` 9 cases):
+
+- anon 可 / 空 query は空配列 / handle / display_name / bio に部分一致
+- is_active=False を除外 / cursor pagination で 20+5 件
+- response は user_id / username / display_name / bio / avatar_url のみ (email / is_premium 等は出さない)
+
+frontend vitest (`client/src/lib/api/__tests__/userSearch.test.ts` 4 cases):
+
+- non-empty q を ?q= に / 空 query は param 無し / cursor 引き継ぎ / response shape
+
+E2E (`client/e2e/user-search.spec.ts` 3 cases):
+
+- USER-SEARCH-1 (anon): /search/users が 200、 search form が見える
+- USER-SEARCH-2 (golden): 検索 → user card → /u/<handle> プロフィール遷移
+- USER-SEARCH-3 (nav): home から「ユーザー検索」 link で 1 click で到達
+
+実行:
+
+```bash
+docker compose -f local.yml exec api pytest apps/users/tests/test_user_search_fulltext.py -v --no-cov
+cd client && npx vitest run src/lib/api/__tests__/userSearch.test.ts
+PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/user-search.spec.ts
+```
+
 ---
 
 ## 8. ロールアウト順序
 
 1. ✅ **P12-01** (#678 merged): model + API + tests
-2. **P12-02** (本 PR): 設定 UI + プロフィール map 表示 (Leaflet + OSM)
-3. P12-03: signup wizard 統合
-4. P12-04: 汎用 user search page
+2. ✅ **P12-02** (#679 merged): 設定 UI + プロフィール map 表示 (Leaflet + OSM)
+3. **P12-04** (本 PR): 汎用 user search page (full-text、 cursor pagination)
+4. P12-03: signup wizard 統合 (P12-04 後に依存しない順序で着手)
 5. P12-05: 近所検索 (haversine SQL)
 
 各段階で `gan-evaluator` agent に採点させて UX を確認 (新 route 追加なので Phase 11 同様の必須運用)。
