@@ -358,6 +358,62 @@ class MentorPlanListCreateView(APIView):
         )
 
 
+# --- MentorProfile public search / detail (P11-13) ---
+
+
+class _MentorListPagination(CursorPagination):
+    """mentor 検索の cursor pagination (avg_rating 降順)。"""
+
+    page_size = 20
+    ordering = "-avg_rating"
+    cursor_query_param = "cursor"
+
+
+class MentorListView(GenericAPIView):
+    """`GET /api/v1/mentors/` (anon 可) — mentor 検索 + skill filter。
+
+    spec §6.3。 ?tag=python で skill_tags filter、 ?accepting=all で受付停止
+    含む。 default は is_accepting=True のみ。 ordering avg_rating 降順 + cursor。
+    """
+
+    permission_classes = [permissions.AllowAny]
+    pagination_class = _MentorListPagination
+
+    def get_queryset(self):
+        accepting = self.request.query_params.get("accepting")
+        qs = MentorProfile.objects.select_related("user").prefetch_related(
+            "skill_tags",
+        )
+        if accepting is None or accepting.lower() != "all":
+            qs = qs.filter(is_accepting=True)
+        tag = self.request.query_params.get("tag")
+        if tag:
+            qs = qs.filter(skill_tags__name=tag.lower()).distinct()
+        return qs
+
+    def get(self, request: Request) -> Response:
+        page = self.paginate_queryset(self.get_queryset())
+        serializer = MentorProfileSerializer(page, many=True)
+        return self.get_paginated_response(serializer.data)
+
+
+class MentorDetailView(APIView):
+    """`GET /api/v1/mentors/<handle>/` (anon 可) — mentor profile 公開出力。"""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request: Request, handle: str) -> Response:
+        try:
+            profile = (
+                MentorProfile.objects.select_related("user")
+                .prefetch_related("skill_tags", "plans")
+                .get(user__username=handle)
+            )
+        except MentorProfile.DoesNotExist as exc:
+            raise NotFound("MentorProfile not found") from exc
+        return Response(MentorProfileSerializer(profile).data)
+
+
 class MentorPlanDetailView(APIView):
     """`/mentors/me/plans/<id>/` — PATCH 編集 / DELETE 論理削除 (is_active=False)。"""
 
