@@ -7,7 +7,6 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 
 import { type MentorProfileDetail, type MentorReview } from "@/lib/api/mentor";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
@@ -52,7 +51,54 @@ export default async function MentorDetailPage({ params }: PageProps) {
 		fetchProfile(params.handle),
 		fetchReviews(params.handle),
 	]);
-	if (!profile) notFound();
+	if (!profile) {
+		// follow-up #671: 生 404 ではなく空状態 page を返して mentor 探索動線に戻す。
+		return (
+			<>
+				<header
+					className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+					style={{
+						borderBottom: "1px solid var(--a-border)",
+						background: "rgba(255,255,255,0.85)",
+						backdropFilter: "blur(8px)",
+					}}
+				>
+					<Link
+						href="/mentors"
+						className="rounded text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+						style={{ fontSize: 12.5 }}
+					>
+						← メンター一覧
+					</Link>
+					<div className="ml-2 min-w-0 flex-1">
+						<h1
+							className="truncate font-semibold tracking-tight"
+							style={{ fontSize: 15, letterSpacing: -0.2 }}
+						>
+							@{params.handle}
+						</h1>
+					</div>
+				</header>
+				<div className="space-y-4 p-5">
+					<p
+						role="status"
+						className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-10 text-center text-sm text-[color:var(--a-text-muted)]"
+					>
+						このユーザーはまだメンター活動を始めていません。
+					</p>
+					<div className="flex justify-center">
+						<Link
+							href="/mentors"
+							className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-white"
+							style={{ background: "var(--a-accent)", fontSize: 12.5 }}
+						>
+							メンターを探す
+						</Link>
+					</div>
+				</div>
+			</>
+		);
+	}
 
 	const rating =
 		profile.avg_rating !== null ? Number(profile.avg_rating).toFixed(1) : null;
