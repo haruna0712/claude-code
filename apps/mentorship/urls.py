@@ -7,6 +7,7 @@ spec §6.1
 from django.urls import path
 
 from apps.mentorship.views import (
+    MentorProposalCreateView,
     MentorRequestCloseView,
     MentorRequestDetailView,
     MentorRequestListCreateView,
@@ -27,5 +28,11 @@ urlpatterns = [
         "requests/<int:pk>/close/",
         MentorRequestCloseView.as_view(),
         name="mentor-request-close",
+    ),
+    # P11-04: mentor が提案を出す。
+    path(
+        "requests/<int:request_id>/proposals/",
+        MentorProposalCreateView.as_view(),
+        name="mentor-proposal-create",
     ),
 ]

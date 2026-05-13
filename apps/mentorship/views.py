@@ -14,6 +14,8 @@ spec §6.1
 
 from __future__ import annotations
 
+from django.db import IntegrityError, transaction
+from django.db.models import F
 from rest_framework import permissions, status
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.generics import GenericAPIView
@@ -23,8 +25,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.mentorship.models import MentorRequest
+from apps.mentorship.models import MentorProposal, MentorRequest
 from apps.mentorship.serializers import (
+    MentorProposalDetailSerializer,
+    MentorProposalInputSerializer,
     MentorRequestDetailSerializer,
     MentorRequestInputSerializer,
     MentorRequestSummarySerializer,
@@ -165,3 +169,66 @@ class MentorRequestCloseView(APIView):
         req.status = MentorRequest.Status.CLOSED
         req.save(update_fields=["status", "updated_at"])
         return Response(MentorRequestDetailSerializer(req).data)
+
+
+# --- MentorProposal (P11-04) ---
+
+
+class MentorProposalCreateView(APIView):
+    """`POST /mentor/requests/<request_id>/proposals/` — mentor が提案を出す。
+
+    spec §6.2。
+    - auth 必須
+    - mentor == request.mentee は禁止 (自分の募集に提案できない)
+    - request.status == OPEN のみ受付
+    - 1 request に 1 mentor は 1 proposal のみ (unique constraint)
+    - 提案投稿成功で request.proposal_count を atomic に +1
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request: Request, request_id: int) -> Response:
+        try:
+            mentor_request = MentorRequest.objects.select_related("mentee").get(pk=request_id)
+        except MentorRequest.DoesNotExist as exc:
+            raise NotFound("MentorRequest not found") from exc
+
+        # 自分の募集には提案できない
+        if mentor_request.mentee_id == request.user.pk:
+            return Response(
+                {"detail": "自分の募集には提案できません"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # OPEN 以外は受け付けない (MATCHED / CLOSED / EXPIRED)
+        if mentor_request.status != MentorRequest.Status.OPEN:
+            return Response(
+                {"detail": "この募集は受付終了しています"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = MentorProposalInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        body = serializer.validated_data["body"]
+
+        try:
+            with transaction.atomic():
+                proposal = MentorProposal.objects.create(
+                    request=mentor_request,
+                    mentor=request.user,
+                    body=body,
+                )
+                # cached counter を atomic に increment。
+                MentorRequest.objects.filter(pk=mentor_request.pk).update(
+                    proposal_count=F("proposal_count") + 1
+                )
+        except IntegrityError:
+            # unique (request, mentor) 違反 = 既に proposal 投稿済
+            return Response(
+                {"detail": "この募集には既に提案を出しています"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            MentorProposalDetailSerializer(proposal).data,
+            status=status.HTTP_201_CREATED,
+        )
