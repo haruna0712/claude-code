@@ -200,3 +200,52 @@ class MentorshipContract(models.Model):
             f"MentorshipContract(proposal={self.proposal_id}, "
             f"mentee={self.mentee_id}, mentor={self.mentor_id}, {self.status})"
         )
+
+
+class MentorProfile(models.Model):
+    """mentor として相談を受け付ける User の profile (P11-11)。
+
+    spec §4.1。 User の OneToOne で「mentor offering する人」 だけ row が存在する
+    (未設定 = mentor offering なし、 spec §3.1 推奨)。
+
+    P11-11 では検索キャッシュ (proposal_count / contract_count / avg_rating /
+    review_count) は default=0 のまま、 P11-12 (Plan) / P11-13 (検索) /
+    P11-20 (Review) で個別に集計を更新する。
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="mentor_profile",
+    )
+    # 検索 / 一覧での 1 行短文。 「AWS infra mentor, ex-SRE」 のような catch copy。
+    headline = models.CharField(max_length=80)
+    # プロフィール本文。 Markdown 可。 frontend で react-markdown 描画。
+    bio = models.TextField(max_length=2000)
+    experience_years = models.PositiveSmallIntegerField()
+    # 一時的に新規申込を止めたいときに mentor 側で off にする。
+    is_accepting = models.BooleanField(default=True)
+    # 既存 apps.tags.Tag を流用 (spec §3、 新 master 作らない)。
+    skill_tags = models.ManyToManyField(
+        "tags.Tag",
+        related_name="mentor_profiles",
+        blank=True,
+    )
+
+    # 検索ランキング用 cached counter (P11-13 で list ordering、 P11-20 で集計更新)。
+    proposal_count = models.PositiveIntegerField(default=0)
+    contract_count = models.PositiveIntegerField(default=0)
+    avg_rating = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
+    review_count = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        # 検索 default sort は is_accepting=True 中で avg_rating 降順。
+        indexes = [
+            models.Index(fields=["is_accepting", "-avg_rating"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"MentorProfile(user={self.user_id}, accepting={self.is_accepting})"
