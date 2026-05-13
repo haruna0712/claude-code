@@ -37,12 +37,14 @@ def _set_residence(user, lat: str, lng: str, radius_m: int = 500) -> UserResiden
 @pytest.mark.django_db
 @pytest.mark.integration
 class TestNearMeSearch:
-    def test_near_me_requires_auth(self, api_client: APIClient, search_url: str) -> None:
+    def test_near_me_requires_auth_returns_401_for_anon(
+        self, api_client: APIClient, search_url: str
+    ) -> None:
+        """#683 fix: anon は NotAuthenticated (401) で返す。 PermissionDenied (403)
+        だと frontend が「ログインが必要」 でなく generic error を出す。
+        DRF 慣行的にも 「未認証 = 401、 auth 済だが forbidden = 403」 が正しい。"""
         res = api_client.get(search_url, {"near_me": "1", "radius_km": "10"})
-        assert res.status_code in (
-            status.HTTP_401_UNAUTHORIZED,
-            status.HTTP_403_FORBIDDEN,
-        )
+        assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_near_me_400_when_self_residence_missing(
         self, api_client: APIClient, user_factory, search_url: str

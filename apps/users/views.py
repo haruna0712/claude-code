@@ -8,7 +8,7 @@ from django.db.models.expressions import RawSQL
 from django.shortcuts import get_object_or_404
 from djoser.social.views import ProviderAuthView
 from rest_framework import serializers, status
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import NotAuthenticated, ValidationError
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.pagination import CursorPagination
 from rest_framework.parsers import JSONParser
@@ -925,11 +925,14 @@ class UserFullTextSearchView(ListAPIView):
         center: tuple[float, float] | None = None
         if near_me:
             if not self.request.user.is_authenticated:
-                # 401/403 は DRF の permission レイヤで返したいが、 ここまで来た時点で
-                # AllowAny なので明示的に PermissionDenied で 403 を返す。
+                # anon は 401 (NotAuthenticated)、 「auth 済だが forbidden」 は
+                # 403 (PermissionDenied) という DRF 慣行に合わせる (#683 fix)。
+                # frontend は 401 を「ログインが必要」 outcome に map している
+                # (page.tsx の loadUserSearch)。 ここで PermissionDenied (403)
+                # を投げると frontend は generic error 扱いになって誤誘導する。
                 # (near=lat,lng は anon 可なので permission_classes は AllowAny の
                 # まま、 near_me のみ in-method で auth を要求する pragmatic 分岐)
-                raise PermissionDenied("near_me には認証が必要です")
+                raise NotAuthenticated("near_me には認証が必要です")
             residence = UserResidence.objects.filter(user=self.request.user).first()
             if residence is None:
                 raise ValidationError(
