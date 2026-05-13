@@ -15,6 +15,7 @@ import {
 	Bell,
 	Compass,
 	FileText,
+	Handshake,
 	Home,
 	MessageSquare,
 	MessagesSquare,
@@ -38,6 +39,7 @@ const ICON_MAP: Record<
 	Bell,
 	MessagesSquare,
 	FileText,
+	Handshake,
 };
 
 function resolveLinkPath(
