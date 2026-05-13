@@ -13,6 +13,7 @@ import {
 	CircleUser,
 	Compass,
 	FileText,
+	Handshake,
 	Home,
 	MessageSquare,
 	MessagesSquare,
@@ -37,6 +38,7 @@ const ICON_MAP: Record<
 	Bell,
 	MessagesSquare,
 	FileText,
+	Handshake,
 };
 
 /** isProfile link は self handle を埋めて返す。handle 未取得時は null。 */

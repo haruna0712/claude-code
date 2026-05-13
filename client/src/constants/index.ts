@@ -53,6 +53,13 @@ export const leftNavLinks: LeftNavLink[] = [
 		iconName: "FileText",
 	},
 	{
+		// Phase 11 (#625 / P11-06): mentor 募集 board。 匿名閲覧可。
+		// CLAUDE.md §9 「ホームから 3 click 以内で到達」 反省で LeftNav に追加。
+		path: "/mentor/wanted",
+		label: "メンター募集",
+		iconName: "Handshake",
+	},
+	{
 		// path は LeftNavbar 側で `/u/<self.handle>` に動的に組み替える
 		path: "",
 		label: "プロフィール",
