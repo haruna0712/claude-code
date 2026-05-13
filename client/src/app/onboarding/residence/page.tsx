@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * /onboarding/residence — onboarding step 2 (Phase 12 P12-03)。
  *
@@ -11,11 +9,20 @@
  * /onboarding に redirect するが、 本 page は step 1 完了後 (= False) の user
  * しか辿り着かない経路なので gate しない。 直接 URL を踏まれても害は無い
  * (residence は anytime 設定可なので)。
+ *
+ * State なし / hooks なしの presentational page なので Server Component で動かす
+ * (typescript-reviewer P12-03 MEDIUM 指摘 — hydration payload 削減)。
  */
 
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+
+export const metadata: Metadata = {
+	title: "居住地の設定 — オンボーディング",
+	robots: { index: false },
+};
 
 export default function OnboardingResidencePage() {
 	return (

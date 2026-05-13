@@ -38,8 +38,11 @@ export default function OnboardingForm() {
 		onSuccess: () => {
 			// P12-03: step 1 完了後は step 2 (居住地、 任意) に遷移。
 			// 既存実装は `/` に飛ばしていたが、 prompt → skip / 設定 の選択肢を挟む。
+			// `router.refresh()` は呼ばない: 遷移先 (/onboarding/residence) は
+			// presentational で server data を持たないので revalidate 不要、
+			// `push` と race して navigation を取りこぼす懸念もある
+			// (typescript-reviewer P12-03 HIGH 指摘)。
 			router.push("/onboarding/residence");
-			router.refresh();
 		},
 	});
 
