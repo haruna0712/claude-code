@@ -13,6 +13,7 @@
 import dynamic from "next/dynamic";
 import { useState } from "react";
 
+import { parseDrfErrors } from "@/lib/api/errors";
 import {
 	RESIDENCE_MAX_RADIUS_M,
 	RESIDENCE_MIN_RADIUS_M,
@@ -49,12 +50,13 @@ type SaveStatus =
 export default function ResidenceSettingsForm({
 	initialResidence,
 }: ResidenceSettingsFormProps) {
-	const initLat = initialResidence
-		? Number(initialResidence.latitude)
-		: DEFAULT_CENTER.lat;
-	const initLng = initialResidence
-		? Number(initialResidence.longitude)
-		: DEFAULT_CENTER.lng;
+	// 不正な数値が来ても map が壊れないよう Number.isFinite で fallback。
+	// backend は DecimalField + CheckConstraint で範囲を保証するが、
+	// 防御的に DEFAULT_CENTER に倒す (初期値だけが影響、 保存時に再 enforce)。
+	const parsedLat = initialResidence ? Number(initialResidence.latitude) : NaN;
+	const parsedLng = initialResidence ? Number(initialResidence.longitude) : NaN;
+	const initLat = Number.isFinite(parsedLat) ? parsedLat : DEFAULT_CENTER.lat;
+	const initLng = Number.isFinite(parsedLng) ? parsedLng : DEFAULT_CENTER.lng;
 	const initRadius = initialResidence?.radius_m ?? 1000;
 
 	const [lat, setLat] = useState<number>(initLat);
@@ -72,7 +74,10 @@ export default function ResidenceSettingsForm({
 			});
 			setStatus({ kind: "saved" });
 		} catch (error: unknown) {
-			setStatus({ kind: "error", message: getErrorMessage(error) });
+			setStatus({
+				kind: "error",
+				message: parseDrfErrors(error).summary ?? "Unknown error",
+			});
 		}
 	}
 
@@ -82,7 +87,10 @@ export default function ResidenceSettingsForm({
 			await deleteMyResidence();
 			setStatus({ kind: "deleted" });
 		} catch (error: unknown) {
-			setStatus({ kind: "error", message: getErrorMessage(error) });
+			setStatus({
+				kind: "error",
+				message: parseDrfErrors(error).summary ?? "Unknown error",
+			});
 		}
 	}
 
@@ -228,26 +236,4 @@ export default function ResidenceSettingsForm({
 			)}
 		</div>
 	);
-}
-
-function getErrorMessage(error: unknown): string {
-	if (typeof error !== "object" || error === null) return "Unknown error";
-	const maybeAxios = error as {
-		response?: { data?: unknown; status?: number };
-		message?: string;
-	};
-	const data = maybeAxios.response?.data;
-	if (typeof data === "object" && data !== null) {
-		// DRF の field error 形式: {field: [msg]}
-		const flat: string[] = [];
-		for (const [field, msgs] of Object.entries(data)) {
-			if (Array.isArray(msgs)) {
-				flat.push(`${field}: ${msgs.join(", ")}`);
-			} else if (typeof msgs === "string") {
-				flat.push(`${field}: ${msgs}`);
-			}
-		}
-		if (flat.length > 0) return flat.join(" / ");
-	}
-	return maybeAxios.message ?? "Unknown error";
 }

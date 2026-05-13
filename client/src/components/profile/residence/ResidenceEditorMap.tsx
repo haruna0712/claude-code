@@ -45,6 +45,11 @@ function ClickHandler({
 }: {
 	onClick: (lat: number, lng: number) => void;
 }) {
+	// react-leaflet の useMapEvent は mount 時に handler を登録し、 component
+	// re-render 時に handler を更新する仕組みがない (内部で map.on/off を直接呼ぶ)。
+	// そのため `onClick` が component state を直接読むと stale closure になる。
+	// ここでは親 ResidenceSettingsForm の setLat / setLng (stable な state setter)
+	// しか触らないので問題なし。 onClick の signature を増やすときは注意。
 	useMapEvent("click", (e) => {
 		onClick(e.latlng.lat, e.latlng.lng);
 	});
