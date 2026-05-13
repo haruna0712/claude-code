@@ -95,6 +95,10 @@ class Report(models.Model):
         MESSAGE = "message", "メッセージ"
         THREAD_POST = "thread_post", "掲示板レス"
         USER = "user", "ユーザー"
+        # Phase 11 (P11-25): mentorship 系も通報対象に追加。
+        MENTOR_REQUEST = "mentor_request", "メンター募集"
+        MENTOR_PROPOSAL = "mentor_proposal", "メンター提案"
+        MENTOR_REVIEW = "mentor_review", "メンターレビュー"
 
     class Reason(models.TextChoices):
         SPAM = "spam", "スパム"
