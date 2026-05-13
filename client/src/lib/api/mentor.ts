@@ -266,3 +266,49 @@ export async function deleteMyMentorPlan(
 ): Promise<void> {
 	await client.delete(`/mentors/me/plans/${planId}/`);
 }
+
+// --- MentorshipContract (Phase 11-C P11-18) ---
+
+export async function listMyContracts(
+	params: { role?: "mentee" | "mentor" } = {},
+	client: AxiosInstance = api,
+): Promise<MentorshipContractDetail[]> {
+	const qs = new URLSearchParams();
+	if (params.role) qs.set("role", params.role);
+	const path =
+		qs.toString().length > 0
+			? `/mentor/contracts/me/?${qs.toString()}`
+			: "/mentor/contracts/me/";
+	const res = await client.get<MentorshipContractDetail[]>(path);
+	return res.data;
+}
+
+export async function getMentorshipContract(
+	id: number,
+	client: AxiosInstance = api,
+): Promise<MentorshipContractDetail> {
+	const res = await client.get<MentorshipContractDetail>(
+		`/mentor/contracts/${id}/`,
+	);
+	return res.data;
+}
+
+export async function completeContract(
+	id: number,
+	client: AxiosInstance = api,
+): Promise<MentorshipContractDetail> {
+	const res = await client.post<MentorshipContractDetail>(
+		`/mentor/contracts/${id}/complete/`,
+	);
+	return res.data;
+}
+
+export async function cancelContract(
+	id: number,
+	client: AxiosInstance = api,
+): Promise<MentorshipContractDetail> {
+	const res = await client.post<MentorshipContractDetail>(
+		`/mentor/contracts/${id}/cancel/`,
+	);
+	return res.data;
+}
