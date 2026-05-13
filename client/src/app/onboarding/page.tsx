@@ -24,19 +24,13 @@ export default function OnboardingPage() {
 					<span className="flex size-6 items-center justify-center rounded-full border">
 						2
 					</span>
-					スキルタグ (近日公開)
-				</li>
-				<li className="flex items-center gap-2 opacity-50">
-					<span className="flex size-6 items-center justify-center rounded-full border">
-						3
-					</span>
-					興味タグ (近日公開)
+					居住地 (任意)
 				</li>
 			</ol>
 			<header className="mb-6 space-y-2">
 				<h1 className="text-2xl font-bold">ようこそ 🎉</h1>
 				<p className="text-sm text-muted-foreground">
-					最初に表示名と自己紹介だけ設定しましょう。タグ設定はあとから追加できます。
+					最初に表示名と自己紹介を設定しましょう。次のステップで居住地マップも任意で設定できます。
 				</p>
 			</header>
 			<OnboardingForm />

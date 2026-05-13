@@ -36,7 +36,9 @@ export default function OnboardingForm() {
 		form,
 		mutate: (values) => completeOnboarding(values).then(() => undefined),
 		onSuccess: () => {
-			router.push("/");
+			// P12-03: step 1 完了後は step 2 (居住地、 任意) に遷移。
+			// 既存実装は `/` に飛ばしていたが、 prompt → skip / 設定 の選択肢を挟む。
+			router.push("/onboarding/residence");
 			router.refresh();
 		},
 	});
