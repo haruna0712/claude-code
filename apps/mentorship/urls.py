@@ -7,6 +7,7 @@ spec §6.1
 from django.urls import path
 
 from apps.mentorship.views import (
+    MentorProposalAcceptView,
     MentorProposalCreateView,
     MentorRequestCloseView,
     MentorRequestDetailView,
@@ -34,5 +35,11 @@ urlpatterns = [
         "requests/<int:request_id>/proposals/",
         MentorProposalCreateView.as_view(),
         name="mentor-proposal-create",
+    ),
+    # P11-05: mentee が proposal を accept → Contract + DMRoom 自動作成。
+    path(
+        "proposals/<int:pk>/accept/",
+        MentorProposalAcceptView.as_view(),
+        name="mentor-proposal-accept",
     ),
 ]

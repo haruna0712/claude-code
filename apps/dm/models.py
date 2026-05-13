@@ -49,6 +49,10 @@ class DMRoom(models.Model):
     class Kind(models.TextChoices):
         DIRECT = "direct", "1:1"
         GROUP = "group", "group"
+        # P11-05: メンターマッチング契約成立で auto-create される 1:1 mentee-mentor room。
+        # 既存 DIRECT と同じ 2 人 room だが、 frontend で「メンタリング契約中」 バナーや
+        # 完了時 read-only UI を出すため kind で区別する。
+        MENTORSHIP = "mentorship", "メンタリング"
 
     kind = models.CharField(
         max_length=10,

@@ -135,3 +135,68 @@ class MentorProposal(models.Model):
 
     def __str__(self) -> str:
         return f"MentorProposal(req={self.request_id}, mentor={self.mentor_id}, {self.status})"
+
+
+class MentorshipContract(models.Model):
+    """proposal を mentee が accept したときに作られる契約 (P11-05)。
+
+    spec §4.5。 既存 `apps.dm.DMRoom` を 1:1 mentee-mentor 専用に流用 (kind=MENTORSHIP)。
+    課金 (Stripe) は無償ベータ pivot のため Phase 11 では `is_paid=False`、
+    `paid_amount_jpy=0` 固定運用。 後続 Phase 11-E で `stripe_subscription_id` 等を
+    migration 追加する。
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "進行中"
+        COMPLETED = "completed", "完了"
+        CANCELED = "canceled", "キャンセル"
+
+    proposal = models.OneToOneField(
+        MentorProposal,
+        on_delete=models.PROTECT,
+        related_name="contract",
+    )
+    mentee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="contracts_as_mentee",
+    )
+    mentor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="contracts_as_mentor",
+    )
+    # 契約時の plan 内容を JSON で凍結 (Phase 11-B 以降で plan が編集されても契約は不変)。
+    # P11-05 単独だと plan 無しなので空 dict、 P11-12 で snapshot を入れる。
+    plan_snapshot = models.JSONField(default=dict, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+    # 専用 DM room (kind=MENTORSHIP)。 contract と 1:1 対応。
+    room = models.OneToOneField(
+        "dm.DMRoom",
+        on_delete=models.PROTECT,
+        related_name="mentorship_contract",
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    # 課金 placeholder (Phase 11-E future)。 Phase 11 では常に False / 0。
+    is_paid = models.BooleanField(default=False)
+    paid_amount_jpy = models.PositiveIntegerField(default=0)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["mentee", "-started_at"]),
+            models.Index(fields=["mentor", "-started_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"MentorshipContract(proposal={self.proposal_id}, "
+            f"mentee={self.mentee_id}, mentor={self.mentor_id}, {self.status})"
+        )

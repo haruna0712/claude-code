@@ -8,7 +8,11 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from apps.mentorship.models import MentorProposal, MentorRequest
+from apps.mentorship.models import (
+    MentorProposal,
+    MentorRequest,
+    MentorshipContract,
+)
 from apps.tags.models import Tag
 
 
@@ -134,3 +138,32 @@ class MentorProposalInputSerializer(serializers.Serializer):
     """`POST /requests/<id>/proposals/` の入力 schema。"""
 
     body = serializers.CharField(min_length=1, max_length=2000)
+
+
+# --- MentorshipContract (P11-05) ---
+
+
+class MentorshipContractDetailSerializer(serializers.ModelSerializer):
+    """契約詳細 (mentee or mentor のみ閲覧、 P11-07 で frontend が消費)。"""
+
+    mentee = _MenteeMiniSerializer(read_only=True)
+    mentor = _MentorMiniSerializer(read_only=True)
+    room_id = serializers.IntegerField(source="room.pk", read_only=True)
+
+    class Meta:
+        model = MentorshipContract
+        fields = (
+            "id",
+            "proposal",
+            "mentee",
+            "mentor",
+            "plan_snapshot",
+            "status",
+            "room_id",
+            "started_at",
+            "completed_at",
+            "is_paid",
+            "paid_amount_jpy",
+            "updated_at",
+        )
+        read_only_fields = fields
