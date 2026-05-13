@@ -1,15 +1,31 @@
 """URL routing for /api/v1/mentor/... endpoints.
 
-P11-01: 空 router。 endpoint は後続 Issue で追加。
+P11-03: MentorRequest CRUD + close を配線。
+spec §6.1
 """
 
-from rest_framework.routers import DefaultRouter
+from django.urls import path
 
-router = DefaultRouter()
-# Future:
-# router.register(r"requests", MentorRequestViewSet, basename="mentor-request")
-# router.register(r"proposals", MentorProposalViewSet, basename="mentor-proposal")
-# router.register(r"contracts", MentorshipContractViewSet, basename="mentor-contract")
-# (P11-13 で /mentors/ は別 prefix で config/urls.py 直接 register)
+from apps.mentorship.views import (
+    MentorRequestCloseView,
+    MentorRequestDetailView,
+    MentorRequestListCreateView,
+)
 
-urlpatterns = router.urls
+urlpatterns = [
+    path(
+        "requests/",
+        MentorRequestListCreateView.as_view(),
+        name="mentor-request-list",
+    ),
+    path(
+        "requests/<int:pk>/",
+        MentorRequestDetailView.as_view(),
+        name="mentor-request-detail",
+    ),
+    path(
+        "requests/<int:pk>/close/",
+        MentorRequestCloseView.as_view(),
+        name="mentor-request-close",
+    ),
+]
