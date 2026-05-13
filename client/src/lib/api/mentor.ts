@@ -312,3 +312,38 @@ export async function cancelContract(
 	);
 	return res.data;
 }
+
+// --- MentorReview (Phase 11-D P11-21) ---
+
+export interface MentorReview {
+	id: number;
+	contract: number;
+	mentor: MentorMiniUser;
+	mentee: MentorMiniUser | null;
+	rating: number;
+	comment: string;
+	is_visible: boolean;
+	created_at: string;
+	updated_at: string;
+}
+
+export async function submitContractReview(
+	contractId: number,
+	rating: number,
+	comment: string,
+	client: AxiosInstance = api,
+): Promise<MentorReview> {
+	const res = await client.post<MentorReview>(
+		`/mentor/contracts/${contractId}/review/`,
+		{ rating, comment },
+	);
+	return res.data;
+}
+
+export async function listMentorReviews(
+	handle: string,
+	client: AxiosInstance = api,
+): Promise<MentorReview[]> {
+	const res = await client.get<MentorReview[]>(`/mentors/${handle}/reviews/`);
+	return res.data;
+}

@@ -9,7 +9,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { type MentorProfileDetail } from "@/lib/api/mentor";
+import { type MentorProfileDetail, type MentorReview } from "@/lib/api/mentor";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 
 interface PageProps {
@@ -27,6 +27,14 @@ async function fetchProfile(
 	}
 }
 
+async function fetchReviews(handle: string): Promise<MentorReview[]> {
+	try {
+		return await serverFetch<MentorReview[]>(`/mentors/${handle}/reviews/`);
+	} catch {
+		return [];
+	}
+}
+
 export async function generateMetadata({
 	params,
 }: PageProps): Promise<Metadata> {
@@ -40,7 +48,10 @@ export async function generateMetadata({
 }
 
 export default async function MentorDetailPage({ params }: PageProps) {
-	const profile = await fetchProfile(params.handle);
+	const [profile, reviews] = await Promise.all([
+		fetchProfile(params.handle),
+		fetchReviews(params.handle),
+	]);
 	if (!profile) notFound();
 
 	const rating =
@@ -170,6 +181,43 @@ export default async function MentorDetailPage({ params }: PageProps) {
 						</div>
 					</dl>
 				</section>
+
+				{reviews.length > 0 && (
+					<section aria-label="メンターレビュー">
+						<h2 className="mb-2 text-sm font-semibold">レビュー</h2>
+						<ul role="list" className="grid gap-3">
+							{reviews.map((r) => (
+								<li
+									key={r.id}
+									className="rounded-lg border border-[color:var(--a-border)] p-3"
+								>
+									<div className="flex items-center gap-2 text-xs text-[color:var(--a-text-muted)]">
+										<span
+											aria-label={`★ ${r.rating} / 5`}
+											className="text-yellow-500"
+										>
+											{"★".repeat(r.rating)}
+											<span className="text-[color:var(--a-text-muted)]">
+												{"★".repeat(5 - r.rating)}
+											</span>
+										</span>
+										<span aria-hidden="true">·</span>
+										<span>
+											@{r.mentee ? r.mentee.handle : "退会済ユーザー"}
+										</span>
+										<span aria-hidden="true">·</span>
+										<time dateTime={r.created_at}>
+											{new Date(r.created_at).toLocaleDateString("ja-JP")}
+										</time>
+									</div>
+									<p className="mt-1 whitespace-pre-wrap text-sm text-[color:var(--a-text)]">
+										{r.comment}
+									</p>
+								</li>
+							))}
+						</ul>
+					</section>
+				)}
 			</div>
 		</>
 	);
