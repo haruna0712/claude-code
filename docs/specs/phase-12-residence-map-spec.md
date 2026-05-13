@@ -215,14 +215,52 @@ cd client && npx vitest run src/lib/api/__tests__/userSearch.test.ts
 PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/user-search.spec.ts
 ```
 
+### 7.5 近所検索 (P12-05)
+
+backend pytest (`apps/users/tests/test_user_search_near_me.py` 10 cases):
+
+- `?near_me=1` は要 auth (401/403)
+- `?near_me=1` で自分 residence 未設定 → 400 (`{near_me: "..."}`)
+- 半径内の user だけ返る、 大阪 (~400km) は radius 10km で除外
+- response に `distance_km` が含まれる (東京駅⇔新宿駅 ≈ 5.5km の妥当性検証)
+- `distance_km` 昇順で sort
+- `?near=lat,lng&radius_km=N` は anon でも動く (explicit center)
+- `q` と near_me 併用で AND (text 一致 AND 半径内)
+- 不正 `near=` 値で 400
+- `radius_km=1000` でも 200km にクランプ
+- residence 未設定の user は結果から除外 (INNER JOIN residence)
+
+haversine SQL は `6371 * acos(cos(radians(lat1)) * cos(radians(lat2)) * cos(...) + sin(radians(lat1)) * sin(radians(lat2)))` を `RawSQL` で annotate、 `__lte=radius_km` で filter。 PostGIS 不要。
+
+frontend vitest (拡張):
+
+- `userSearch.test.ts`: 4 → 8 cases (near_me 1/radius_km / combine q+near_me+cursor / default radius)
+- `UserSearchResultCard.test.tsx`: 7 → 10 cases (distance_km バッジ表示 / null 非表示 / 0 km 表示)
+- `NearMeFilter.test.tsx` 新規 (7 cases): toggle render / login hint / slider 表示 / navigate URL / drag 中は navigate しない
+
+E2E (`client/e2e/near-me-search.spec.ts` 3 cases):
+
+- NEAR-1 (anon): /search/users?near_me=1 を anon で踏むと「ログインが必要」 が出る
+- NEAR-3 (golden): test1 が新宿、 test2 が東京駅で residence 設定 →
+  /search/users?near_me=1&radius_km=20 で test2 の card に「約 X km」 バッジ
+- NEAR-NAV: home → 「ユーザー検索」 link → 「自分の近所で絞り込む」 toggle
+
+実行:
+
+```bash
+docker compose -f local.yml exec api pytest apps/users/tests/test_user_search_near_me.py -v --no-cov
+cd client && npx vitest run src/lib/api/__tests__/userSearch.test.ts src/components/search/__tests__/
+PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/near-me-search.spec.ts
+```
+
 ---
 
 ## 8. ロールアウト順序
 
 1. ✅ **P12-01** (#678 merged): model + API + tests
 2. ✅ **P12-02** (#679 merged): 設定 UI + プロフィール map 表示 (Leaflet + OSM)
-3. **P12-04** (本 PR): 汎用 user search page (full-text、 cursor pagination)
-4. P12-03: signup wizard 統合 (P12-04 後に依存しない順序で着手)
-5. P12-05: 近所検索 (haversine SQL)
+3. ✅ **P12-04** (#680 merged): 汎用 user search page (full-text、 cursor pagination)
+4. **P12-05** (本 PR): 近所検索 (haversine SQL, near_me=1 / near=lat,lng)
+5. P12-03: signup wizard 統合 (任意フェーズ、 完成度的に最後)
 
 各段階で `gan-evaluator` agent に採点させて UX を確認 (新 route 追加なので Phase 11 同様の必須運用)。

@@ -60,6 +60,15 @@ export default function UserSearchResultCard({
 						>
 							@{handle}
 						</span>
+						{user.distance_km != null && (
+							<span
+								className="ml-auto shrink-0 rounded-full bg-[color:var(--a-bg-muted)] px-2 py-0.5 text-[color:var(--a-text-muted)]"
+								style={{ fontSize: 11 }}
+								aria-label={`現在地から約 ${user.distance_km} km`}
+							>
+								約 {user.distance_km} km
+							</span>
+						)}
 					</div>
 					{user.bio && (
 						<p className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">

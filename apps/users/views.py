@@ -1,11 +1,14 @@
 import logging
+import math
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db.models import Q, QuerySet
+from django.db.models import FloatField, Q, QuerySet
+from django.db.models.expressions import RawSQL
 from django.shortcuts import get_object_or_404
 from djoser.social.views import ProviderAuthView
 from rest_framework import serializers, status
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.pagination import CursorPagination
 from rest_framework.parsers import JSONParser
@@ -774,9 +777,21 @@ class UserFullTextSerializer(serializers.ModelSerializer):
     """汎用ユーザー検索結果。 ``UserSearchSerializer`` (handle autocomplete) と
     別物で、 search card UI 用に ``display_name`` と ``bio`` を追加する。
     PII は引き続き出さない。
+
+    P12-05: 近所検索 (``?near_me=1`` / ``?near=lat,lng``) の場合、 view 側で
+    queryset に ``distance_km`` annotation を付ける。 ある場合は response に
+    含めて UI で「X km away」 表示に使う。 通常の text 検索では None。
     """
 
     user_id = serializers.UUIDField(source="id", read_only=True)
+    distance_km = serializers.SerializerMethodField()
+
+    def get_distance_km(self, obj: User) -> float | None:
+        # annotation 値 (Decimal / float) を float に正規化。 annotation 無しなら None。
+        value = getattr(obj, "_distance_km", None)
+        if value is None:
+            return None
+        return round(float(value), 2)
 
     class Meta:
         model = User
@@ -786,6 +801,7 @@ class UserFullTextSerializer(serializers.ModelSerializer):
             "display_name",
             "bio",
             "avatar_url",
+            "distance_km",
         )
         read_only_fields = fields
 
@@ -796,6 +812,19 @@ class UserSearchCursorPagination(CursorPagination):
     page_size = 20
     max_page_size = 50
     ordering = "username"
+    cursor_query_param = "cursor"
+
+
+class UserSearchProximityCursorPagination(CursorPagination):
+    """近所検索 (P12-05) 用の cursor pagination。
+
+    distance_km 昇順で並べる。 ``_distance_km`` annotation は queryset 側で
+    付ける ($ ``annotate``)。 tie-breaker に username を入れて stable に。
+    """
+
+    page_size = 20
+    max_page_size = 50
+    ordering = ("_distance_km", "username")
     cursor_query_param = "cursor"
 
 
@@ -811,6 +840,38 @@ class UserSearchAnonThrottle(AnonRateThrottle):
     scope = "user_search_anon"
 
 
+_NEAR_RADIUS_KM_DEFAULT = 10.0
+_NEAR_RADIUS_KM_MAX = 200.0
+
+
+def _parse_near_param(value: str) -> tuple[float, float] | None:
+    """``"35.681,139.767"`` 形式の文字列を (lat, lng) に分解。 範囲外 / 不正は None。
+
+    OverflowError も catch: ``float("1e999")`` は ``OverflowError`` を投げるので
+    ``ValueError`` だけだと unhandled になる。
+    """
+    try:
+        lat_str, lng_str = value.split(",", 1)
+        lat = float(lat_str)
+        lng = float(lng_str)
+    except (ValueError, AttributeError, OverflowError):
+        return None
+    if not (math.isfinite(lat) and math.isfinite(lng)):
+        return None
+    if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lng <= 180.0):
+        return None
+    return (lat, lng)
+
+
+def _parse_radius_km(value: str | None) -> float:
+    """``radius_km`` を float に。 不正値は default、 max でクランプ。"""
+    try:
+        r = float(value) if value is not None else _NEAR_RADIUS_KM_DEFAULT
+    except (ValueError, TypeError):
+        r = _NEAR_RADIUS_KM_DEFAULT
+    return max(0.0, min(r, _NEAR_RADIUS_KM_MAX))
+
+
 class UserFullTextSearchView(ListAPIView):
     """``GET /api/v1/users/search/?q=<text>&cursor=...``: 汎用ユーザー検索 (P12-04)。
 
@@ -821,9 +882,21 @@ class UserFullTextSearchView(ListAPIView):
     - cursor pagination (page_size=20)。 ``ordering="username"`` で安定。
     - 空 q は空配列 (lookup 空打ちさせない)。
 
+    P12-05 — 近所検索:
+    - ``?near_me=1&radius_km=N``: auth user の residence を center に半径 N km。
+      ``self`` は結果から除外。 自分 residence 未設定なら 400。
+    - ``?near=lat,lng&radius_km=N``: 明示 center で anon でも検索可。
+    - ``q`` と併用するときは AND (text 部分一致 + 距離 filter 両方)。
+    - ``distance_km`` を annotation で response に含める。
+    - radius_km は max 200km にクランプ、 default 10km。
+    - residence 未設定の user は結果から除外 (INNER JOIN residence)。
+    - 並びは ``distance_km ASC`` (近い順)。 cursor pagination は ``ordering`` を
+      上書き (``UserSearchProximityCursorPagination``)。
+
     パフォーマンス: ``username`` / ``display_name`` / ``bio`` には pg_trgm の
     ``gin_trgm_ops`` GIN index を貼って ``ILIKE '%q%'`` を index 利用可にする
     (apps/users/migrations/0006_user_search_gin_indexes.py)。
+    近所検索は MVP 規模なので haversine SQL を都度計算 (PostGIS 不要)。
     """
 
     serializer_class = UserFullTextSerializer
@@ -831,12 +904,89 @@ class UserFullTextSearchView(ListAPIView):
     pagination_class = UserSearchCursorPagination
     throttle_classes = [UserSearchAnonThrottle]
 
+    @property
+    def paginator(self):
+        """近所検索のときだけ距離順 paginator を返す (DRF GenericAPIView の
+        標準 property を上書き)。 通常 search は username 順 (P12-04 既存挙動)。"""
+        if not hasattr(self, "_cached_paginator"):
+            params = self.request.query_params
+            if params.get("near_me") == "1" or "near" in params:
+                self._cached_paginator = UserSearchProximityCursorPagination()
+            else:
+                self._cached_paginator = UserSearchCursorPagination()
+        return self._cached_paginator
+
     def get_queryset(self) -> QuerySet:
-        q = (self.request.query_params.get("q") or "").strip()
-        if not q:
+        params = self.request.query_params
+        q = (params.get("q") or "").strip()
+        near_me = params.get("near_me") == "1"
+        near_raw = params.get("near")
+
+        center: tuple[float, float] | None = None
+        if near_me:
+            if not self.request.user.is_authenticated:
+                # 401/403 は DRF の permission レイヤで返したいが、 ここまで来た時点で
+                # AllowAny なので明示的に PermissionDenied で 403 を返す。
+                # (near=lat,lng は anon 可なので permission_classes は AllowAny の
+                # まま、 near_me のみ in-method で auth を要求する pragmatic 分岐)
+                raise PermissionDenied("near_me には認証が必要です")
+            residence = UserResidence.objects.filter(user=self.request.user).first()
+            if residence is None:
+                raise ValidationError(
+                    {
+                        "near_me": "自分の residence が未設定です。 /settings/residence で設定してください。"
+                    }
+                )
+            center = (float(residence.latitude), float(residence.longitude))
+        elif near_raw is not None:
+            parsed = _parse_near_param(near_raw)
+            if parsed is None:
+                raise ValidationError(
+                    {"near": "near は 'lat,lng' 形式で、 lat∈[-90,90] / lng∈[-180,180] が必要です"}
+                )
+            center = parsed
+
+        if center is None and not q:
+            # 何も指定が無ければ空配列 (P12-04 既存挙動)
             return User.objects.none()
-        return (
-            User.objects.filter(is_active=True)
-            .filter(Q(username__icontains=q) | Q(display_name__icontains=q) | Q(bio__icontains=q))
-            .order_by("username")
+
+        qs = User.objects.filter(is_active=True)
+        if q:
+            qs = qs.filter(
+                Q(username__icontains=q) | Q(display_name__icontains=q) | Q(bio__icontains=q)
+            )
+
+        if center is None:
+            return qs.order_by("username")
+
+        # 近所検索: haversine SQL で distance を annotation
+        lat, lng = center
+        radius_km = _parse_radius_km(params.get("radius_km"))
+
+        # User → UserResidence (OneToOne, related_name="residence") を JOIN。
+        # residence 未設定 user は除外。 self は除外 (自分が結果に出るのは違和感、
+        # near_me だけでなく ?near=lat,lng でも self は除外で一貫させる)。
+        qs = qs.filter(residence__isnull=False)
+        if self.request.user.is_authenticated:
+            qs = qs.exclude(pk=self.request.user.pk)
+
+        # 6371 = earth radius (km)。
+        # acos の domain は [-1, 1]。 浮動小数点誤差で範囲外になるのを
+        # LEAST(1.0, GREATEST(-1.0, ...)) で両端クランプ (片側だけだと NaN 経路あり)。
+        # columns は users_userresidence.{latitude,longitude}。
+        # output_field=FloatField で annotation を明示的に float8 として扱う
+        # (cursor pagination が annotation を string 比較するときの安定性のため)。
+        haversine_sql = (
+            "6371 * acos(LEAST(1.0, GREATEST(-1.0, "
+            "cos(radians(%s)) * cos(radians(users_userresidence.latitude)) "
+            "* cos(radians(users_userresidence.longitude) - radians(%s)) "
+            "+ sin(radians(%s)) * sin(radians(users_userresidence.latitude))"
+            ")))"
         )
+        qs = qs.annotate(
+            _distance_km=RawSQL(haversine_sql, (lat, lng, lat), output_field=FloatField()),
+        ).filter(_distance_km__lte=radius_km)
+
+        # paginator (UserSearchProximityCursorPagination) も同じ ordering を持つので
+        # 上書きされるが、 get_queryset 単体で使う pytest 経路でも安定するよう明示する。
+        return qs.order_by("_distance_km", "username")
