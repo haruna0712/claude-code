@@ -6,7 +6,7 @@
  * 共有 (client/src/types/index.ts に再 export 想定だが、現状は直接 import)。
  */
 
-export type DMRoomKind = "direct" | "group";
+export type DMRoomKind = "direct" | "group" | "mentorship";
 
 /**
  * Backend (`DMRoomMembershipSerializer`) は user の入れ子オブジェクトではなく

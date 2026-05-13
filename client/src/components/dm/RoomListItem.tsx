@@ -86,7 +86,7 @@ function RoomAvatar({
 	room: DMRoom;
 	currentUserId: number;
 }) {
-	if (room.kind === "direct") {
+	if (room.kind === "direct" || room.kind === "mentorship") {
 		const peer = pickPeer(room, currentUserId);
 		// DMRoomMembership は flat な handle のみ持つ。avatar URL は別 endpoint
 		// (/api/v1/profiles/...) で解決する設計だが Phase 3 範囲外、initials のみ表示。
@@ -94,9 +94,14 @@ function RoomAvatar({
 		return (
 			<div
 				aria-hidden="true"
-				className="bg-baby_grey/30 text-baby_white flex size-12 shrink-0 items-center justify-center rounded-full text-base font-semibold"
+				aria-label={room.kind === "mentorship" ? "メンタリング" : undefined}
+				className={`flex size-12 shrink-0 items-center justify-center rounded-full text-base font-semibold ${
+					room.kind === "mentorship"
+						? "bg-baby_blue/20 text-baby_blue ring-baby_blue/40 ring-2"
+						: "bg-baby_grey/30 text-baby_white"
+				}`}
 			>
-				{fallback}
+				{room.kind === "mentorship" ? "🤝" : fallback}
 			</div>
 		);
 	}
