@@ -12,7 +12,11 @@ import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
 import ContractActions from "@/components/mentorship/ContractActions";
-import { type MentorshipContractDetail } from "@/lib/api/mentor";
+import ReviewForm from "@/components/mentorship/ReviewForm";
+import {
+	type MentorReview,
+	type MentorshipContractDetail,
+} from "@/lib/api/mentor";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { CurrentUser } from "@/lib/api/users";
 
@@ -51,6 +55,21 @@ async function fetchCurrentUser(): Promise<CurrentUser | null> {
 	}
 }
 
+async function fetchExistingReview(
+	mentorHandle: string,
+	contractId: number,
+): Promise<MentorReview | null> {
+	// 公開 review 一覧から該当 contract の review を引く (mentee は自分の投稿を編集可能)。
+	try {
+		const reviews = await serverFetch<MentorReview[]>(
+			`/mentors/${mentorHandle}/reviews/`,
+		);
+		return reviews.find((r) => r.contract === contractId) ?? null;
+	} catch {
+		return null;
+	}
+}
+
 export default async function ContractDetailPage({ params }: PageProps) {
 	const isAuthenticated = cookies().get("logged_in")?.value === "true";
 	if (!isAuthenticated) {
@@ -72,6 +91,13 @@ export default async function ContractDetailPage({ params }: PageProps) {
 				? "mentor"
 				: "third";
 	if (role === "third") notFound();
+
+	// P11-21: mentee が completed 契約に review 投稿 / 編集できる。 既存 review を
+	// 先に取得して form に pre-populate (上書き編集対応)。
+	const existingReview =
+		role === "mentee" && contract.status === "completed"
+			? await fetchExistingReview(contract.mentor.handle, contract.id)
+			: null;
 
 	const statusLabel =
 		contract.status === "active"
@@ -173,6 +199,17 @@ export default async function ContractDetailPage({ params }: PageProps) {
 						</p>
 					)}
 				</section>
+
+				{role === "mentee" && contract.status === "completed" && (
+					<section aria-label="メンターレビュー">
+						<h2 className="mb-2 text-sm font-semibold">
+							{existingReview
+								? "あなたのレビュー (編集可能)"
+								: "メンターを評価"}
+						</h2>
+						<ReviewForm contractId={contract.id} existing={existingReview} />
+					</section>
+				)}
 			</div>
 		</>
 	);
