@@ -87,6 +87,10 @@ urlpatterns = [
     path("api/v1/timeline/", include("apps.timeline.urls")),
     # P11-01: メンターマッチング (Phase 11)。 endpoint は P11-03 以降で追加。
     path("api/v1/mentor/", include("apps.mentorship.urls")),
+    # P11-12 (11-B): mentor profile + plan の prefix (複数形)。
+    # /mentors/me/ + /mentors/me/plans/[<id>/] を提供。 /mentors/<handle>/ (公開
+    # profile) は P11-13 検索 API で追加。
+    path("api/v1/mentors/", include("apps.mentorship.urls_mentors")),
 ]
 
 # Sentry smoke test endpoint (P0-06). DEBUG=True の環境だけ URL 登録すること自体を

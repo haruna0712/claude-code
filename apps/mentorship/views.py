@@ -25,8 +25,17 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.mentorship.models import MentorProposal, MentorRequest
+from apps.mentorship.models import (
+    MentorPlan,
+    MentorProfile,
+    MentorProposal,
+    MentorRequest,
+)
 from apps.mentorship.serializers import (
+    MentorPlanInputSerializer,
+    MentorPlanSerializer,
+    MentorProfileInputSerializer,
+    MentorProfileSerializer,
     MentorProposalDetailSerializer,
     MentorProposalInputSerializer,
     MentorRequestDetailSerializer,
@@ -265,3 +274,127 @@ class MentorProposalAcceptView(APIView):
             MentorshipContractDetailSerializer(contract).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+# --- MentorProfile self-edit (P11-12) ---
+
+
+class MentorProfileMeView(APIView):
+    """`GET/PATCH /mentors/me/` — 自分の MentorProfile を取得 / 編集。
+
+    PATCH は auto-create: profile 未作成なら新規作成 (auth user 全員が mentor を
+    名乗れる仕様、 spec §3.1 mentor 申請 / 審査制なしの方針)。
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        try:
+            profile = MentorProfile.objects.prefetch_related("skill_tags", "plans").get(
+                user=request.user
+            )
+        except MentorProfile.DoesNotExist as exc:
+            raise NotFound("MentorProfile not found") from exc
+        return Response(MentorProfileSerializer(profile).data)
+
+    def patch(self, request: Request) -> Response:
+        serializer = MentorProfileInputSerializer(data=request.data, partial=False)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        tags = data.pop("skill_tag_names", [])
+
+        with transaction.atomic():
+            profile, _created = MentorProfile.objects.update_or_create(
+                user=request.user,
+                defaults={
+                    "headline": data["headline"],
+                    "bio": data["bio"],
+                    "experience_years": data["experience_years"],
+                    "is_accepting": data["is_accepting"],
+                },
+            )
+            profile.skill_tags.set(tags)
+        # plan は別 endpoint で管理。 ここでは profile + tags のみ返す。
+        return Response(MentorProfileSerializer(profile).data)
+
+
+# --- MentorPlan CRUD (P11-12) ---
+
+
+def _get_my_profile_or_404(user) -> MentorProfile:
+    try:
+        return MentorProfile.objects.get(user=user)
+    except MentorProfile.DoesNotExist as exc:
+        raise NotFound(
+            "MentorProfile が未作成です。 先に /mentors/me/ を PATCH してください"
+        ) from exc
+
+
+class MentorPlanListCreateView(APIView):
+    """`/mentors/me/plans/` — GET 自分の plan 一覧 / POST 新規 plan。"""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        profile = _get_my_profile_or_404(request.user)
+        plans = profile.plans.filter(is_active=True).order_by("created_at")
+        return Response(MentorPlanSerializer(plans, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        profile = _get_my_profile_or_404(request.user)
+        serializer = MentorPlanInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        plan = MentorPlan.objects.create(
+            profile=profile,
+            title=data["title"],
+            description=data["description"],
+            price_jpy=data["price_jpy"],
+            billing_cycle=data["billing_cycle"],
+        )
+        return Response(
+            MentorPlanSerializer(plan).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MentorPlanDetailView(APIView):
+    """`/mentors/me/plans/<id>/` — PATCH 編集 / DELETE 論理削除 (is_active=False)。"""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_plan(self, request: Request, pk: int) -> MentorPlan:
+        try:
+            plan = MentorPlan.objects.select_related("profile").get(pk=pk)
+        except MentorPlan.DoesNotExist as exc:
+            raise NotFound("MentorPlan not found") from exc
+        if plan.profile.user_id != request.user.pk:
+            raise PermissionDenied("自分の plan のみ編集できます")
+        return plan
+
+    def patch(self, request: Request, pk: int) -> Response:
+        plan = self._get_plan(request, pk)
+        serializer = MentorPlanInputSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        for field in ("title", "description", "price_jpy", "billing_cycle"):
+            if field in data:
+                setattr(plan, field, data[field])
+        plan.save(
+            update_fields=[
+                "title",
+                "description",
+                "price_jpy",
+                "billing_cycle",
+                "updated_at",
+            ]
+        )
+        return Response(MentorPlanSerializer(plan).data)
+
+    def delete(self, request: Request, pk: int) -> Response:
+        """論理削除 (is_active=False)。 row は残す (proposal / contract が参照)。"""
+        plan = self._get_plan(request, pk)
+        if plan.is_active:
+            plan.is_active = False
+            plan.save(update_fields=["is_active", "updated_at"])
+        return Response(status=status.HTTP_204_NO_CONTENT)

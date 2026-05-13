@@ -249,3 +249,44 @@ class MentorProfile(models.Model):
 
     def __str__(self) -> str:
         return f"MentorProfile(user={self.user_id}, accepting={self.is_accepting})"
+
+
+class MentorPlan(models.Model):
+    """mentor が提示する相談プラン (P11-12)。
+
+    spec §4.2。 単発 (one_time) / 月額 (monthly) の 2 種類。 Phase 11 は無償ベータ
+    pivot のため `price_jpy=0` 固定運用、 P11-E (将来) で Stripe 連携を入れる際に
+    `stripe_price_id` 等を migration 追加するだけ。
+
+    proposal が plan に紐付くのは P11-12 で MentorProposal.plan FK を後付け migration。
+    """
+
+    class BillingCycle(models.TextChoices):
+        ONE_TIME = "one_time", "単発"
+        MONTHLY = "monthly", "月額"
+
+    profile = models.ForeignKey(
+        MentorProfile,
+        on_delete=models.CASCADE,
+        related_name="plans",
+    )
+    title = models.CharField(max_length=60)
+    description = models.TextField(max_length=1000)
+    price_jpy = models.PositiveIntegerField(default=0)
+    billing_cycle = models.CharField(
+        max_length=20,
+        choices=BillingCycle.choices,
+    )
+    # 論理削除フラグ。 過去の proposal/contract が plan を参照したまま編集 / 削除を
+    # 安全にするため、 物理削除はせず is_active=False で hide する。
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["profile", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"MentorPlan(profile={self.profile_id}, {self.title[:30]}, {self.billing_cycle})"
