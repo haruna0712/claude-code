@@ -31,8 +31,11 @@ export default function OnboardingResidencePage() {
 				className="mb-6 flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground"
 				aria-label="オンボーディングの進行状況"
 			>
-				<li className="flex items-center gap-2 opacity-50">
-					<span className="flex size-6 items-center justify-center rounded-full border">
+				<li className="flex items-center gap-2 text-muted-foreground">
+					<span
+						aria-hidden="true"
+						className="flex size-6 items-center justify-center rounded-full border"
+					>
 						1
 					</span>
 					プロフィール
@@ -41,19 +44,23 @@ export default function OnboardingResidencePage() {
 					className="flex items-center gap-2 font-semibold text-foreground"
 					aria-current="step"
 				>
-					<span className="flex size-6 items-center justify-center rounded-full bg-foreground text-background">
+					<span
+						aria-hidden="true"
+						className="flex size-6 items-center justify-center rounded-full bg-foreground text-background"
+					>
 						2
 					</span>
 					居住地 (任意)
+					<span className="sr-only">（ステップ 2 / 2、 現在地）</span>
 				</li>
 			</ol>
 
 			<header className="mb-6 space-y-2">
 				<h1 className="text-2xl font-bold">住んでる場所を設定しますか？</h1>
 				<p className="text-sm text-muted-foreground">
-					地図に <strong>円</strong> で居住地を表示します。 半径 500m
-					以上で公開され、 ピンポイントの住所は他のユーザーに見えません。
-					あとから設定 / 削除もできます。
+					地図に円で居住地を表示します。 半径 500m 以上で公開され、
+					ピンポイントの住所は他のユーザーに見えません。 あとから設定 /
+					削除もできます。
 				</p>
 				<p className="text-sm text-muted-foreground">
 					「自分の近所のエンジニア」 を検索する機能も使えるようになります。
@@ -71,8 +78,12 @@ export default function OnboardingResidencePage() {
 
 			<p className="mt-6 text-xs text-muted-foreground">
 				居住地は{" "}
-				<Link href="/settings/residence" className="underline">
-					/settings/residence
+				<Link
+					href="/settings/residence"
+					className="underline"
+					aria-label="居住地設定ページを開く"
+				>
+					居住地設定ページ
 				</Link>{" "}
 				からいつでも変更できます。
 			</p>

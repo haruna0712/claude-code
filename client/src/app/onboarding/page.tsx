@@ -15,13 +15,20 @@ export default function OnboardingPage() {
 					className="flex items-center gap-2 font-semibold text-foreground"
 					aria-current="step"
 				>
-					<span className="flex size-6 items-center justify-center rounded-full bg-foreground text-background">
+					<span
+						aria-hidden="true"
+						className="flex size-6 items-center justify-center rounded-full bg-foreground text-background"
+					>
 						1
 					</span>
 					プロフィール
+					<span className="sr-only">（ステップ 1 / 2、 現在地）</span>
 				</li>
-				<li className="flex items-center gap-2 opacity-50">
-					<span className="flex size-6 items-center justify-center rounded-full border">
+				<li className="flex items-center gap-2 text-muted-foreground">
+					<span
+						aria-hidden="true"
+						className="flex size-6 items-center justify-center rounded-full border"
+					>
 						2
 					</span>
 					居住地 (任意)
