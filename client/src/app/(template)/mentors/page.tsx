@@ -74,6 +74,23 @@ export default async function MentorsListPage({ searchParams }: PageProps) {
 				</div>
 			</header>
 
+			{/* P11-23: skill tag filter chip。 解除 link 付き。 */}
+			{tag ? (
+				<nav
+					aria-label="skill filter"
+					className="flex items-center gap-2 border-b border-[color:var(--a-border)] px-5 py-2 text-xs"
+				>
+					<span className="text-[color:var(--a-text-muted)]">filter:</span>
+					<Link
+						href="/mentors"
+						aria-label={`#${tag} の filter を解除`}
+						className="inline-flex items-center gap-1 rounded-full bg-[color:var(--a-bg-muted)] px-2 py-0.5 text-[color:var(--a-text)] hover:bg-[color:var(--a-bg-muted)]/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+					>
+						#{tag} ×
+					</Link>
+				</nav>
+			) : null}
+
 			<div className="p-5">
 				{items.length === 0 ? (
 					<p className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-10 text-center text-sm text-[color:var(--a-text-muted)]">
