@@ -46,21 +46,22 @@
 
 > v0.4 で「目安工数」「累計」列を削除した経緯は冒頭の変更履歴を参照。Issue 単位のサイズ感は `docs/issues/phase-N.md` 各 Issue の `Estimate` フィールドを参照。
 
-| Phase     | 内容                                                            | 状態                                                                                       |
-| --------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Phase 0   | セットアップ・基盤整備・観測性                                  | ✅ **完了** (13/13 Issue)                                                                  |
-| Phase 0.5 | 最小 stg デプロイ（Hello World 相当）                           | ✅ **完了** (16/16、stg apply + NS 委任 + ACM + HTTPS まで本番稼働)                        |
-| Phase 1   | 認証・プロフィール・基本ツイート (+ F-02/F-10/F-11/F-14 前倒し) | ✅ **完了** (23/23 Issue + F1-1〜F1-7 セキュリティ修正)                                    |
-| Phase 2   | TL・リアクション・フォロー・検索 (+ F-15 pg_bigm migration)     | ✅ **完了** (22 Issue + follow-up #198/#199/#200/#201、stg E2E API golden path 全 pass)    |
-| Phase 3   | DM（リアルタイム、S3 プリサインド含む）                         | ✅ **コード完了 + stg 動作確認** (21/22 Issue マージ、画像 E2E pass、残 #247 docs 整備)    |
-| Phase 4A  | 通知・お気に入りボックス                                        | 計画                                                                                       |
-| Phase 4B  | モデレーション（Block/Mute/Report）                             | ✅ **コード完了** (10 Issue: #443-#452 / PR #453、stg デプロイ + 動作確認待ち)             |
-| Phase 5   | 掲示板                                                          | ✅ **コード完了** (12 Issue: #425-#434, #436, #437 / PR #438、stg デプロイ + 動作確認待ち) |
-| Phase 6   | 記事機能（GitHub 片方向 push のみ）                             | 計画                                                                                       |
-| Phase 7   | Bot（RSS + AI 要約、+ F-04 Redis 分離）                         | 計画                                                                                       |
-| Phase 8   | プレミアム機能（Stripe + 記事 AI、+ F-01 webhook WAF）          | 計画                                                                                       |
-| Phase 9   | 本番昇格・負荷試験・Lighthouse CI (+ F-03/05/06/07/08/09/12/13) | 計画                                                                                       |
-| Phase 10  | Claude Design 取り込み・a11y 監査・SEO                          | 計画                                                                                       |
+| Phase     | 内容                                                                                       | 状態                                                                                                                                                    |
+| --------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase 0   | セットアップ・基盤整備・観測性                                                             | ✅ **完了** (13/13 Issue)                                                                                                                               |
+| Phase 0.5 | 最小 stg デプロイ（Hello World 相当）                                                      | ✅ **完了** (16/16、stg apply + NS 委任 + ACM + HTTPS まで本番稼働)                                                                                     |
+| Phase 1   | 認証・プロフィール・基本ツイート (+ F-02/F-10/F-11/F-14 前倒し)                            | ✅ **完了** (23/23 Issue + F1-1〜F1-7 セキュリティ修正)                                                                                                 |
+| Phase 2   | TL・リアクション・フォロー・検索 (+ F-15 pg_bigm migration)                                | ✅ **完了** (22 Issue + follow-up #198/#199/#200/#201、stg E2E API golden path 全 pass)                                                                 |
+| Phase 3   | DM（リアルタイム、S3 プリサインド含む）                                                    | ✅ **コード完了 + stg 動作確認** (21/22 Issue マージ、画像 E2E pass、残 #247 docs 整備)                                                                 |
+| Phase 4A  | 通知・お気に入りボックス                                                                   | 計画                                                                                                                                                    |
+| Phase 4B  | モデレーション（Block/Mute/Report）                                                        | ✅ **コード完了** (10 Issue: #443-#452 / PR #453、stg デプロイ + 動作確認待ち)                                                                          |
+| Phase 5   | 掲示板                                                                                     | ✅ **コード完了** (12 Issue: #425-#434, #436, #437 / PR #438、stg デプロイ + 動作確認待ち)                                                              |
+| Phase 6   | 記事機能（GitHub 片方向 push のみ）                                                        | 計画                                                                                                                                                    |
+| Phase 7   | Bot（RSS + AI 要約、+ F-04 Redis 分離）                                                    | 計画                                                                                                                                                    |
+| Phase 8   | プレミアム機能（Stripe + 記事 AI、+ F-01 webhook WAF）                                     | 計画                                                                                                                                                    |
+| Phase 9   | 本番昇格・負荷試験・Lighthouse CI (+ F-03/05/06/07/08/09/12/13)                            | 計画                                                                                                                                                    |
+| Phase 10  | Claude Design 取り込み・a11y 監査・SEO                                                     | 計画                                                                                                                                                    |
+| Phase 11  | メンターマッチング (Menta ライク、 募集 board / profile / review、 課金は無償ベータ pivot) | 計画 — spec: [docs/specs/phase-11-mentor-board-spec.md](./specs/phase-11-mentor-board-spec.md)、 Issue: [docs/issues/phase-11.md](./issues/phase-11.md) |
 
 ### 0.3 Phase 0 / 0.5 実績サマリ
 
