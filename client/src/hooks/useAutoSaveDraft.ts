@@ -100,30 +100,42 @@ export function useAutoSaveDraft(
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	// 最新の value を ref で保持 (unmount flush 用)
 	const latestValueRef = useRef<string>(initial);
+	// 最新の key を ref で保持 (cleanup で stale key に書き込まないため)
+	const keyRef = useRef<string>(key);
+	// Strict Mode 2 回 mount で isRestored が trip しないよう、復元は session 中 1 度だけ
+	const hasRestoredRef = useRef<boolean>(false);
+
+	useEffect(() => {
+		keyRef.current = key;
+	}, [key]);
 
 	// mount: localStorage から復元 (SSR hydration mismatch を避けるため useEffect 内)
 	useEffect(() => {
-		const stored = safeGetItem(key);
-		if (stored !== null && stored !== "") {
-			setValueState(stored);
-			latestValueRef.current = stored;
-			setIsRestored(true);
+		if (!hasRestoredRef.current) {
+			hasRestoredRef.current = true;
+			const stored = safeGetItem(key);
+			if (stored !== null && stored !== "") {
+				setValueState(stored);
+				latestValueRef.current = stored;
+				setIsRestored(true);
+			}
 		}
-		// cleanup: unmount で pending debounce を flush する
+		// cleanup: unmount で pending debounce を flush する (現在の key に対して)
 		return () => {
 			if (timerRef.current !== null) {
 				clearTimeout(timerRef.current);
 				timerRef.current = null;
-				// 最新値が空でなければ flush、 空なら remove
 				const last = latestValueRef.current;
+				const currentKey = keyRef.current;
 				if (last === "") {
-					safeRemoveItem(key);
+					safeRemoveItem(currentKey);
 				} else {
-					safeSetItem(key, last);
+					safeSetItem(currentKey, last);
 				}
 			}
 		};
 		// key が動的に変わるケースは想定しない (composer 毎に 1 key 固定)。
+		// PostDialog で mode/tweetId 変化があれば旧 key の pending は flush される。
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [key]);
 
@@ -162,6 +174,11 @@ export function useAutoSaveDraft(
 	return { value, setValue, clear, isRestored };
 }
 
+export interface UseAutoSaveSyncReturn {
+	/** pending な debounce timer を cancel + localStorage[key] を remove。 送信成功時に呼ぶ。 */
+	clear: () => void;
+}
+
 /**
  * 既存の useState ベースの value を localStorage に sync する companion hook。
  *
@@ -172,27 +189,32 @@ export function useAutoSaveDraft(
  *
  * 用途例:
  * ```tsx
- * const [body, setBody] = useState(() => {
- *   if (typeof window === "undefined") return initial;
- *   return localStorage.getItem("composer:article:new:body") ?? initial;
- * });
- * useAutoSaveSync("composer:article:new:body", body);
+ * const [body, setBody] = useState(() => loadStoredDraft("composer:article:new:body"));
+ * const { clear } = useAutoSaveSync("composer:article:new:body", body);
  * // 送信成功時:
- * localStorage.removeItem("composer:article:new:body");
+ * clear();          // pending timer を cancel して LS から remove
  * setBody("");
  * ```
  *
- * 単独で復元は管理せず、 caller が `useState(() => ...)` の initial で
- * 復元を行う前提。 当 hook は **書き込みだけ** を debounce 担当する。
+ * 単独で復元は管理せず、 caller が `useState(() => loadStoredDraft(...))` の
+ * initial で復元を行う前提。 当 hook は **書き込みだけ** を debounce 担当する。
+ *
+ * `clear()` を必ず使うこと: 直接 `localStorage.removeItem` を呼ぶと debounce
+ * 中の pending timer が後から発火して書きかけが復活する競合が起きる。
  */
 export function useAutoSaveSync(
 	key: string,
 	value: string,
 	options?: { debounceMs?: number },
-): void {
+): UseAutoSaveSyncReturn {
 	const debounceMs = options?.debounceMs ?? DEFAULT_DEBOUNCE_MS;
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const latestValueRef = useRef<string>(value);
+	const keyRef = useRef<string>(key);
+
+	useEffect(() => {
+		keyRef.current = key;
+	}, [key]);
 
 	useEffect(() => {
 		latestValueRef.current = value;
@@ -208,10 +230,13 @@ export function useAutoSaveSync(
 			}
 		}, debounceMs);
 		return () => {
-			// この effect の cleanup は次の effect 起動時にも走る。 ここで flush
-			// すると毎キーストロークで LS 書き込みが起きる (= debounce 機能しない)
-			// ので、 通常時は何もせず、 アンマウント時のみ pending を flush する。
-			// それを実現するため、 別の useEffect で unmount のみ flush する。
+			// この effect の cleanup は value 変更ごとに走る。 ここで flush
+			// すると毎キーストロークで LS 書き込みが起きる (= debounce 機能しない)。
+			// timer の clear も次の effect 起動時の冒頭で行うので、ここは何もしない。
+			// 真の unmount flush は下の useEffect (deps=[]) で扱う。
+			// 注意: React は同一 component 内では effect cleanup を **登録順** に
+			// 呼ぶため、ここで timer を null にすると下の unmount-only cleanup が
+			// flush できなくなる (test: "flushes pending value to LS on unmount")。
 		};
 	}, [key, value, debounceMs]);
 
@@ -222,15 +247,27 @@ export function useAutoSaveSync(
 				clearTimeout(timerRef.current);
 				timerRef.current = null;
 				const last = latestValueRef.current;
+				const currentKey = keyRef.current;
 				if (last === "") {
-					safeRemoveItem(key);
+					safeRemoveItem(currentKey);
 				} else {
-					safeSetItem(key, last);
+					safeSetItem(currentKey, last);
 				}
 			}
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
+
+	const clear = useCallback(() => {
+		if (timerRef.current !== null) {
+			clearTimeout(timerRef.current);
+			timerRef.current = null;
+		}
+		latestValueRef.current = "";
+		safeRemoveItem(keyRef.current);
+	}, []);
+
+	return { clear };
 }
 
 /**

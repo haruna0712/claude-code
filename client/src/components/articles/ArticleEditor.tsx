@@ -139,8 +139,8 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 		loadStoredDraft(bodyKey, initial?.body_markdown ?? ""),
 	);
 	// debounce 付きで localStorage に書き戻す
-	useAutoSaveSync(titleKey, title);
-	useAutoSaveSync(bodyKey, body);
+	const { clear: clearTitleAutosave } = useAutoSaveSync(titleKey, title);
+	const { clear: clearBodyAutosave } = useAutoSaveSync(bodyKey, body);
 	const [tagsInput, setTagsInput] = useState(
 		(initial?.tags ?? []).map((t) => t.slug).join(", "),
 	);
@@ -292,13 +292,9 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 				toast.success(
 					status === "published" ? "公開しました" : "下書きを保存しました",
 				);
-				// #739: 送信成功で autosave key を clear
-				try {
-					window.localStorage.removeItem(titleKey);
-					window.localStorage.removeItem(bodyKey);
-				} catch {
-					/* no-op */
-				}
+				// #739: 送信成功で autosave key を clear (pending debounce も cancel)
+				clearTitleAutosave();
+				clearBodyAutosave();
 				router.push(`/articles/${created.slug}`);
 			} else if (initial) {
 				const updated = await updateArticle(initial.slug, {
@@ -311,12 +307,8 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 				toast.success(
 					status === "published" ? "公開しました" : "下書きを保存しました",
 				);
-				try {
-					window.localStorage.removeItem(titleKey);
-					window.localStorage.removeItem(bodyKey);
-				} catch {
-					/* no-op */
-				}
+				clearTitleAutosave();
+				clearBodyAutosave();
 				router.push(`/articles/${updated.slug}`);
 			}
 		} catch (err) {

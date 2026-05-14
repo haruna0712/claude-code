@@ -5,11 +5,13 @@
  */
 
 import { act, renderHook } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
 	clearAllComposerDrafts,
 	useAutoSaveDraft,
+	useAutoSaveSync,
 } from "@/hooks/useAutoSaveDraft";
 
 const KEY = "composer:test:scope";
@@ -137,6 +139,78 @@ describe("useAutoSaveDraft (#739)", () => {
 			vi.advanceTimersByTime(1);
 		});
 		expect(localStorage.getItem(KEY)).toBe("quick");
+	});
+});
+
+describe("useAutoSaveDraft Strict Mode (#739)", () => {
+	it("restores from LS once even under Strict Mode double-mount", () => {
+		localStorage.setItem(KEY, "saved earlier");
+		const { result } = renderHook(() => useAutoSaveDraft(KEY), {
+			wrapper: StrictMode,
+		});
+		expect(result.current.value).toBe("saved earlier");
+		expect(result.current.isRestored).toBe(true);
+	});
+});
+
+describe("useAutoSaveSync (#739)", () => {
+	it("writes value to LS after debounce", () => {
+		const { rerender } = renderHook(({ v }) => useAutoSaveSync(KEY, v), {
+			initialProps: { v: "" },
+		});
+		rerender({ v: "draft" });
+		act(() => {
+			vi.advanceTimersByTime(500);
+		});
+		expect(localStorage.getItem(KEY)).toBe("draft");
+	});
+
+	it("clear() cancels pending debounce and removes from LS", () => {
+		const { result, rerender } = renderHook(
+			({ v }) => useAutoSaveSync(KEY, v),
+			{ initialProps: { v: "" } },
+		);
+		// 入力中 (debounce timer 走行中) に clear が呼ばれる現実シナリオを再現
+		rerender({ v: "about to send" });
+		// debounce 完了前
+		expect(localStorage.getItem(KEY)).toBeNull();
+		act(() => {
+			result.current.clear();
+		});
+		// debounce 完了時間を進めても LS は空のまま (= pending timer がキャンセルされている)
+		act(() => {
+			vi.advanceTimersByTime(500);
+		});
+		expect(localStorage.getItem(KEY)).toBeNull();
+	});
+
+	it("clear() prevents stale-write race after explicit removeItem path", () => {
+		// regression: typescript-reviewer HIGH-3。
+		// ArticleEditor が直接 LS.removeItem を呼んだ後に debounce が発火して
+		// 書きかけが復活する競合を防ぐ。 clear() で同じシナリオが起きないか確認。
+		const { result, rerender } = renderHook(
+			({ v }) => useAutoSaveSync(KEY, v),
+			{ initialProps: { v: "x" } },
+		);
+		rerender({ v: "user typed more" });
+		act(() => {
+			result.current.clear();
+		});
+		// 仮に debounce が後発火しても LS には何も書かれない
+		act(() => {
+			vi.advanceTimersByTime(1000);
+		});
+		expect(localStorage.getItem(KEY)).toBeNull();
+	});
+
+	it("flushes pending value to LS on unmount", () => {
+		const { rerender, unmount } = renderHook(
+			({ v }) => useAutoSaveSync(KEY, v),
+			{ initialProps: { v: "" } },
+		);
+		rerender({ v: "leaving page" });
+		unmount();
+		expect(localStorage.getItem(KEY)).toBe("leaving page");
 	});
 });
 
