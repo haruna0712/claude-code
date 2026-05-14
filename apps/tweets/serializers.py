@@ -161,6 +161,9 @@ class TweetBaseMiniSerializer(serializers.ModelSerializer):
             "reaction_count",
             "reposted_by_me",
             "reaction_summary",
+            # P13-01: 自動検出された言語コード (ISO 639-1)。 frontend の
+            # 「翻訳」 button 表示判定で必要。 null=未検出。
+            "language",
         ]
         read_only_fields = fields
 
@@ -281,6 +284,9 @@ class TweetListSerializer(serializers.ModelSerializer):
             "reposted_by_me",
             # #383
             "reaction_summary",
+            # P13-01: 自動検出された言語コード (ISO 639-1)。 frontend の
+            # 「翻訳」 button 表示判定で必要。 null=未検出。
+            "language",
         ]
         read_only_fields = fields
 

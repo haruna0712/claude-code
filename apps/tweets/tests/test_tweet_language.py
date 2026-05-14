@@ -75,6 +75,27 @@ class TestTweetLanguageDetection:
         tweet.refresh_from_db()
         assert tweet.language == "en"
 
+    def test_api_response_includes_language_field(self, author):
+        """P13-01 follow-up: GET /api/v1/tweets/<id>/ の response に
+        "language" key が含まれること。 stg Playwright で frontend が
+        button 表示判定できなかった bug (= serializer fields 漏れ) の regression guard。
+        """
+        from rest_framework.test import APIClient
+
+        tweet = Tweet.objects.create(
+            author=author,
+            body="It was a beautiful day today. I took a walk in the park.",
+        )
+        client = APIClient()
+        client.force_authenticate(user=author)
+        resp = client.get(f"/api/v1/tweets/{tweet.pk}/")
+        assert resp.status_code == 200
+        assert "language" in resp.data, (
+            "TweetDetailSerializer must expose 'language' field "
+            "for frontend translate button to work"
+        )
+        assert resp.data["language"] == "en"
+
     def test_edit_re_detects_language(self, author):
         """本文を変更したら language も再検出。"""
         tweet = Tweet.objects.create(author=author, body="Hello world, this is English text")
