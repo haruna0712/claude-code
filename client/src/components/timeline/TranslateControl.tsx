@@ -14,7 +14,7 @@
  * TweetCard 側で「本文を翻訳テキストに差し替える」 を一元管理できる。
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Languages } from "lucide-react";
 
@@ -46,6 +46,16 @@ export default function TranslateControl(props: TranslateControlProps) {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
+	// typescript-reviewer HIGH: unmount race ガード。 fetch 中に component が
+	// unmount された場合、 解決後の setState / onTranslated を抑止する。
+	const isMountedRef = useRef(true);
+	useEffect(
+		() => () => {
+			isMountedRef.current = false;
+		},
+		[],
+	);
+
 	if (!shouldOfferTranslation(props)) return null;
 
 	// 翻訳済 state: 「原文を表示」 link を出す。
@@ -69,11 +79,13 @@ export default function TranslateControl(props: TranslateControlProps) {
 		setError(null);
 		try {
 			const resp = await translateTweet(tweetId);
+			if (!isMountedRef.current) return;
 			onTranslated(resp.translated_text);
 		} catch {
+			if (!isMountedRef.current) return;
 			setError("翻訳に失敗しました。 もう一度試してください。");
 		} finally {
-			setLoading(false);
+			if (isMountedRef.current) setLoading(false);
 		}
 	};
 
@@ -82,6 +94,7 @@ export default function TranslateControl(props: TranslateControlProps) {
 			<button
 				type="button"
 				disabled={loading}
+				aria-busy={loading}
 				onClick={handleTranslate}
 				className="inline-flex items-center gap-1 self-start text-xs font-medium text-[color:var(--a-accent)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)] disabled:opacity-50"
 			>
