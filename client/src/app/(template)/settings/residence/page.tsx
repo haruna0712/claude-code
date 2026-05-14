@@ -55,7 +55,7 @@ export default async function ResidenceSettingsPage() {
 						className="truncate font-semibold tracking-tight"
 						style={{ fontSize: 15, letterSpacing: -0.2 }}
 					>
-						居住地マップ
+						居住地マップの編集
 					</h1>
 					<p
 						className="truncate text-[color:var(--a-text-subtle)]"
