@@ -34,6 +34,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuthNavigation } from "@/hooks";
 import { useUserProfile } from "@/hooks/useUseProfile";
+import { resolveActiveHref } from "@/lib/nav-active";
 
 interface BottomTabItem {
 	href: string;
@@ -172,17 +173,18 @@ export default function AMobileAppBar({ children }: { children?: ReactNode }) {
 					fontFamily: "var(--a-font-sans)",
 				}}
 			>
-				{BOTTOM_TABS.filter((t) => !t.requiresAuth || isAuthenticated).map(
-					(tab) => {
-						const isActive =
-							tab.href === "/"
-								? pathname === "/"
-								: pathname.startsWith(tab.href);
+				{(() => {
+					const visible = BOTTOM_TABS.filter(
+						(t) => !t.requiresAuth || isAuthenticated,
+					);
+					const activeHref = resolveActiveHref(visible, pathname);
+					return visible.map((tab) => {
+						const isActive = tab.href === activeHref;
 						return (
 							<Link
 								key={tab.href}
 								href={tab.href}
-								aria-current={isActive || undefined}
+								aria-current={isActive ? "page" : undefined}
 								className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 transition-colors focus-visible:outline-none"
 								style={{
 									color: isActive ? "var(--a-accent)" : "var(--a-text-muted)",
@@ -193,8 +195,8 @@ export default function AMobileAppBar({ children }: { children?: ReactNode }) {
 								<span>{tab.label}</span>
 							</Link>
 						);
-					},
-				)}
+					});
+				})()}
 				{isAuthenticated && profile ? (
 					<Link
 						href={`/u/${profile.username}`}
@@ -256,19 +258,19 @@ function DrawerNav({ onItemClick }: { onItemClick: () => void }) {
 
 	return (
 		<div className="flex flex-col gap-0.5">
-			{items
-				.filter((it) => !it.requiresAuth || isAuthenticated)
-				.map((item) => {
-					const isActive =
-						item.href === "/"
-							? pathname === "/"
-							: pathname.startsWith(item.href);
+			{(() => {
+				const visible = items.filter(
+					(it) => !it.requiresAuth || isAuthenticated,
+				);
+				const activeHref = resolveActiveHref(visible, pathname);
+				return visible.map((item) => {
+					const isActive = item.href === activeHref;
 					return (
 						<Link
 							key={item.href}
 							href={item.href}
 							onClick={onItemClick}
-							aria-current={isActive || undefined}
+							aria-current={isActive ? "page" : undefined}
 							className="flex items-center gap-3 rounded-md py-2 pr-2.5"
 							style={{
 								paddingLeft: 7,
@@ -284,7 +286,8 @@ function DrawerNav({ onItemClick }: { onItemClick: () => void }) {
 							<span>{item.label}</span>
 						</Link>
 					);
-				})}
+				});
+			})()}
 		</div>
 	);
 }

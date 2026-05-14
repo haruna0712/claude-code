@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/sheet";
 import { useAuthNavigation } from "@/hooks";
 import { useUserProfile } from "@/hooks/useUseProfile";
+import { resolveActiveHref } from "@/lib/nav-active";
 import type { LeftNavIconName, LeftNavLink } from "@/types";
 import { HomeModernIcon } from "@heroicons/react/24/solid";
 import {
@@ -88,40 +89,44 @@ function LeftNavContent() {
 			aria-label="メインナビゲーション"
 			className="flex h-full flex-col gap-2 pt-16"
 		>
-			{filteredNavLinks.map((linkItem) => {
-				const href = resolveLinkPath(linkItem, selfHandle);
-				if (!href) {
+			{(() => {
+				// 全 link の resolved href から最長 prefix の 1 個を active にする
+				// (#685 fix: `/search` と `/search/users` の二重 active を回避)。
+				const resolvedHrefs = filteredNavLinks
+					.map((link) => ({ href: resolveLinkPath(link, selfHandle) }))
+					.filter((x): x is { href: string } => Boolean(x.href));
+				const activeHref = resolveActiveHref(resolvedHrefs, pathname);
+				return filteredNavLinks.map((linkItem) => {
+					const href = resolveLinkPath(linkItem, selfHandle);
+					if (!href) {
+						return (
+							<span
+								key={linkItem.label}
+								aria-disabled="true"
+								className="text-baby_richBlack/50 flex items-center justify-start gap-4 p-4"
+							>
+								<NavIcon link={linkItem} isActive={false} />
+								<p className="base-medium">{linkItem.label}</p>
+							</span>
+						);
+					}
+					const isActive = href === activeHref;
 					return (
-						<span
-							key={linkItem.label}
-							aria-disabled="true"
-							className="text-baby_richBlack/50 flex items-center justify-start gap-4 p-4"
-						>
-							<NavIcon link={linkItem} isActive={false} />
-							<p className="base-medium">{linkItem.label}</p>
-						</span>
+						<SheetClose asChild key={linkItem.label}>
+							<Link
+								href={href}
+								aria-current={isActive ? "page" : undefined}
+								className={`${isActive ? "electricIndigo-gradient text-babyPowder rounded-lg" : "text-baby_richBlack"} flex items-center justify-start gap-4 bg-transparent p-4`}
+							>
+								<NavIcon link={linkItem} isActive={isActive} />
+								<p className={`${isActive ? "base-bold" : "base-medium"}`}>
+									{linkItem.label}
+								</p>
+							</Link>
+						</SheetClose>
 					);
-				}
-				// path-prefix match: nested route (`/search/users`) で親 (`/search`) と
-				// 二重に active になる substring match を避ける (P12-04 HIGH 修正)。
-				const isActive =
-					pathname === href ||
-					(href.length > 1 && pathname.startsWith(`${href}/`));
-				return (
-					<SheetClose asChild key={linkItem.label}>
-						<Link
-							href={href}
-							aria-current={isActive ? "page" : undefined}
-							className={`${isActive ? "electricIndigo-gradient text-babyPowder rounded-lg" : "text-baby_richBlack"} flex items-center justify-start gap-4 bg-transparent p-4`}
-						>
-							<NavIcon link={linkItem} isActive={isActive} />
-							<p className={`${isActive ? "base-bold" : "base-medium"}`}>
-								{linkItem.label}
-							</p>
-						</Link>
-					</SheetClose>
-				);
-			})}
+				});
+			})()}
 		</nav>
 	);
 }
