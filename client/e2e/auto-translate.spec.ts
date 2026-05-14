@@ -100,7 +100,7 @@ async function uiLogin(page: Page, email: string, password: string) {
 	await page.goto("/login");
 	await page.getByLabel("Email Address").fill(email);
 	await page.getByPlaceholder("Password").fill(password);
-	await page.getByRole("button", { name: /Sign In/i }).click();
+	await page.getByRole("button", { name: "ログイン", exact: true }).click();
 	await page.waitForURL(/\/onboarding|\/$/);
 }
 
@@ -126,13 +126,14 @@ test.describe("Phase 13 自動翻訳 (P13-05 / P13-07)", () => {
 	}) => {
 		await uiLogin(page, USER1.email, USER1.password);
 
-		// USER2 のプロフィールに行って英文 tweet を見つける
+		// USER2 のプロフィールに行って一番新しい (= beforeAll で post した) tweet を
+		// 取得する。 body 文字列で filter すると、 翻訳後に body が日本語に変わって
+		// 同じ locator が無効化されるので、 「最新の article」 をピン留めする戦略で
+		// 翻訳前後どちらの状態でも同じ element を指すようにする。
 		await page.goto(`/u/${USER2.handle}`);
-		const tweetCard = page
-			.getByRole("article")
-			.filter({ hasText: "English test tweet" })
-			.first();
+		const tweetCard = page.getByRole("article").first();
 		await expect(tweetCard).toBeVisible({ timeout: 15_000 });
+		await expect(tweetCard).toContainText("English test tweet");
 
 		// TRANSLATE-1: 翻訳 button が visible (USER1 default lang=ja !== tweet.language=en)
 		const translateBtn = tweetCard.getByRole("button", { name: "翻訳する" });
