@@ -261,6 +261,13 @@ export default async function UserSearchPage({
 
 				{outcome.kind === "results" && outcome.page.results.length > 0 && (
 					<section aria-label="検索結果">
+						<p
+							role="status"
+							className="mb-3 text-xs text-[color:var(--a-text-muted)]"
+						>
+							{outcome.page.results.length} 件
+							{outcome.page.next ? " (続きあり)" : ""}
+						</p>
 						<ul role="list" className="space-y-2">
 							{outcome.page.results.map((u) => (
 								<UserSearchResultCard key={u.user_id} user={u} />
