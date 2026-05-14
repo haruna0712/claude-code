@@ -21,6 +21,7 @@ import {
 	MessageSquare,
 	MessagesSquare,
 	Search,
+	Sparkles,
 	User,
 	UserSearch,
 } from "lucide-react";
@@ -43,6 +44,7 @@ const ICON_MAP: Record<
 	MessagesSquare,
 	FileText,
 	Handshake,
+	Sparkles,
 };
 
 function resolveLinkPath(
