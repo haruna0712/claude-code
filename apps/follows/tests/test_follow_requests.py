@@ -30,7 +30,7 @@ def authed_client():
     return _make
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestFollowOnPublicAccount:
     def test_follow_public_is_immediately_approved(self, authed_client):
         a = make_user()  # follower
@@ -49,7 +49,7 @@ class TestFollowOnPublicAccount:
         assert a.following_count == 1
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestFollowOnPrivateAccount:
     def test_follow_private_creates_pending(self, authed_client):
         a = make_user()  # follower
@@ -68,7 +68,7 @@ class TestFollowOnPrivateAccount:
         assert a.following_count == 0
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestFollowRequestsList:
     def test_list_own_pending_requests(self, authed_client):
         owner = make_user(is_private=True)
@@ -93,7 +93,7 @@ class TestFollowRequestsList:
         assert resp.status_code in (401, 403)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestApproveReject:
     def test_approve_promotes_status_and_bumps_counters(self, authed_client):
         owner = make_user(is_private=True)
@@ -145,7 +145,7 @@ class TestApproveReject:
         assert resp.status_code == 400
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestUnprivateAutoApproves:
     def test_setting_is_private_false_auto_approves_pending(self, authed_client):
         owner = make_user(is_private=True)
