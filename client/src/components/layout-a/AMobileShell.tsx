@@ -27,6 +27,7 @@ import {
 	MessageSquare,
 	Menu as MenuIcon,
 	Search,
+	Sparkles,
 	User,
 	UserSearch,
 	X,
@@ -261,6 +262,14 @@ function DrawerNav({ onItemClick }: { onItemClick: () => void }) {
 		{ href: "/articles", label: "記事", Icon: FileText },
 		{ href: "/boards", label: "掲示板", Icon: Flame },
 		{ href: "/mentor/wanted", label: "メンター募集", Icon: Handshake },
+		// Phase 14 (P14-05): Claude Agent。 leftNavLinks と同 entry を
+		// mobile drawer にも明示する。
+		{
+			href: "/agent",
+			label: "Agent",
+			Icon: Sparkles,
+			requiresAuth: true,
+		},
 	];
 
 	return (
