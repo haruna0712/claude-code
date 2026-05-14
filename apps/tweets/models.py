@@ -127,6 +127,21 @@ class Tweet(models.Model):
         related_name="tweets",
     )
 
+    # P13-01: 自動翻訳機能のための言語検出結果。 ISO 639-1 ("ja", "en", "ko" 等、
+    # zh-CN 等 BCP-47 が来ても 8 文字以内に収まる)。 投稿時 / 編集時に langdetect
+    # で検出 (apps/tweets/signals.py の auto_detect_language で実装)。 短文 / 検出
+    # 失敗 / URL のみ / 絵文字のみは NULL (= 翻訳 button を出さない判定材料)。
+    language = models.CharField(  # noqa: DJ001
+        max_length=8,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Auto-detected language code (Phase 13).",
+    )
+    # NULL を許可する意図的な選択: 「未検出 / 検出失敗 (短文 / URL のみ)」 と
+    # 「空文字列」 を区別する。 frontend は `null` を「翻訳 button を出さない」
+    # 判定材料に使う。 default="" だと両者が混じって翻訳判定で誤動作。
+
     # 既定 Manager は削除済みを除外する
     objects = TweetManager()
     # 監査/管理画面用: 削除済みも含む全件。複数 Manager 宣言のため
