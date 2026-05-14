@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 
 import { dispatchAComposeOpen } from "@/components/layout-a/AComposeDialogHost";
+import { resolveActiveHref } from "@/lib/nav-active";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -158,39 +159,39 @@ export default function ALeftNav() {
 				</span>
 			</div>
 
-			{visibleItems.map((item) => {
-				// nested route (例: `/search/users`) で親 (`/search`) と二重 active に
-				// ならないよう、 完全一致 or `/<seg>/...` のときだけ active にする
-				// (P12-04 HIGH 修正)。
-				const isActive =
-					item.href === "/"
-						? pathname === "/"
-						: pathname === item.href || pathname.startsWith(`${item.href}/`);
-				const badgeCount = itemBadgeCount(item.badgeKey);
-				return (
-					<Link
-						key={item.href}
-						href={item.href}
-						aria-current={isActive || undefined}
-						className={`flex items-center gap-3 rounded-md py-1.5 pr-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)] ${
-							isActive ? "" : "hover:bg-[color:var(--a-bg-muted)]"
-						}`}
-						style={{
-							paddingLeft: 7,
-							borderLeft: `2px solid ${
-								isActive ? "var(--a-accent)" : "transparent"
-							}`,
-							background: isActive ? "var(--a-bg-muted)" : "transparent",
-							color: isActive ? "var(--a-text)" : "var(--a-text-muted)",
-							fontSize: 13.5,
-						}}
-					>
-						<item.Icon className="size-4" />
-						<span className="flex-1 truncate">{item.label}</span>
-						<NavBadge count={badgeCount} />
-					</Link>
-				);
-			})}
+			{(() => {
+				// nested sibling route (例: `/search` と `/search/users`) で両方が
+				// active にならないよう、 sibling 全体の中で最長 prefix の 1 個だけ
+				// active にする (#685 fix)。 `resolveActiveHref` で 1 度だけ計算。
+				const activeHref = resolveActiveHref(visibleItems, pathname);
+				return visibleItems.map((item) => {
+					const isActive = item.href === activeHref;
+					const badgeCount = itemBadgeCount(item.badgeKey);
+					return (
+						<Link
+							key={item.href}
+							href={item.href}
+							aria-current={isActive ? "page" : undefined}
+							className={`flex items-center gap-3 rounded-md py-1.5 pr-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)] ${
+								isActive ? "" : "hover:bg-[color:var(--a-bg-muted)]"
+							}`}
+							style={{
+								paddingLeft: 7,
+								borderLeft: `2px solid ${
+									isActive ? "var(--a-accent)" : "transparent"
+								}`,
+								background: isActive ? "var(--a-bg-muted)" : "transparent",
+								color: isActive ? "var(--a-text)" : "var(--a-text-muted)",
+								fontSize: 13.5,
+							}}
+						>
+							<item.Icon className="size-4" />
+							<span className="flex-1 truncate">{item.label}</span>
+							<NavBadge count={badgeCount} />
+						</Link>
+					);
+				});
+			})()}
 
 			{isAuthenticated && profile && (
 				<Link

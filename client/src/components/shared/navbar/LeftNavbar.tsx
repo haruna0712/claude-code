@@ -1,4 +1,5 @@
 "use client";
+import { resolveActiveHref } from "@/lib/nav-active";
 import SettingsMenu from "@/components/shared/navbar/SettingsMenu";
 import ComposeTweetDialog from "@/components/tweets/ComposeTweetDialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -114,67 +115,71 @@ export default function LeftNavbar() {
 				aria-label="メインナビゲーション"
 				className="flex flex-1 flex-col gap-2"
 			>
-				{filteredNavLinks.map((linkItem) => {
-					const href = resolveLinkPath(linkItem, selfHandle);
-					if (!href) {
-						// プロフィール link で self handle が未取得の場合は disabled 扱い
+				{(() => {
+					// 全 link の resolved href から「最長 prefix の 1 個」 を選んで active
+					// 判定する (#685 fix: `/search/users` 表示中に `/search` も active に
+					// なる問題を回避)。
+					const resolvedHrefs = filteredNavLinks
+						.map((link) => ({ href: resolveLinkPath(link, selfHandle) }))
+						.filter((x): x is { href: string } => Boolean(x.href));
+					const activeHref = resolveActiveHref(resolvedHrefs, pathname);
+					return filteredNavLinks.map((linkItem) => {
+						const href = resolveLinkPath(linkItem, selfHandle);
+						if (!href) {
+							// プロフィール link で self handle が未取得の場合は disabled 扱い
+							return (
+								<span
+									key={linkItem.label}
+									aria-disabled="true"
+									title="プロフィール情報を取得中..."
+									className="text-baby_richBlack/50 flex items-center justify-start gap-4 p-4"
+								>
+									<NavIcon link={linkItem} isActive={false} />
+									<p className="base-medium max-lg:hidden">{linkItem.label}</p>
+								</span>
+							);
+						}
+						const isActive = href === activeHref;
 						return (
-							<span
+							<Link
+								href={href}
 								key={linkItem.label}
-								aria-disabled="true"
-								title="プロフィール情報を取得中..."
-								className="text-baby_richBlack/50 flex items-center justify-start gap-4 p-4"
+								aria-label={
+									linkItem.path === "/notifications" && unreadCount > 0
+										? `${linkItem.label} (${unreadCount} 件の未読)`
+										: linkItem.label
+								}
+								aria-current={isActive ? "page" : undefined}
+								className={`${
+									isActive
+										? "electricIndigo-gradient text-babyPowder rounded-lg"
+										: "text-baby_richBlack hover:bg-baby_richBlack/5"
+								} flex items-center justify-start gap-4 bg-transparent p-4 transition`}
 							>
-								<NavIcon link={linkItem} isActive={false} />
-								<p className="base-medium max-lg:hidden">{linkItem.label}</p>
-							</span>
-						);
-					}
-					// path-prefix match: 「`/search` が `/search/users` も active 化させる」
-					// 問題 (typescript-reviewer P12-04 HIGH) を回避するため、完全一致または
-					// `/<segment>/...` で始まるかどうかを active 扱いにする。
-					const isActive =
-						pathname === href ||
-						(href.length > 1 && pathname.startsWith(`${href}/`));
-					return (
-						<Link
-							href={href}
-							key={linkItem.label}
-							aria-label={
-								linkItem.path === "/notifications" && unreadCount > 0
-									? `${linkItem.label} (${unreadCount} 件の未読)`
-									: linkItem.label
-							}
-							aria-current={isActive ? "page" : undefined}
-							className={`${
-								isActive
-									? "electricIndigo-gradient text-babyPowder rounded-lg"
-									: "text-baby_richBlack hover:bg-baby_richBlack/5"
-							} flex items-center justify-start gap-4 bg-transparent p-4 transition`}
-						>
-							<NavIcon link={linkItem} isActive={isActive} />
-							{/* lg 以下では label を視覚的に隠すが、a11y のため Link 自体に
+								<NavIcon link={linkItem} isActive={isActive} />
+								{/* lg 以下では label を視覚的に隠すが、a11y のため Link 自体に
 							    aria-label を付与している (max-lg で text を display:none に
 							    した場合も SR からは label が display:none に
 							    した場合も SR からは label が読み上げられる)。 */}
-							<p
-								aria-hidden="true"
-								className={`${isActive ? "base-bold" : "base-medium"} max-lg:hidden`}
-							>
-								{linkItem.label}
-							</p>
-							{/* #412: 通知 link の右側に未読バッジ。0 件のときは出さない。 */}
-							{linkItem.path === "/notifications" && unreadCount > 0 ? (
-								<span
+								<p
 									aria-hidden="true"
-									className="ml-auto inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white max-lg:absolute max-lg:right-2 max-lg:top-2 max-lg:ml-0"
+									className={`${isActive ? "base-bold" : "base-medium"} max-lg:hidden`}
 								>
-									{unreadCount > 99 ? "99+" : unreadCount}
-								</span>
-							) : null}
-						</Link>
-					);
-				})}
+									{linkItem.label}
+								</p>
+								{/* #412: 通知 link の右側に未読バッジ。0 件のときは出さない。 */}
+								{linkItem.path === "/notifications" && unreadCount > 0 ? (
+									<span
+										aria-hidden="true"
+										className="ml-auto inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white max-lg:absolute max-lg:right-2 max-lg:top-2 max-lg:ml-0"
+									>
+										{unreadCount > 99 ? "99+" : unreadCount}
+									</span>
+								) : null}
+							</Link>
+						);
+					});
+				})()}
 
 				{/* #396: + ポストボタン (認証済みのみ)。lg+ は label "ポスト"、
 				    sm〜lg は icon のみ。click → ComposeTweetDialog を open。
