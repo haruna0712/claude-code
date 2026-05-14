@@ -26,6 +26,7 @@ from rest_framework.routers import DefaultRouter
 
 from apps.tweets.views import TweetViewSet
 from apps.tweets.views_actions import QuoteView, ReplyView, RepostView
+from apps.tweets.views_translate import TweetTranslateView
 
 router = DefaultRouter()
 router.register(r"", TweetViewSet, basename="tweets")
@@ -46,6 +47,12 @@ urlpatterns = [
         "<int:tweet_id>/reply/",
         ReplyView.as_view(),
         name="tweets-reply",
+    ),
+    # Phase 13 P13-03: 自動翻訳
+    path(
+        "<int:tweet_id>/translate/",
+        TweetTranslateView.as_view(),
+        name="tweets-translate",
     ),
     *router.urls,
 ]
