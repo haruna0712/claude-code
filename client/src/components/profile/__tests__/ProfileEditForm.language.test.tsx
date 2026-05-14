@@ -108,4 +108,25 @@ describe("ProfileEditForm — translation preferences (P13-04)", () => {
 		const payload = updateMock.mock.calls[0][0];
 		expect(payload.auto_translate).toBe(true);
 	});
+
+	it("announces '自動翻訳を有効にしました' when auto_translate transitions false → true (P13-06)", async () => {
+		render(<ProfileEditForm initialUser={BASE_USER} />);
+		await userEvent.click(screen.getByLabelText("自動翻訳を有効にする"));
+		await userEvent.click(screen.getByRole("button", { name: "保存" }));
+		// react-toastify の toast.success は role=status の aria-live 領域を持つ。
+		// 専用メッセージで「翻訳が ON になった」 を AT に明示する。
+		expect(toastSuccessSpy).toHaveBeenCalledWith("自動翻訳を有効にしました");
+	});
+
+	it("uses generic '保存しました' message when auto_translate did not transition (P13-06)", async () => {
+		// 既に ON のユーザーが言語のみ変えた → 専用メッセージは出さない
+		const userWithAutoTranslateOn = {
+			...BASE_USER,
+			auto_translate: true,
+		};
+		render(<ProfileEditForm initialUser={userWithAutoTranslateOn} />);
+		await userEvent.selectOptions(screen.getByLabelText("UI 表示言語"), "en");
+		await userEvent.click(screen.getByRole("button", { name: "保存" }));
+		expect(toastSuccessSpy).toHaveBeenCalledWith("プロフィールを保存しました");
+	});
 });

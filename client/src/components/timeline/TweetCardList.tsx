@@ -35,6 +35,8 @@ interface TweetCardListProps {
 	currentUserHandle?: string;
 	/** P13-05: viewer の preferred_language (翻訳 button の表示判定に使う). */
 	currentUserPreferredLanguage?: string;
+	/** P13-07: viewer の auto_translate (true なら mount 時に翻訳を自動 fire). */
+	currentUserAutoTranslate?: boolean;
 }
 
 export default function TweetCardList({
@@ -44,6 +46,7 @@ export default function TweetCardList({
 	onDescendantPosted,
 	currentUserHandle,
 	currentUserPreferredLanguage,
+	currentUserAutoTranslate,
 }: TweetCardListProps) {
 	const [visibleTweets, setVisibleTweets] = useState(tweets);
 	useEffect(() => {
@@ -72,6 +75,7 @@ export default function TweetCardList({
 					onDescendantPosted={onDescendantPosted}
 					currentUserHandle={currentUserHandle}
 					currentUserPreferredLanguage={currentUserPreferredLanguage}
+					currentUserAutoTranslate={currentUserAutoTranslate}
 					onTimelineItemRemoved={handleTimelineItemRemoved}
 				/>
 			))}

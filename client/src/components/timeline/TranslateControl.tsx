@@ -30,6 +30,13 @@ export interface TranslateControlProps {
 	translatedText: string | null;
 	onTranslated: (text: string) => void;
 	onRevert: () => void;
+	/**
+	 * P13-07: viewer.auto_translate=true なら mount 時に翻訳 API を自動 fire する。
+	 * cache miss は OpenAI を 1 度叩くが、 同じ (tweet, target_language) の
+	 * 2 度目以降は DB cache hit で速い。 「原文を表示」 で revert すると、
+	 * その後の auto fetch は走らない (per-post override, X / Twitter と同じ挙動)。
+	 */
+	autoTranslate?: boolean;
 }
 
 function shouldOfferTranslation(props: TranslateControlProps): boolean {
@@ -42,7 +49,8 @@ function shouldOfferTranslation(props: TranslateControlProps): boolean {
 }
 
 export default function TranslateControl(props: TranslateControlProps) {
-	const { tweetId, translatedText, onTranslated, onRevert } = props;
+	const { tweetId, translatedText, onTranslated, onRevert, autoTranslate } =
+		props;
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -56,7 +64,53 @@ export default function TranslateControl(props: TranslateControlProps) {
 		[],
 	);
 
-	if (!shouldOfferTranslation(props)) return null;
+	// P13-07: 「原文を表示」 で revert された後に同 card 内で再 auto fetch しない
+	// ようにする per-post override flag。 false にすると useEffect は次 mount まで
+	// 何もしない。
+	const [autoFetchSuppressed, setAutoFetchSuppressed] = useState(false);
+
+	const canTranslate = shouldOfferTranslation(props);
+
+	// 自動翻訳 useEffect: viewer.auto_translate=true && 表示条件満たす && 未翻訳
+	// && まだ自動 fetch 抑止されていない なら mount 時に 1 度だけ fire する。
+	useEffect(() => {
+		if (!autoTranslate) return;
+		if (!canTranslate) return;
+		if (translatedText !== null) return;
+		if (autoFetchSuppressed) return;
+		if (loading) return;
+		let cancelled = false;
+		setLoading(true);
+		setError(null);
+		(async () => {
+			try {
+				const resp = await translateTweet(tweetId);
+				if (cancelled || !isMountedRef.current) return;
+				onTranslated(resp.translated_text);
+			} catch {
+				if (cancelled || !isMountedRef.current) return;
+				setError("翻訳に失敗しました。 もう一度試してください。");
+			} finally {
+				if (!cancelled && isMountedRef.current) setLoading(false);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+		// 依存は intentional: autoTranslate / canTranslate / autoFetchSuppressed /
+		// translatedText / tweetId のいずれかが変わったら再評価。 onTranslated は
+		// 親が useState で安定参照なので含めても良いが、 含めると effect が
+		// 毎 render 再 schedule されるため除外。
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [
+		autoTranslate,
+		canTranslate,
+		autoFetchSuppressed,
+		translatedText,
+		tweetId,
+	]);
+
+	if (!canTranslate) return null;
 
 	// 翻訳済 state: 「原文を表示」 link を出す。
 	if (translatedText !== null) {
@@ -66,6 +120,9 @@ export default function TranslateControl(props: TranslateControlProps) {
 				className="self-start text-xs font-medium text-[color:var(--a-text-muted)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 				onClick={() => {
 					setError(null);
+					// P13-07: 1 度 revert したら、 同 card 内で auto fetch を抑止
+					// (X / Twitter の per-post override 挙動と同じ)。
+					setAutoFetchSuppressed(true);
 					onRevert();
 				}}
 			>
