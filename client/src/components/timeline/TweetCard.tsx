@@ -55,6 +55,11 @@ interface TweetCardProps {
 	 * undefined / 未認証では翻訳 button を出さない。
 	 */
 	currentUserPreferredLanguage?: string;
+	/**
+	 * P13-07: Login viewer の auto_translate 設定。
+	 * true なら mount 時に自動翻訳を fire する。
+	 */
+	currentUserAutoTranslate?: boolean;
 	/** Called when this timeline row should disappear after unrepost. */
 	onTimelineItemRemoved?: (tweetId: number) => void;
 }
@@ -163,6 +168,7 @@ export default function TweetCard({
 	onDescendantPosted,
 	currentUserHandle,
 	currentUserPreferredLanguage,
+	currentUserAutoTranslate,
 	onTimelineItemRemoved,
 }: TweetCardProps) {
 	const router = useRouter();
@@ -495,6 +501,7 @@ export default function TweetCard({
 				authorHandle={displayTweet.author_handle}
 				viewerHandle={currentUserHandle}
 				viewerLanguage={currentUserPreferredLanguage}
+				autoTranslate={currentUserAutoTranslate}
 				translatedText={translatedText}
 				onTranslated={setTranslatedText}
 				onRevert={() => setTranslatedText(null)}

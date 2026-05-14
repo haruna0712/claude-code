@@ -148,6 +148,7 @@ export default async function HomePage({
 				initialTweets={initialTweets}
 				currentUserHandle={user.username}
 				currentUserPreferredLanguage={user.preferred_language}
+				currentUserAutoTranslate={user.auto_translate}
 			/>
 		</>
 	);

@@ -101,7 +101,15 @@ export default function ProfileEditForm({ initialUser }: ProfileEditFormProps) {
 
 	const onSubmit = async (values: TProfileEditSchema) => {
 		await updateCurrentUser(values);
-		toast.success("プロフィールを保存しました");
+		// P13-06: 自動翻訳 toggle が ON に切り替わった場合は専用 message を出す
+		// (役立つ feedback)。 toast は role=status の aria-live region を内部で持つ。
+		const turnedAutoTranslateOn =
+			!initialUser.auto_translate && values.auto_translate === true;
+		toast.success(
+			turnedAutoTranslateOn
+				? "自動翻訳を有効にしました"
+				: "プロフィールを保存しました",
+		);
 		router.push(`/u/${initialUser.username}`);
 		router.refresh();
 	};
@@ -259,7 +267,8 @@ export default function ProfileEditForm({ initialUser }: ProfileEditFormProps) {
 							className="text-[color:var(--a-text-subtle)]"
 							style={{ fontSize: 12 }}
 						>
-							ON にすると外国語のツイートが初期表示で翻訳されます。
+							ON にすると、 異なる言語のツイートを自動的に翻訳します。
+							翻訳結果は「原文を表示」 で元に戻せます。
 						</p>
 					</div>
 				</div>
