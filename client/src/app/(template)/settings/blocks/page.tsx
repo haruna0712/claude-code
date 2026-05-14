@@ -17,11 +17,10 @@ export default function BlockedSettingsPage() {
 	return (
 		<>
 			<header
-				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				className="flex items-center gap-3 px-5 py-3"
 				style={{
 					borderBottom: "1px solid var(--a-border)",
 					background: "rgba(255,255,255,0.85)",
-					backdropFilter: "blur(8px)",
 				}}
 			>
 				<h1
