@@ -24,6 +24,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from apps.common.blocking import is_blocked_relationship
 from apps.common.cookie_auth import CookieAuthentication
 from apps.translation.services import NoopTranslator, get_translator
 from apps.tweets.models import Tweet, TweetTranslation
@@ -44,6 +45,15 @@ class TweetTranslateView(APIView):
 
     def post(self, request: Request, tweet_id: int) -> Response:
         tweet = get_object_or_404(Tweet, pk=tweet_id)
+
+        # security-reviewer HIGH: 双方向 block 関係なら 403。 views_actions.py の
+        # repost / quote / reply と同じ規約。 翻訳結果は本文の paraphrase なので、
+        # block していても閲覧できてしまうと block contract に違反する。
+        if is_blocked_relationship(request.user, tweet.author):
+            return Response(
+                {"detail": "このツイートに対する操作は許可されていません。"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         source_lang = tweet.language
         target_lang = request.user.preferred_language

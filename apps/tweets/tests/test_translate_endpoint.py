@@ -151,6 +151,40 @@ class TestTranslateCacheBehavior:
 
 
 @pytest.mark.django_db
+class TestBlockCheck:
+    """security-reviewer HIGH: 双方向 block 関係なら 403。 views_actions.py の
+    repost / quote / reply と同じ contract。 翻訳結果は本文の paraphrase なので
+    block contract に違反しないようガードする。"""
+
+    @override_settings(OPENAI_API_KEY="sk-test")  # pragma: allowlist secret
+    @patch("apps.tweets.views_translate.get_translator")
+    def test_blocked_viewer_gets_403(self, mock_factory):
+        from apps.moderation.models import Block
+
+        translator = MagicMock()
+        translator.ENGINE_TAG = "openai:gpt-4o-mini"
+        translator.translate.return_value = "should not be called"
+        mock_factory.return_value = translator
+
+        author = _make_user("a-block@example.com", "a_block", preferred_language="en")
+        tweet = _make_tweet(author, "Hello, world.", language="en")
+        viewer = _make_user("v-block@example.com", "v_block", preferred_language="ja")
+
+        # author が viewer を block している。 双方向チェックなので方向は問わない。
+        Block.objects.create(blocker=author, blockee=viewer)
+
+        client = APIClient()
+        client.force_authenticate(user=viewer)
+        url = reverse("tweets-translate", kwargs={"tweet_id": tweet.pk})
+        resp = client.post(url, {}, format="json")
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+        # block されているなら OpenAI も叩かれない (cost 漏れ防止)
+        translator.translate.assert_not_called()
+        # cache 行も作らない
+        assert not TweetTranslation.objects.filter(tweet=tweet).exists()
+
+
+@pytest.mark.django_db
 class TestNoopFallback:
     @override_settings(OPENAI_API_KEY="")  # NoopTranslator にフォールバック
     def test_noop_returns_original_and_does_not_cache(self):
