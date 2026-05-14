@@ -224,6 +224,20 @@ class PopularUsersView(APIView):
 # ---------------------------------------------------------------------------
 
 
+class _FollowRequestPagination(CursorPagination):
+    """`/follows/requests/` 専用 cursor pagination (= Follow queryset 用)。
+
+    FollowCursorPagination は User queryset 用に `date_joined` を ordering に
+    使っているので、 Follow queryset では FieldError になる。 こちらは
+    `created_at` を使う (Follow.created_at は auto_now_add で常にある)。
+    """
+
+    page_size = 20
+    ordering = "-created_at"
+    cursor_query_param = "cursor"
+    max_page_size = 100
+
+
 class FollowRequestsListView(ListAPIView):
     """GET /api/v1/follows/requests/
 
@@ -232,7 +246,7 @@ class FollowRequestsListView(ListAPIView):
     """
 
     permission_classes = [IsAuthenticated]
-    pagination_class = FollowCursorPagination
+    pagination_class = _FollowRequestPagination
 
     def get_queryset(self) -> QuerySet[Follow]:
         return (
