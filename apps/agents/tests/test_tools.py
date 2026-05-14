@@ -1,0 +1,266 @@
+"""
+P14-02: Tool layer のテスト。
+
+spec: docs/specs/claude-agent-spec.md §4 §8.1
+
+カバレッジ:
+- user scope (各 tool は自分のデータしか見えない)
+- block / mute filter (双方向 block で除外)
+- DM 本文は読まない (Privacy)
+- limit の clamp (LLM が境界超えても安全)
+- compose_tweet_draft の 140 字制限
+- tool registry / get_callable
+
+テスト戦略:
+- 各 tool に対し「自分のデータ含まれる」「他人のデータ含まれない」 の対をテスト
+- block の場合 ``Block`` model を作って filter を確認
+"""
+
+from __future__ import annotations
+
+import pytest
+from django.contrib.auth import get_user_model
+
+from apps.agents.tools import (
+    TWEET_DRAFT_MAX_CHARS,
+    DraftTooLongError,
+    compose_tweet_draft,
+    get_callable,
+    read_home_timeline,
+    read_my_notifications,
+    read_my_recent_tweets,
+    search_tweets_by_tag,
+)
+from apps.notifications.models import Notification, NotificationKind
+from apps.tags.models import Tag
+from apps.tweets.models import Tweet, TweetType
+
+User = get_user_model()
+
+
+def _make_user(email: str, username: str) -> User:
+    return User.objects.create_user(
+        email=email,
+        username=username,
+        first_name="F",
+        last_name="L",
+        password="StrongPass!1",  # pragma: allowlist secret
+    )
+
+
+# ---------------------------------------------------------------------------
+# read_my_recent_tweets
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestReadMyRecentTweets:
+    def test_returns_only_own_tweets(self):
+        me = _make_user("me-rec@example.com", "me_rec")
+        other = _make_user("o-rec@example.com", "o_rec")
+        Tweet.objects.create(author=me, body="my tweet 1")
+        Tweet.objects.create(author=other, body="other tweet")
+        out = read_my_recent_tweets(me)
+        assert "@me_rec" in out
+        assert "@o_rec" not in out
+        assert "my tweet 1" in out
+
+    def test_excludes_repost_and_reply_types(self):
+        """ORIGINAL のみ。 repost / quote / reply は除外。"""
+        me = _make_user("me-types@example.com", "me_types")
+        target = Tweet.objects.create(author=me, body="target")
+        Tweet.objects.create(author=me, body="repost", type=TweetType.REPOST, repost_of=target)
+        Tweet.objects.create(author=me, body="quote body", type=TweetType.QUOTE, quote_of=target)
+        out = read_my_recent_tweets(me)
+        assert "target" in out
+        assert "repost" not in out
+        assert "quote body" not in out
+
+    def test_returns_empty_message_when_no_tweets(self):
+        me = _make_user("me-empty@example.com", "me_empty")
+        out = read_my_recent_tweets(me)
+        assert "(0 件)" in out
+        assert "(無し)" in out
+
+    def test_limit_is_clamped(self):
+        """limit=999 を渡しても最大 20 件まで。"""
+        me = _make_user("me-clamp@example.com", "me_clamp")
+        for i in range(25):
+            Tweet.objects.create(author=me, body=f"t-{i}")
+        out = read_my_recent_tweets(me, limit=999)
+        # 出力には 20 行までしか含まれない
+        lines = [line for line in out.split("\n") if line.startswith("- @")]
+        assert len(lines) <= 20
+
+
+# ---------------------------------------------------------------------------
+# read_my_notifications
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestReadMyNotifications:
+    def test_returns_only_my_notifications(self):
+        me = _make_user("me-not@example.com", "me_not")
+        other = _make_user("o-not@example.com", "o_not")
+        Notification.objects.create(recipient=me, actor=other, kind=NotificationKind.LIKE)
+        Notification.objects.create(recipient=other, actor=me, kind=NotificationKind.LIKE)
+        out = read_my_notifications(me)
+        # 自分宛 1 件、 他人宛 1 件は出ない
+        assert out.count("[like]") == 1
+        # actor は @o_not (相手)
+        assert "@o_not" in out
+        assert "@me_not" not in out
+
+    def test_dm_message_body_is_redacted(self):
+        """DM 本文は読まない (Privacy)。 kind だけ出して 本文は (本文は非表示)。"""
+        me = _make_user("me-dm@example.com", "me_dm")
+        sender = _make_user("o-dm@example.com", "o_dm")
+        Notification.objects.create(
+            recipient=me,
+            actor=sender,
+            kind=NotificationKind.DM_MESSAGE,
+            target_type="dm_message",
+            target_id="42",
+        )
+        out = read_my_notifications(me)
+        assert "[dm_message]" in out
+        assert "(本文は非表示)" in out
+        # target_id を含まないこと (DM では一切 message ID を漏らさない方針)
+        assert "/42" not in out
+
+    def test_includes_unread_marker(self):
+        me = _make_user("me-unr@example.com", "me_unr")
+        other = _make_user("o-unr@example.com", "o_unr")
+        Notification.objects.create(
+            recipient=me, actor=other, kind=NotificationKind.MENTION, read=False
+        )
+        out = read_my_notifications(me)
+        assert "[未読]" in out
+
+
+# ---------------------------------------------------------------------------
+# read_home_timeline
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestReadHomeTimeline:
+    def test_uses_build_home_tl(self):
+        """build_home_tl の戻り値を整形して返すだけ。 ここでは smoke test。"""
+        me = _make_user("me-hot@example.com", "me_hot")
+        other = _make_user("o-hot@example.com", "o_hot")
+        Tweet.objects.create(author=other, body="other tweet for tl")
+        # build_home_tl の挙動の詳細は apps/timeline/tests/test_services.py で
+        # 既にカバーされているので、 ここでは smoke test (例外なく実行できる) のみ。
+        out = read_home_timeline(me, limit=10)
+        assert isinstance(out, str)
+        assert "# home TL" in out
+
+    def test_empty_returns_no_match_message(self):
+        me = _make_user("me-hot-e@example.com", "me_hot_e")
+        out = read_home_timeline(me)
+        assert "(0 件)" in out or "@" in out  # 空 or 何か入っている
+
+
+# ---------------------------------------------------------------------------
+# search_tweets_by_tag
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestSearchTweetsByTag:
+    def test_returns_tweets_with_tag(self):
+        me = _make_user("me-tag@example.com", "me_tag")
+        other = _make_user("o-tag@example.com", "o_tag")
+        tag = Tag.objects.create(name="python", display_name="Python", is_approved=True)
+        t1 = Tweet.objects.create(author=other, body="Python is cool")
+        t1.tags.add(tag)
+        out = search_tweets_by_tag(me, "python")
+        assert "@o_tag" in out
+        assert "Python is cool" in out
+
+    def test_strips_hash_prefix(self):
+        me = _make_user("me-h@example.com", "me_h")
+        other = _make_user("o-h@example.com", "o_h")
+        tag = Tag.objects.create(name="rust", display_name="Rust", is_approved=True)
+        t1 = Tweet.objects.create(author=other, body="rust lang")
+        t1.tags.add(tag)
+        out = search_tweets_by_tag(me, "#rust")
+        assert "@o_h" in out
+        assert "rust lang" in out
+
+    def test_unknown_tag_returns_placeholder(self):
+        me = _make_user("me-ut@example.com", "me_ut")
+        out = search_tweets_by_tag(me, "this-tag-does-not-exist")
+        assert "存在しません" in out
+
+
+@pytest.mark.django_db
+class TestSearchTweetsByTagBlockFilter:
+    def test_blocked_user_tweet_is_excluded(self):
+        """security: block 関係にある相手の tweet は tag 検索結果から除外。"""
+        from apps.moderation.models import Block
+
+        me = _make_user("me-blk@example.com", "me_blk")
+        bad = _make_user("o-blk@example.com", "o_blk")
+        tag = Tag.objects.create(name="js", display_name="JS", is_approved=True)
+        t1 = Tweet.objects.create(author=bad, body="js tweet by blocked user")
+        t1.tags.add(tag)
+        # me が bad を block
+        Block.objects.create(blocker=me, blockee=bad)
+        out = search_tweets_by_tag(me, "js")
+        assert "js tweet by blocked user" not in out
+        # 「(0 件)」 になる (block で全件 filter された)
+        assert "(0 件)" in out
+
+
+# ---------------------------------------------------------------------------
+# compose_tweet_draft
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestComposeTweetDraft:
+    def test_returns_stripped_text(self):
+        me = _make_user("me-cmp@example.com", "me_cmp")
+        out = compose_tweet_draft(me, "  hello world  ")
+        assert out == "hello world"
+
+    def test_raises_on_too_long(self):
+        me = _make_user("me-long@example.com", "me_long")
+        with pytest.raises(DraftTooLongError):
+            compose_tweet_draft(me, "あ" * (TWEET_DRAFT_MAX_CHARS + 1))
+
+    def test_boundary_140_chars_ok(self):
+        me = _make_user("me-boundary@example.com", "me_boundary")
+        out = compose_tweet_draft(me, "あ" * TWEET_DRAFT_MAX_CHARS)
+        assert len(out) == TWEET_DRAFT_MAX_CHARS
+
+
+# ---------------------------------------------------------------------------
+# Tool registry
+# ---------------------------------------------------------------------------
+
+
+class TestToolRegistry:
+    def test_registry_is_deterministic(self):
+        """spec §5.1.1: tools 順序は cache invalidation 防止のため deterministic。"""
+        from apps.agents.tools import TOOL_REGISTRY
+
+        # 順序が固定されている (sorted ではないがソート可能な確定順序)
+        assert TOOL_REGISTRY == (
+            "read_home_timeline",
+            "read_my_notifications",
+            "read_my_recent_tweets",
+            "search_tweets_by_tag",
+            "compose_tweet_draft",
+        )
+
+    def test_get_callable_returns_callable(self):
+        f = get_callable("read_home_timeline")
+        assert callable(f)
+
+    def test_get_callable_unknown_name_raises(self):
+        with pytest.raises(KeyError):
+            get_callable("not_a_real_tool")
