@@ -64,10 +64,13 @@ python-slugify==8.0.4
 # RSS フィード取得 (Phase 7 Bot)
 feedparser==6.0.11
 
-# AI API (Phase 7 Bot 要約、Phase 8 記事下書き AI)
+# AI API (Phase 7 Bot 要約、Phase 8 記事下書き AI、 Phase 13 自動翻訳)
 # TODO(Phase 7/8): SDK は頻繁にリリースされるため、実装着手時に最新安定版へバンプする。
 openai==1.42.0
 anthropic==0.34.1
+
+# Phase 13: ツイート本文の言語自動検出 (langdetect は Google CLD2 port、 BSD、 offline)
+langdetect==1.0.9
 
 # GitHub API (Phase 6 記事連携 push)
 PyGithub==2.4.0

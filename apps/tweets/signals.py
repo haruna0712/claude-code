@@ -19,10 +19,11 @@ from typing import Any
 from django.db import transaction
 from django.db.models import F
 from django.db.models.functions import Greatest
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 
 from apps.common.blocking import safe_notify
+from apps.tweets.language_detection import detect_language
 from apps.tweets.models import Tweet, TweetType
 
 # #412: mention 抽出の正規表現と上限。spec §12 より handle 数 10 超過時は
@@ -161,3 +162,43 @@ def on_tweet_deleted(sender: type[Tweet], instance: Tweet, **kwargs: Any) -> Non
             _bump_field(repost_of_pk, "repost_count", -1)
 
     transaction.on_commit(_bump)
+
+
+# ---------------------------------------------------------------------------
+# Phase 13 P13-01: 言語自動検出 (langdetect で本文から言語コードを推定)
+# ---------------------------------------------------------------------------
+
+
+@receiver(pre_save, sender=Tweet)
+def auto_detect_language(sender: type[Tweet], instance: Tweet, **kwargs: Any) -> None:
+    """投稿 / 編集時に Tweet.body の言語を検出して language field に保存。
+
+    動作:
+    - 新規 (`pk is None`) で `language` が既にセットされている → caller が
+      明示指定したと判断して尊重 (data migration / fixture 用途)
+    - 新規で `language` が None → 検出して set
+    - 既存 (`pk` あり) で body が変わっていたら再検出
+    - 既存で body 変わらず → そのまま (検出 cost 削減)
+    """
+
+    body = instance.body or ""
+    if not body:
+        return
+
+    if instance.pk is None:
+        if instance.language is not None:
+            # 明示指定された値を尊重
+            return
+        instance.language = detect_language(body)
+        return
+
+    # 既存 instance: DB の old body と比較して、 body が変わっていたら再検出
+    try:
+        old_body = Tweet.all_objects.values_list("body", flat=True).get(pk=instance.pk)
+    except Tweet.DoesNotExist:
+        instance.language = detect_language(body)
+        return
+    if old_body == body:
+        # body 不変 → language も触らない (caller が明示変更した場合も尊重)
+        return
+    instance.language = detect_language(body)
