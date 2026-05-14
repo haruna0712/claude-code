@@ -51,7 +51,8 @@ export default function UserSearchBox({
 			/>
 			<button
 				type="submit"
-				className="rounded-md bg-lime-500 px-4 py-2 text-sm font-semibold text-black hover:bg-lime-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				className="rounded-md px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+				style={{ background: "var(--a-accent)" }}
 			>
 				検索
 			</button>
