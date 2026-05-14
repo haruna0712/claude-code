@@ -229,7 +229,7 @@ describe("TranslateControl (P13-05)", () => {
 		// revert → null に戻る → 再 mount しない限り auto fetch は再 fire されない
 		await userEvent.click(revert);
 		// 短時間待っても 2 回目は走らない (= suppression flag が効いている)
-		await new Promise((r) => setTimeout(r, 50));
+		await new Promise((resolve) => setTimeout(resolve, 50));
 		expect(translateMock).toHaveBeenCalledTimes(1);
 	});
 
