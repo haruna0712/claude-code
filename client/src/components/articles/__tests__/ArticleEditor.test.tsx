@@ -153,6 +153,9 @@ describe("ArticleEditor", () => {
 		toastErrorMock.mockReset();
 		createArticleMock.mockReset();
 		updateArticleMock.mockReset();
+		if (typeof window !== "undefined") {
+			window.localStorage.clear();
+		}
 	});
 
 	it("T-EDIT-2 preview pane renders heading from body markdown", () => {

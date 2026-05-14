@@ -9,6 +9,7 @@
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
+import { useAutoSaveDraft } from "@/hooks/useAutoSaveDraft";
 import { createThread } from "@/lib/api/boards";
 
 interface ThreadComposerProps {
@@ -24,8 +25,18 @@ export default function ThreadComposer({
 	isAuthenticated,
 }: ThreadComposerProps) {
 	const router = useRouter();
-	const [title, setTitle] = useState("");
-	const [body, setBody] = useState("");
+	// #739: 掲示板スレ立ては board 毎に key を分ける (board A で書きかけて board
+	// B に移っても混ざらない)。 1 board × 1 新規スレ前提。
+	const {
+		value: title,
+		setValue: setTitle,
+		clear: clearTitleAutosave,
+	} = useAutoSaveDraft(`composer:thread:${boardSlug}:new:title`);
+	const {
+		value: body,
+		setValue: setBody,
+		clear: clearBodyAutosave,
+	} = useAutoSaveDraft(`composer:thread:${boardSlug}:new:body`);
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +69,9 @@ export default function ThreadComposer({
 				title: title.trim(),
 				first_post_body: body,
 			});
+			// #739: 成功でき autosave 消す
+			clearTitleAutosave();
+			clearBodyAutosave();
 			router.push(`/threads/${res.id}`);
 		} catch (err: unknown) {
 			const status =

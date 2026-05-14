@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import Spinner from "@/components/shared/Spinner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useAutoSaveDraft } from "@/hooks/useAutoSaveDraft";
 import { createTweet, type TweetSummary } from "@/lib/api/tweets";
 import { parseDrfErrors } from "@/lib/api/errors";
 import { TWEET_MAX_CHARS, countTweetChars } from "@/lib/tweets/charCount";
@@ -44,7 +45,13 @@ export default function TweetComposer({
 	const textareaId = useId();
 	const counterId = useId();
 	const tagsId = useId();
-	const [body, setBody] = useState("");
+	// #739: body は localStorage に autosave される。 key は 1 ユーザー 1 入力
+	// 前提の `composer:tweet:new` 固定。 別ページに遷移して戻ってきても残る。
+	const {
+		value: body,
+		setValue: setBody,
+		clear: clearBodyAutosave,
+	} = useAutoSaveDraft("composer:tweet:new");
 	const [tagInput, setTagInput] = useState("");
 	const [tags, setTags] = useState<string[]>([]);
 	const [tagError, setTagError] = useState<string | undefined>();
@@ -113,7 +120,9 @@ export default function TweetComposer({
 			const tweet = await createTweet({ body, tags });
 			onPosted?.(tweet);
 			toast.success("投稿しました");
-			setBody("");
+			// #739: 送信成功で autosave key を確実に消す (setBody("") の debounce
+			// より先に clear するために専用 helper を呼ぶ)
+			clearBodyAutosave();
 			setTags([]);
 			setTagInput("");
 		} catch (error) {
@@ -121,7 +130,7 @@ export default function TweetComposer({
 		} finally {
 			setIsSubmitting(false);
 		}
-	}, [body, tags, canSubmit, onPosted]);
+	}, [body, tags, canSubmit, onPosted, clearBodyAutosave]);
 
 	/**
 	 * #734: 下書き保存。 POST /tweets/ {is_draft: true} で published_at=NULL の
@@ -136,7 +145,9 @@ export default function TweetComposer({
 		try {
 			await createTweet({ body, tags, is_draft: true });
 			toast.success("下書きに保存しました");
-			setBody("");
+			// #739: server 下書き保存後は autosave も clear (= 同じ内容を 2 重に
+			// 保持しない、 次に composer を開いたら空に戻る)。
+			clearBodyAutosave();
 			setTags([]);
 			setTagInput("");
 			// onPosted は public TL refresh trigger のため、 draft では呼ばない
@@ -146,7 +157,7 @@ export default function TweetComposer({
 		} finally {
 			setIsSavingDraft(false);
 		}
-	}, [body, tags, canSaveDraft]);
+	}, [body, tags, canSaveDraft, clearBodyAutosave]);
 
 	const onBodyKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
 		if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {

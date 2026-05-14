@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogTitle } from "@radix-ui/react-dialog";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "react-toastify";
 
+import { useAutoSaveDraft } from "@/hooks/useAutoSaveDraft";
 import { quoteTweet, replyToTweet } from "@/lib/api/repost";
 import type { TweetMini, TweetSummary } from "@/lib/api/tweets";
 import { TWEET_MAX_CHARS, countTweetChars } from "@/lib/tweets/charCount";
@@ -38,7 +39,12 @@ export default function PostDialog({
 	onPosted,
 	parentTweet,
 }: PostDialogProps) {
-	const [body, setBody] = useState("");
+	// #739: reply / quote 別 + 対象 tweet 別に書きかけを localStorage 保存。
+	const {
+		value: body,
+		setValue: setBody,
+		clear: clearBodyAutosave,
+	} = useAutoSaveDraft(`composer:${mode}:${tweetId}`);
 	const [busy, setBusy] = useState(false);
 
 	const title = mode === "quote" ? "引用リポスト" : "リプライ";
@@ -68,7 +74,8 @@ export default function PostDialog({
 					? await quoteTweet(tweetId, { body: trimmed })
 					: await replyToTweet(tweetId, { body: trimmed });
 			onPosted?.(result);
-			setBody("");
+			// #739: 送信成功で autosave key を確実に消す
+			clearBodyAutosave();
 			onOpenChange(false);
 		} catch {
 			toast.error("投稿に失敗しました");

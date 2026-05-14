@@ -31,6 +31,7 @@ import {
 import { toast } from "react-toastify";
 
 import { useArticleImageUpload } from "@/hooks/useArticleImageUpload";
+import { loadStoredDraft, useAutoSaveSync } from "@/hooks/useAutoSaveDraft";
 import type { UploadedImage } from "@/lib/api/articleImages";
 import {
 	createArticle,
@@ -123,9 +124,23 @@ export function insertImageMarkdown(
 
 export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 	const router = useRouter();
-	const [title, setTitle] = useState(initial?.title ?? "");
+	// #739: 書きかけ autosave。 新規 vs 編集で key を分ける。
+	// 編集モードは記事 slug をキーに、 新規は固定 key (= 1 ユーザー 1 件)。
+	const draftScope =
+		mode === "edit" && initial?.slug ? `edit:${initial.slug}` : "new";
+	const titleKey = `composer:article:${draftScope}:title`;
+	const bodyKey = `composer:article:${draftScope}:body`;
+	// 初期値は localStorage 優先、 無ければ initial を使う。
+	const [title, setTitle] = useState(() =>
+		loadStoredDraft(titleKey, initial?.title ?? ""),
+	);
 	const [slug, setSlug] = useState(initial?.slug ?? "");
-	const [body, setBody] = useState(initial?.body_markdown ?? "");
+	const [body, setBody] = useState(() =>
+		loadStoredDraft(bodyKey, initial?.body_markdown ?? ""),
+	);
+	// debounce 付きで localStorage に書き戻す
+	useAutoSaveSync(titleKey, title);
+	useAutoSaveSync(bodyKey, body);
 	const [tagsInput, setTagsInput] = useState(
 		(initial?.tags ?? []).map((t) => t.slug).join(", "),
 	);
@@ -277,6 +292,13 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 				toast.success(
 					status === "published" ? "公開しました" : "下書きを保存しました",
 				);
+				// #739: 送信成功で autosave key を clear
+				try {
+					window.localStorage.removeItem(titleKey);
+					window.localStorage.removeItem(bodyKey);
+				} catch {
+					/* no-op */
+				}
 				router.push(`/articles/${created.slug}`);
 			} else if (initial) {
 				const updated = await updateArticle(initial.slug, {
@@ -289,6 +311,12 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 				toast.success(
 					status === "published" ? "公開しました" : "下書きを保存しました",
 				);
+				try {
+					window.localStorage.removeItem(titleKey);
+					window.localStorage.removeItem(bodyKey);
+				} catch {
+					/* no-op */
+				}
 				router.push(`/articles/${updated.slug}`);
 			}
 		} catch (err) {

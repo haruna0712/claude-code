@@ -12,6 +12,7 @@
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 
+import { useAutoSaveDraft } from "@/hooks/useAutoSaveDraft";
 import { createThreadPost, type ThreadState } from "@/lib/api/boards";
 
 interface PostComposerProps {
@@ -31,7 +32,12 @@ export default function PostComposer({
 	boardSlug,
 	onPosted,
 }: PostComposerProps) {
-	const [body, setBody] = useState("");
+	// #739: thread 毎に key を分ける (= 複数 thread で書きかけて移動しても混ざらない)。
+	const {
+		value: body,
+		setValue: setBody,
+		clear: clearBodyAutosave,
+	} = useAutoSaveDraft(`composer:post:${threadId}`);
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -81,7 +87,8 @@ export default function PostComposer({
 		setSubmitting(true);
 		try {
 			const res = await createThreadPost(threadId, { body });
-			setBody("");
+			// #739: 成功で autosave clear
+			clearBodyAutosave();
 			onPosted?.(res.thread_state);
 		} catch (err: unknown) {
 			const status =

@@ -3,7 +3,7 @@
  */
 
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import ThreadView from "@/components/boards/ThreadView";
 import type { ThreadDetail, ThreadPost } from "@/lib/api/boards";
@@ -45,6 +45,12 @@ function makePosts(
 }
 
 describe("ThreadView", () => {
+	beforeEach(() => {
+		if (typeof window !== "undefined") {
+			window.localStorage.clear();
+		}
+	});
+
 	it("shows approaching_limit warning at 990", () => {
 		const thread = makeThread({
 			post_count: 990,
