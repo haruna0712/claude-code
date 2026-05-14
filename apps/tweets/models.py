@@ -67,6 +67,22 @@ class Tweet(models.Model):
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
+    # #734 下書き機能: published_at IS NULL = 下書き (未公開)、 値あり = 公開済み。
+    # TweetManager の get_queryset() で既定除外され、 すべての公開 read query
+    # (TL / search / agent tools 等) から自動的に消える。 下書きを意図的に読みたい
+    # 場所だけ `all_with_drafts()` / `drafts_of(user)` を使う。
+    # spec: docs/specs/tweet-drafts-spec.md §2
+    published_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        default=None,
+        db_index=True,
+        help_text=(
+            "公開時刻。 NULL = 下書き、 値あり = 公開済み。 "
+            "下書きを「公開する」 で now() に更新 (created_at も同時に更新)。"
+        ),
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

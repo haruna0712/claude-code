@@ -27,8 +27,10 @@ from __future__ import annotations
 from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import serializers as drf_serializers
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -52,8 +54,23 @@ ACTION_CREATE = "create"
 ACTION_UPDATE = "update"
 ACTION_PARTIAL_UPDATE = "partial_update"
 ACTION_DESTROY = "destroy"
+# #734: 下書き機能 — drafts は GET、 publish は POST。
+ACTION_DRAFTS = "drafts"
+ACTION_PUBLISH = "publish"
 
 _READ_ACTIONS = frozenset({ACTION_LIST, ACTION_RETRIEVE})
+# state 変更系 + drafts list は **自分の下書きにアクセスする必要がある** ので、
+# Manager の既定 (= 公開済みのみ) ではなく `all_with_drafts()` を使う。 author
+# scope は各 action 内で別途 enforce する。
+_DRAFT_AWARE_ACTIONS = frozenset(
+    {
+        ACTION_UPDATE,
+        ACTION_PARTIAL_UPDATE,
+        ACTION_DESTROY,
+        ACTION_DRAFTS,
+        ACTION_PUBLISH,
+    }
+)
 
 
 class TweetViewSet(viewsets.ModelViewSet):
@@ -88,7 +105,7 @@ class TweetViewSet(viewsets.ModelViewSet):
     def get_permissions(self) -> list[Any]:
         if self.action in _READ_ACTIONS:
             return [AllowAny()]
-        # create / update / partial_update / destroy
+        # create / update / partial_update / destroy / drafts / publish
         return [IsAuthenticated()]
 
     # 認証は CookieAuthentication に一本化する。
@@ -122,19 +139,23 @@ class TweetViewSet(viewsets.ModelViewSet):
         ``created_at desc`` は Tweet.Meta.ordering で既定。
         N+1 を避けるため author / images / tags を prefetch する。
         #323: nested parent (reply_to / quote_of / repost_of) も author 込みで select_related。
+        #734: state 変更系 action (update / destroy / publish / drafts) は自分の
+        下書きにアクセスする必要があるので ``all_with_drafts()`` を使う (author
+        scope は action 内で enforce)。 list / retrieve は manager の既定 (=
+        公開済みのみ) を使う。
         """
-        qs = (
-            Tweet.objects.all()
-            .select_related(
-                "author",
-                # #323: TweetMiniSerializer が parent.author.username 等を引くので
-                # __author まで select_related で N+1 抑制。
-                "reply_to__author",
-                "quote_of__author",
-                "repost_of__author",
-            )
-            .prefetch_related("images", "tags")
-        )
+        if self.action in _DRAFT_AWARE_ACTIONS:
+            base = Tweet.objects.all_with_drafts()
+        else:
+            base = Tweet.objects.all()
+        qs = base.select_related(
+            "author",
+            # #323: TweetMiniSerializer が parent.author.username 等を引くので
+            # __author まで select_related で N+1 抑制。
+            "reply_to__author",
+            "quote_of__author",
+            "repost_of__author",
+        ).prefetch_related("images", "tags")
 
         request = getattr(self, "request", None)
         if request is None:
@@ -171,6 +192,9 @@ class TweetViewSet(viewsets.ModelViewSet):
         """retrieve は all_objects から引き、is_deleted=True なら 410 Gone を返す。
 
         SPEC §3.9: tombstone レスポンス ``{id, is_deleted, deleted_at}``。
+        #734: `published_at IS NULL` (= 下書き) は、 **author 本人** なら 200 で
+        中身を返し、 それ以外 (他人 / 匿名) は **404 隠蔽** (= 存在自体を漏らさ
+        ない)。 403 だと「ある」 ことが推測できるので避ける。
         """
         pk = kwargs.get(self.lookup_field)
         tweet = (
@@ -194,6 +218,14 @@ class TweetViewSet(viewsets.ModelViewSet):
                     "deleted_at": tweet.deleted_at,
                 },
                 status=status.HTTP_410_GONE,
+            )
+        # #734: 下書きは author 本人だけ閲覧可能。 他は 404 隠蔽。
+        if tweet.published_at is None and (
+            not request.user.is_authenticated or tweet.author_id != request.user.pk
+        ):
+            return Response(
+                {"detail": "Not found."},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = self.get_serializer(tweet)
@@ -233,12 +265,21 @@ class TweetViewSet(viewsets.ModelViewSet):
 
         author チェックは serializer に instance をセットする前に先に行い、
         他人の body validation を無駄に走らせない (情報漏洩防止にもなる)。
+
+        #734: 他人の draft (published_at IS NULL) は **404 隠蔽** にする。
+        既存の公開済み tweet 編集は従来通り 403 (PermissionDenied)。
         """
         instance = self.get_object()
         # User モデルは primary_key を ``pkid`` (BigAutoField) にしている (apps/users/models.py)。
         # ``Tweet.author`` の FK は pk=pkid に張られるため ``author_id`` と比較するのは
         # ``request.user.pk`` (= pkid)。``request.user.id`` は UUIDField なので一致しない。
         if instance.author_id != request.user.pk:
+            if instance.published_at is None:
+                # 下書きの存在自体を漏らさない (= 404 隠蔽)
+                return Response(
+                    {"detail": "Not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
             raise PermissionDenied("他のユーザーのツイートは編集できません。")
 
         serializer = self.get_serializer(instance, data=request.data, partial=True)
@@ -265,6 +306,12 @@ class TweetViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         # User の primary key は ``pkid``。詳細は _do_partial_update のコメント参照。
         if instance.author_id != request.user.pk:
+            # #734: 他人の draft は 404 隠蔽 (= 存在を漏らさない)
+            if instance.published_at is None:
+                return Response(
+                    {"detail": "Not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
             raise PermissionDenied("他のユーザーのツイートは削除できません。")
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -272,3 +319,81 @@ class TweetViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance: Tweet) -> None:
         """論理削除 (§3.9)。物理削除はしない。"""
         instance.soft_delete()
+
+    # ------------------------------------------------------------------
+    # 7. #734 下書き機能: drafts list + publish
+    # ------------------------------------------------------------------
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="drafts",
+        permission_classes=[IsAuthenticated],
+    )
+    def drafts(self, request: Request) -> Response:
+        """GET /api/v1/tweets/drafts/ — 自分の下書き一覧を新しい順で返す。
+
+        spec: docs/specs/tweet-drafts-spec.md §3.3
+        """
+        qs = (
+            Tweet.objects.drafts_of(request.user)
+            .select_related("author")
+            .prefetch_related("images", "tags")
+            .order_by("-created_at")
+        )
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = TweetListSerializer(
+                page,
+                many=True,
+                context=self.get_serializer_context(),
+            )
+            return self.get_paginated_response(serializer.data)
+        serializer = TweetListSerializer(
+            qs,
+            many=True,
+            context=self.get_serializer_context(),
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="publish",
+        permission_classes=[IsAuthenticated],
+    )
+    def publish(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/v1/tweets/<id>/publish/ — 自分の下書きを公開する。
+
+        spec: docs/specs/tweet-drafts-spec.md §3.2
+
+        - 自分の下書き (= `published_at IS NULL` + author=user) のみ
+        - 他人の下書き ID → 404 隠蔽 (= ある事実を漏らさない)
+        - 既に公開済み → 400
+        - 成功時: `published_at = created_at = now()` に更新し、 detail を返す
+        """
+        instance = self.get_object()  # `_DRAFT_AWARE_ACTIONS` で all_with_drafts
+        if instance.author_id != request.user.pk:
+            # 他人の下書きは「存在しない」 として 404 隠蔽
+            return Response(
+                {"detail": "Not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if instance.published_at is not None:
+            return Response(
+                {"detail": "already_published"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        now = timezone.now()
+        # auto_now_add の `created_at` も同時に更新する (spec §2.1)。
+        # bulk update で auto_now_add を回避し、 公開時刻を時系列に正しく載せる。
+        Tweet.all_objects.filter(pk=instance.pk).update(
+            published_at=now,
+            created_at=now,
+        )
+        instance.refresh_from_db()
+        out = TweetDetailSerializer(
+            instance,
+            context=self.get_serializer_context(),
+        ).data
+        return Response(out, status=status.HTTP_200_OK)

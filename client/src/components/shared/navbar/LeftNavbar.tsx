@@ -18,6 +18,7 @@ import {
 	Home,
 	MessageSquare,
 	MessagesSquare,
+	Pencil,
 	Plus,
 	Search,
 	Sparkles,
@@ -44,6 +45,7 @@ const ICON_MAP: Record<
 	FileText,
 	Handshake,
 	Sparkles,
+	Pencil,
 };
 
 /** isProfile link は self handle を埋めて返す。handle 未取得時は null。 */

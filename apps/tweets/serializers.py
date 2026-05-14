@@ -164,6 +164,9 @@ class TweetBaseMiniSerializer(serializers.ModelSerializer):
             # P13-01: 自動検出された言語コード (ISO 639-1)。 frontend の
             # 「翻訳」 button 表示判定で必要。 null=未検出。
             "language",
+            # #734: 公開時刻 (NULL = 下書き)。 frontend で「下書き」 badge 表示や
+            # /drafts での list 表示に使う。
+            "published_at",
         ]
         read_only_fields = fields
 
@@ -224,6 +227,9 @@ class TweetMiniSerializer(TweetBaseMiniSerializer):
             return None
         parent = Tweet.all_objects.filter(pk=obj.quote_of_id).select_related("author").first()
         if parent is None:
+            return None
+        # #734: 下書きを親として露出しない (defense in depth)
+        if parent.published_at is None and not parent.is_deleted:
             return None
         return TweetBaseMiniSerializer(parent, context=self.context).data
 
@@ -287,6 +293,9 @@ class TweetListSerializer(serializers.ModelSerializer):
             # P13-01: 自動検出された言語コード (ISO 639-1)。 frontend の
             # 「翻訳」 button 表示判定で必要。 null=未検出。
             "language",
+            # #734: 公開時刻 (NULL = 下書き)。 frontend で「下書き」 badge 表示や
+            # /drafts での list 表示に使う。
+            "published_at",
         ]
         read_only_fields = fields
 
@@ -312,6 +321,11 @@ class TweetListSerializer(serializers.ModelSerializer):
             return None
         parent = Tweet.all_objects.filter(pk=parent_id).select_related("author").first()
         if parent is None:
+            return None
+        # #734 defense-in-depth: 下書き (published_at IS NULL) は親 tweet として
+        # 露出しない (= 通常起こらないが、 inconsistent row が混入しても
+        # 他人の draft body を nested embed で漏らさない)。
+        if parent.published_at is None and not parent.is_deleted:
             return None
         return TweetMiniSerializer(parent, context=self.context).data
 
@@ -395,6 +409,9 @@ class TweetCreateSerializer(serializers.Serializer):
         default=list,
     )
     images = TweetImageSerializer(many=True, required=False, default=list)
+    # #734 下書き機能: true で未公開 (published_at=NULL) として保存。
+    # type=reply/quote/repost のときは強制 False。 spec §3.1
+    is_draft = serializers.BooleanField(required=False, default=False)
 
     def validate_body(self, value: str) -> str:
         """本文の文字数チェック。
@@ -454,12 +471,35 @@ class TweetCreateSerializer(serializers.Serializer):
         # Tweet.objects.create(**validated_data) のように unpack しても
         # 重複キー / 未知フィールドで落ちないようにする。
         body: str = validated_data.pop("body")
+        # #734: is_draft フラグを取り出して published_at を決定する。
+        is_draft: bool = bool(validated_data.pop("is_draft", False))
+        # 下書きは ORIGINAL のみ許容。 reply/quote/repost は relation が
+        # 紐づくので下書き化禁止 (spec §3.1)。 view が type kwarg を
+        # 渡してくるので check してから decide する。
+        tweet_type = validated_data.get("type", TweetType.ORIGINAL)
+        if is_draft and tweet_type != TweetType.ORIGINAL:
+            raise serializers.ValidationError(
+                {
+                    "is_draft": (
+                        "下書き保存は ORIGINAL ツイートのみで可能です "
+                        "(reply / quote / repost は下書き化できません)。"
+                    )
+                }
+            )
+        # #734: Manager.create() は published_at が無いと now() を入れるので、
+        # 下書きの場合は明示的に None を渡す。 公開投稿は kwarg を渡さなくても
+        # Manager.create() が now() を入れる (= 既存挙動)。
+        if is_draft:
+            validated_data["published_at"] = None
 
         # validated_data に残っている view 由来の kwargs (type / quote_of /
         # reply_to / repost_of) を Tweet.objects.create に通す。これがないと
         # Quote/Reply のときに type=ORIGINAL のまま Tweet が作られて signal
         # が `quote_count` / `reply_count` を更新せず test_actions_api の
         # `test_quote_creates_with_body_201` 等が落ちる (P2-06 残バグ)。
+        # 既定 manager は published_at IS NULL を除外するが、 ここは create
+        # なので `Tweet.objects.create()` が直接 INSERT して manager の
+        # get_queryset() は通らない (= 下書きでも保存される)。
         tweet = Tweet.objects.create(author=author, body=body, **validated_data)
 
         if tags:

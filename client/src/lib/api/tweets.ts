@@ -17,6 +17,11 @@ export interface CreateTweetPayload {
 	body: string;
 	tags?: string[];
 	images?: TweetImagePayload[];
+	/**
+	 * #734: true なら下書きとして保存 (published_at=NULL)。 公開せず /drafts に
+	 * 入る。 ORIGINAL ツイートのみ対応 (reply/quote/repost には付けられない)。
+	 */
+	is_draft?: boolean;
 }
 
 /** Tweet kind 4 種 (TweetType TextChoices: lowercase value)。 */
@@ -100,6 +105,12 @@ export interface TweetSummary {
 	 * 検出不可 / 短文の場合は null。 翻訳 button の表示判定に使う。
 	 */
 	language?: string | null;
+	/**
+	 * #734: 公開時刻 (ISO8601)。 null なら下書き (未公開)。 通常 endpoint
+	 * (/tweets/) の response は public 集合なので null は通常返らないが、
+	 * /tweets/drafts/ や POST /tweets/ {is_draft:true} の response では null。
+	 */
+	published_at?: string | null;
 }
 
 export async function createTweet(
@@ -156,6 +167,36 @@ export async function deleteTweet(
 ): Promise<void> {
 	await ensureCsrfToken(client);
 	await client.delete(`/tweets/${id}/`);
+}
+
+// ---- #734: 下書き機能 ----
+
+/**
+ * GET /api/v1/tweets/drafts/
+ *
+ * 自分の下書き一覧を新しい順 paginate で取得。 未ログインなら 401。
+ */
+export async function fetchDrafts(
+	params: { page?: number } = {},
+	client: AxiosInstance = api,
+): Promise<TweetListPage> {
+	const res = await client.get<TweetListPage>("/tweets/drafts/", { params });
+	return res.data;
+}
+
+/**
+ * POST /api/v1/tweets/<id>/publish/
+ *
+ * 自分の下書きを公開する。 publish 成功時は published_at が入った tweet を返す。
+ * 他人の draft → 404、 既に公開済み → 400。
+ */
+export async function publishDraft(
+	id: number | string,
+	client: AxiosInstance = api,
+): Promise<TweetSummary> {
+	await ensureCsrfToken(client);
+	const res = await client.post<TweetSummary>(`/tweets/${id}/publish/`);
+	return res.data;
 }
 
 // ---- Phase 13 P13-03: 自動翻訳 ----

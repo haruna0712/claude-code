@@ -49,6 +49,9 @@ export default function TweetComposer({
 	const [tags, setTags] = useState<string[]>([]);
 	const [tagError, setTagError] = useState<string | undefined>();
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	// #734: 下書き保存中のフラグ。 通常投稿の isSubmitting と分離して
+	// 「下書き保存」 button だけ spinner にできるようにする。
+	const [isSavingDraft, setIsSavingDraft] = useState(false);
 	const [summaryError, setSummaryError] = useState<string | undefined>();
 
 	const charCount = useMemo(() => countTweetChars(body), [body]);
@@ -56,7 +59,10 @@ export default function TweetComposer({
 	const isOverLimit = remaining < 0;
 	const isEmpty = charCount === 0;
 
-	const canSubmit = !isSubmitting && !isEmpty && !isOverLimit;
+	const canSubmit = !isSubmitting && !isSavingDraft && !isEmpty && !isOverLimit;
+	// #734: 下書きはタグ無し / 空でない本文があれば保存可能 (ORIGINAL のみ)。
+	const canSaveDraft =
+		!isSubmitting && !isSavingDraft && !isEmpty && !isOverLimit;
 
 	const addTag = useCallback(
 		(raw: string) => {
@@ -116,6 +122,31 @@ export default function TweetComposer({
 			setIsSubmitting(false);
 		}
 	}, [body, tags, canSubmit, onPosted]);
+
+	/**
+	 * #734: 下書き保存。 POST /tweets/ {is_draft: true} で published_at=NULL の
+	 * Tweet を作成。 onPosted は通常投稿用 callback (= dialog close + TL refresh)
+	 * なので、 下書き時は呼ばずに「下書きに保存しました」 toast + composer reset
+	 * のみ行う。 ユーザーは続けて投稿しても /drafts へ移動してもよい。
+	 */
+	const saveDraft = useCallback(async () => {
+		if (!canSaveDraft) return;
+		setIsSavingDraft(true);
+		setSummaryError(undefined);
+		try {
+			await createTweet({ body, tags, is_draft: true });
+			toast.success("下書きに保存しました");
+			setBody("");
+			setTags([]);
+			setTagInput("");
+			// onPosted は public TL refresh trigger のため、 draft では呼ばない
+			// (= home TL に出ない投稿なので refresh しても無意味)。
+		} catch (error) {
+			setSummaryError(parseDrfErrors(error).summary);
+		} finally {
+			setIsSavingDraft(false);
+		}
+	}, [body, tags, canSaveDraft]);
 
 	const onBodyKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
 		if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -178,7 +209,7 @@ export default function TweetComposer({
 					placeholder={
 						tags.length >= MAX_TAGS ? "タグは 3 個まで" : "タグを入力して Enter"
 					}
-					className="flex-1 min-w-[140px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+					className="min-w-[140px] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
 					aria-label="タグを追加"
 					disabled={tags.length >= MAX_TAGS}
 				/>
@@ -201,9 +232,20 @@ export default function TweetComposer({
 				>
 					{charCount} / {TWEET_MAX_CHARS}
 				</div>
-				<Button type="button" onClick={submit} disabled={!canSubmit}>
-					{isSubmitting ? <Spinner size="sm" /> : "投稿"}
-				</Button>
+				<div className="flex items-center gap-2">
+					<Button
+						type="button"
+						variant="outline"
+						onClick={saveDraft}
+						disabled={!canSaveDraft}
+						aria-label="下書きとして保存する"
+					>
+						{isSavingDraft ? <Spinner size="sm" /> : "下書き保存"}
+					</Button>
+					<Button type="button" onClick={submit} disabled={!canSubmit}>
+						{isSubmitting ? <Spinner size="sm" /> : "投稿"}
+					</Button>
+				</div>
 			</div>
 
 			{summaryError && (
