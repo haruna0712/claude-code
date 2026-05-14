@@ -35,7 +35,7 @@ import { toast } from "react-toastify";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { fetchAgentRuns, runAgent, type AgentRunResult } from "@/lib/api/agent";
+import { runAgent, type AgentRunResult } from "@/lib/api/agent";
 import { createTweet } from "@/lib/api/tweets";
 
 const PROMPT_MAX = 2000;
@@ -128,17 +128,9 @@ export default function AgentPanel({ initialHistory = [] }: AgentPanelProps) {
 		setPrompt("");
 	};
 
-	// 履歴を server から fresh fetch する (初回 / 投稿後 refresh 用)。
-	const onRefreshHistory = async () => {
-		try {
-			const page = await fetchAgentRuns();
-			setHistory(page.results.slice(0, 10));
-		} catch {
-			// silent (history は補助情報なので fail しても UX を止めない)
-		}
-	};
-
-	void onRefreshHistory; // 起動時 fetch は SSR か useEffect で行う想定。 ここでは未使用。
+	// 履歴 fetch は SSR (app/(template)/agent/page.tsx) で行うので、 client
+	// 側では runAgent 後に prepend するだけ。 client refetch が必要になったら
+	// fetchAgentRuns を import して useEffect で呼ぶ。
 
 	const draftLen = draftEdit.length;
 	const draftOver = draftLen > DRAFT_MAX;
@@ -229,7 +221,7 @@ export default function AgentPanel({ initialHistory = [] }: AgentPanelProps) {
 						className={
 							draftOver
 								? "text-sm text-destructive"
-								: "text-[color:var(--a-text-subtle)] text-xs"
+								: "text-xs text-[color:var(--a-text-subtle)]"
 						}
 					>
 						{draftLen} / {DRAFT_MAX}
