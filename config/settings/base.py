@@ -485,6 +485,12 @@ _THROTTLE_RATES_BASE = {
     # /api/v1/users/search/ 専用の per-minute scope を切る。
     # 60/min = SearchBox を 1 秒間隔で叩いても 1 分は持つ余裕。 bot 抑止としても十分。
     "user_search_anon": "60/min" if not _IS_STG else "600/min",
+    # Phase 13 P13-03 (auto-translate-spec §5.2 / §6):
+    # POST /api/v1/tweets/<id>/translate/ は OpenAI 課金が発生するので
+    # 1 ユーザー 60 翻訳/時間に制限 (= 1 分に 1 件ペース)。
+    # TL を眺めながら数件押す通常 UX に十分な余裕、 cache hit は OpenAI を叩かないので
+    # 同一ツイートを繰り返し押しても枠は消費しない (cache miss だけがコスト要因)。
+    "translate": "60/hour" if not _IS_STG else "600/hour",
 }
 
 REST_FRAMEWORK = {
