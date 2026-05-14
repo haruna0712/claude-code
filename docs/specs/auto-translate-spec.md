@@ -263,12 +263,28 @@ state は client-side `useState`、 page reload で reset (X と同じ per-sessi
 
 ### 8.3 E2E (Playwright, stg)
 
-`client/e2e/auto-translate.spec.ts`:
+`client/e2e/auto-translate.spec.ts` (実装済):
 
-- TRANSLATE-1: test2 (ja user) で英語投稿が見える tweet card に「翻訳する」 button → 翻訳済 + 「原文を表示」 確認
-- TRANSLATE-2: 翻訳済から「原文を表示」 click → 元の英語に戻る、 「翻訳する」 が再表示
+- TRANSLATE-1/2: test2 (ja user) で英語投稿の tweet card に「翻訳する」 button → 翻訳済 + 「原文を表示」 → revert で原文戻り + 「翻訳する」 再表示
 - TRANSLATE-3: 同一言語 (test2 = ja で日本語投稿) は button が出ない
 - TRANSLATE-4: 自分の投稿には button が出ない
+
+実行コマンド (env は [docs/local/e2e-stg.md](../local/e2e-stg.md) 参照):
+
+```bash
+cd /workspace/client
+
+PLAYWRIGHT_BASE_URL=https://stg.codeplace.me \
+PLAYWRIGHT_USER1_EMAIL=test2@gmail.com \
+PLAYWRIGHT_USER1_PASSWORD=Sirius01 \
+PLAYWRIGHT_USER1_HANDLE=test2 \
+PLAYWRIGHT_USER2_EMAIL=test3@gmail.com \
+PLAYWRIGHT_USER2_PASSWORD=Sirius01 \
+PLAYWRIGHT_USER2_HANDLE=test3 \
+  npx playwright test e2e/auto-translate.spec.ts --reporter=line
+```
+
+**注意 (P13-08 未完時)**: stg env に `OPENAI_API_KEY` が注入されるまでは `get_translator()` が `NoopTranslator` を返すので、 endpoint の `translated_text` は原文と同じ文字列になる。 「翻訳済 state への遷移」 と「revert」 の UX 検証は NoopTranslator でも通るので問題ないが、 **実際の翻訳品質確認は P13-08 完了後** に行う必要がある。
 
 ---
 
