@@ -443,6 +443,8 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 							ariaLabel={`@${profile.username} がいいねした投稿`}
 							emptyMessage="いいねした投稿がありません。"
 							currentUserHandle={currentUser?.username}
+							currentUserPreferredLanguage={currentUser?.preferred_language}
+							currentUserAutoTranslate={currentUser?.auto_translate}
 						/>
 					) : (
 						<TweetCardList
@@ -450,6 +452,8 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 							ariaLabel={`@${profile.username} のツイート`}
 							emptyMessage="まだツイートがありません。"
 							currentUserHandle={currentUser?.username}
+							currentUserPreferredLanguage={currentUser?.preferred_language}
+							currentUserAutoTranslate={currentUser?.auto_translate}
 						/>
 					)}
 				</section>
