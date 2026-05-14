@@ -121,6 +121,8 @@ LOCAL_APPS = [
     "apps.search",
     # Phase 11: メンターマッチング (P11-01)。 model 実装は P11-02 以降。
     "apps.mentorship",
+    # Phase 13: 自動翻訳機能 (P13-02)。 service layer のみ (model なし)。
+    "apps.translation",
 ]
 
 # --- Channels / Daphne (P3-02 / Issue #227) ---
@@ -782,3 +784,12 @@ MARKDOWN_BLEACH_ALLOWED_ATTRS = {
     "div": ["class"],  # シンタックスハイライトのラッパ (highlight 等)
 }
 MARKDOWN_BLEACH_ALLOWED_PROTOCOLS = ["http", "https", "mailto"]  # javascript: を弾く
+
+
+# ---------------------------------------------------------------------------
+# Phase 13 P13-02: 自動翻訳機能 (OpenAI GPT-4o-mini)
+# ---------------------------------------------------------------------------
+# 空のときは apps.translation.services.get_translator() が NoopTranslator
+# (原文返却 stub) に fallback するので、 local / CI でも 500 にならない設計。
+# stg / prod は AWS Secrets Manager 経由で ECS task に inject (P13-08 issue 参照)。
+OPENAI_API_KEY = getenv("OPENAI_API_KEY", "")

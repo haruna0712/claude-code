@@ -517,3 +517,46 @@ class OgpCache(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - 表示用
         return f"OgpCache(url={self.url[:50]!r})"
+
+
+class TweetTranslation(models.Model):
+    """ツイートの翻訳結果 DB cache (Phase 13 P13-02)。
+
+    `(tweet, target_language)` で unique。 同 ツイート × 同 target lang の 2 回目
+    以降は OpenAI API を叩かず DB から返す → cost 削減 + 応答速度向上。
+
+    Tweet の本文が編集されたら translation は **stale** になるが、 P13-02 では
+    invalidation 機構は入れず「本文変更後の最初の翻訳要求で新規 entry が作られる」
+    シンプルな運用 (実装は P13-03 view で対応)。 厳密には旧 cache が残るが
+    `(tweet, target_language)` の unique で更新時上書きされる。
+    """
+
+    tweet = models.ForeignKey(
+        Tweet,
+        on_delete=models.CASCADE,
+        related_name="translations",
+    )
+    target_language = models.CharField(max_length=8)
+    translated_text = models.TextField()
+    # 何のエンジンが生成したか (例: "openai:gpt-4o-mini", "noop")。 engine 切替時に
+    # 「古い engine の翻訳」 を識別して再翻訳 / 移行する判断材料にする。
+    engine = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tweet", "target_language"],
+                name="tweet_translation_unique_tweet_lang",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["tweet", "target_language"],
+                name="tweet_translation_lookup_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"TweetTranslation(tweet={self.tweet_id}, lang={self.target_language})"
