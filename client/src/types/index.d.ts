@@ -10,7 +10,8 @@ export type LeftNavIconName =
 	| "Bell"
 	| "MessagesSquare"
 	| "FileText"
-	| "Handshake";
+	| "Handshake"
+	| "Sparkles";
 
 export interface LeftNavLink {
 	/** 静的 path。`isProfile=true` の時は無視され self handle を組み立てる。 */

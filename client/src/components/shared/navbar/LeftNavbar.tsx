@@ -20,6 +20,7 @@ import {
 	MessagesSquare,
 	Plus,
 	Search,
+	Sparkles,
 	User,
 	UserSearch,
 } from "lucide-react";
@@ -42,6 +43,7 @@ const ICON_MAP: Record<
 	MessagesSquare,
 	FileText,
 	Handshake,
+	Sparkles,
 };
 
 /** isProfile link は self handle を埋めて返す。handle 未取得時は null。 */

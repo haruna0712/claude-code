@@ -67,6 +67,14 @@ export const leftNavLinks: LeftNavLink[] = [
 		iconName: "Handshake",
 	},
 	{
+		// Phase 14 (P14-05): Claude Agent。 ログイン必須 (Anthropic 課金で
+		// per-user 10/day 制限。 spec: docs/specs/claude-agent-spec.md)。
+		path: "/agent",
+		label: "Agent",
+		iconName: "Sparkles",
+		requiresAuth: true,
+	},
+	{
 		// path は LeftNavbar 側で `/u/<self.handle>` に動的に組み替える
 		path: "",
 		label: "プロフィール",
