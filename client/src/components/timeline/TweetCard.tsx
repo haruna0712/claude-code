@@ -18,6 +18,7 @@ import BookmarkButton from "@/components/boxes/BookmarkButton";
 import ReactionBar from "@/components/reactions/ReactionBar";
 import ReactionSummary from "@/components/reactions/ReactionSummary";
 import ExpandableBody from "@/components/timeline/ExpandableBody";
+import TranslateControl from "@/components/timeline/TranslateControl";
 import ReportDialog from "@/components/moderation/ReportDialog";
 import PostDialog from "@/components/tweets/PostDialog";
 import RepostButton from "@/components/tweets/RepostButton";
@@ -48,6 +49,12 @@ interface TweetCardProps {
 	onDescendantPosted?: (tweet: TweetSummary) => void;
 	/** Login viewer handle. Used to decide source-tweet delete permissions. */
 	currentUserHandle?: string;
+	/**
+	 * P13-05: Login viewer の preferred_language (ISO 639-1)。
+	 * tweet.language と異なれば「翻訳する」 button を表示する。
+	 * undefined / 未認証では翻訳 button を出さない。
+	 */
+	currentUserPreferredLanguage?: string;
 	/** Called when this timeline row should disappear after unrepost. */
 	onTimelineItemRemoved?: (tweetId: number) => void;
 }
@@ -155,6 +162,7 @@ export default function TweetCard({
 	setsize,
 	onDescendantPosted,
 	currentUserHandle,
+	currentUserPreferredLanguage,
 	onTimelineItemRemoved,
 }: TweetCardProps) {
 	const router = useRouter();
@@ -278,6 +286,16 @@ export default function TweetCard({
 			DOMPurify.sanitize(initialHtml, { USE_PROFILES: { html: true } }),
 		);
 	}, [initialHtml]);
+
+	// P13-05: 翻訳 state (per-card, page reload で reset = X / Twitter と同じ)。
+	// 翻訳中は本文を翻訳結果 (plain text) に差し替えて表示する。
+	const [translatedText, setTranslatedText] = useState<string | null>(null);
+	const displayedBodyHtml = translatedText
+		? escapeHtml(translatedText)
+		: safeHtml;
+	const displayedCharCount = translatedText
+		? translatedText.length
+		: (displayTweet.char_count ?? displayTweet.body.length);
 
 	const relativeTime = useMemo(
 		() => formatRelativeTime(displayTweet.created_at),
@@ -462,11 +480,24 @@ export default function TweetCard({
 				</div>
 			</header>
 
-			{/* Tweet body — DOMPurify sanitized HTML, P2-18 expandable. */}
+			{/* Tweet body — DOMPurify sanitized HTML, P2-18 expandable.
+			    P13-05: 翻訳 ON のときは翻訳結果 (plain text を escape) を出す。 */}
 			<ExpandableBody
-				html={safeHtml}
-				charCount={displayTweet.char_count ?? displayTweet.body.length}
+				html={displayedBodyHtml}
+				charCount={displayedCharCount}
 				className="prose prose-sm dark:prose-invert max-w-none text-sm text-foreground"
+			/>
+
+			{/* P13-05: 翻訳 button / 「原文を表示」 toggle (Phase 13). */}
+			<TranslateControl
+				tweetId={displayTweet.id}
+				tweetLanguage={displayTweet.language}
+				authorHandle={displayTweet.author_handle}
+				viewerHandle={currentUserHandle}
+				viewerLanguage={currentUserPreferredLanguage}
+				translatedText={translatedText}
+				onTranslated={setTranslatedText}
+				onRevert={() => setTranslatedText(null)}
 			/>
 
 			{/* Images grid (up to 4 images) */}
