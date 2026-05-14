@@ -90,6 +90,11 @@ locals {
     { name = "SIGNING_KEY", valueFrom = var.secret_arns["django/jwt-signing-key"] },
     { name = "POSTGRES_PASSWORD", valueFrom = var.secret_arns["django/db-password"] },
     { name = "REDIS_AUTH_TOKEN", valueFrom = var.secret_arns["redis/auth-token"] },
+    # Phase 13 P13-08: OpenAI GPT-4o-mini (auto-translate)。 値はハルナさんが
+    # `aws secretsmanager put-secret-value --secret-id sns/stg/openai/api-key`
+    # で put 済。 万一空文字が secret に書かれていても apps.translation.services
+    # の `get_translator()` が NoopTranslator に fallback するので 500 にはならない。
+    { name = "OPENAI_API_KEY", valueFrom = var.secret_arns["openai/api-key"] },
   ]
 
   # Next.js (SSR) は public NEXT_PUBLIC_* のみ。Sentry DSN は build-time に build args
