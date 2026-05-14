@@ -262,9 +262,23 @@ response = client.messages.create(
 ### 8.3 E2E Playwright (`client/e2e/agent.spec.ts`)
 
 - AGENT-1: 未ログインで /agent → /login redirect
-- AGENT-2: ログインして「TL を 3 件読んで日本語で要約 tweet を作って」 → draft が出る
-- AGENT-3: draft を edit → 「投稿」 で /tweets POST が走る (実投稿、 後片付けに delete)
-- AGENT-4: per-user 10/day を超えると 429
+- AGENT-2: ログイン → ホーム → leftNav「Agent」 で 1 click 到達 (heading が表示される)
+- AGENT-3: prompt 投入 → 「Agent 起動」 で draft が出る (実 Anthropic 経由、 ~30 秒)
+- AGENT-4: draft を edit → 「これを投稿」 で /tweets POST 成功 + 後片付けに API で delete
+
+実行コマンド (env は [docs/local/e2e-stg.md](../local/e2e-stg.md) 参照):
+
+```bash
+cd /workspace/client
+
+PLAYWRIGHT_BASE_URL=https://stg.codeplace.me \
+PLAYWRIGHT_USER1_EMAIL=test2@gmail.com \
+PLAYWRIGHT_USER1_PASSWORD=Sirius01 \
+PLAYWRIGHT_USER1_HANDLE=test2 \
+  npx playwright test e2e/agent.spec.ts --reporter=line --timeout=90000
+```
+
+**注意 (P14-07 未完時)**: stg env に `ANTHROPIC_API_KEY` が注入されるまでは AGENT-3 が `503` を返して fail する。 placeholder のままだと AgentRunner init は通るが Anthropic 401 → 500、 user に toast error が出るので AGENT-3 / AGENT-4 が fail する。 **実翻訳品質確認は P14-07 完了後** に行う。
 
 ---
 
