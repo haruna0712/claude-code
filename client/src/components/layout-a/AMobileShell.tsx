@@ -22,11 +22,13 @@ import {
 	Compass,
 	FileText,
 	Flame,
+	Handshake,
 	Home,
 	MessageSquare,
 	Menu as MenuIcon,
 	Search,
 	User,
+	UserSearch,
 	X,
 	type LucideIcon,
 } from "lucide-react";
@@ -240,11 +242,15 @@ export default function AMobileAppBar({ children }: { children?: ReactNode }) {
 function DrawerNav({ onItemClick }: { onItemClick: () => void }) {
 	const pathname = usePathname();
 	const { isAuthenticated } = useAuthNavigation();
-	// Drawer は全 nav を網羅 (bottom-tab で出ない記事 / 掲示板 / 検索も含む)
+	// Drawer は全 nav を網羅 (bottom-tab で出ない記事 / 掲示板 / 検索 / メンター も含む)。
+	// `leftNavLinks` (constants/index.ts) と等価な構成を mobile drawer でも保つよう
+	// 維持する責務がある — 新 route を leftNavLinks に追加したらここにも追加する
+	// (#686 mobile 動線漏れ防止)。
 	const items: BottomTabItem[] = [
 		{ href: "/", label: "ホーム", Icon: Home },
 		{ href: "/explore", label: "Explore", Icon: Compass },
 		{ href: "/search", label: "検索", Icon: Search },
+		{ href: "/search/users", label: "ユーザー検索", Icon: UserSearch },
 		{ href: "/notifications", label: "通知", Icon: Bell, requiresAuth: true },
 		{
 			href: "/messages",
@@ -254,6 +260,7 @@ function DrawerNav({ onItemClick }: { onItemClick: () => void }) {
 		},
 		{ href: "/articles", label: "記事", Icon: FileText },
 		{ href: "/boards", label: "掲示板", Icon: Flame },
+		{ href: "/mentor/wanted", label: "メンター募集", Icon: Handshake },
 	];
 
 	return (
