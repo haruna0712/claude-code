@@ -21,6 +21,10 @@ interface ConversationRepliesProps {
 	focal: TweetSummary;
 	initialReplies: TweetSummary[];
 	currentUserHandle?: string;
+	/** P13-05: viewer の preferred_language (翻訳 button の表示判定に使う). */
+	currentUserPreferredLanguage?: string;
+	/** P13-07: viewer の auto_translate (true なら mount 時に翻訳を自動 fire). */
+	currentUserAutoTranslate?: boolean;
 }
 
 function dedupById(tweets: TweetSummary[]): TweetSummary[] {
@@ -36,6 +40,8 @@ export default function ConversationReplies({
 	focal,
 	initialReplies,
 	currentUserHandle,
+	currentUserPreferredLanguage,
+	currentUserAutoTranslate,
 }: ConversationRepliesProps) {
 	const [replies, setReplies] = useState<TweetSummary[]>(
 		dedupById(initialReplies),
@@ -73,6 +79,8 @@ export default function ConversationReplies({
 					ariaLabel="ツイート詳細"
 					onDescendantPosted={handleDescendantPosted}
 					currentUserHandle={currentUserHandle}
+					currentUserPreferredLanguage={currentUserPreferredLanguage}
+					currentUserAutoTranslate={currentUserAutoTranslate}
 				/>
 			</section>
 

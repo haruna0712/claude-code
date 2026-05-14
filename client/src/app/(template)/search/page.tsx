@@ -17,6 +17,16 @@ import type { Metadata } from "next";
 import SearchBox from "@/components/search/SearchBox";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { fetchSearch } from "@/lib/api/search";
+import { serverFetch } from "@/lib/api/server";
+import type { CurrentUser } from "@/lib/api/users";
+
+async function loadCurrentUser(): Promise<CurrentUser | null> {
+	try {
+		return await serverFetch<CurrentUser>("/users/me/");
+	} catch {
+		return null;
+	}
+}
 
 interface SearchPageProps {
 	searchParams: { q?: string };
@@ -30,13 +40,16 @@ export const metadata: Metadata = {
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
 	const query = (searchParams.q ?? "").trim();
-	const data = query
-		? await fetchSearch(query).catch(() => ({
-				query,
-				results: [],
-				count: 0,
-			}))
-		: { query: "", results: [], count: 0 };
+	const [data, currentUser] = await Promise.all([
+		query
+			? fetchSearch(query).catch(() => ({
+					query,
+					results: [],
+					count: 0,
+				}))
+			: Promise.resolve({ query: "", results: [], count: 0 }),
+		loadCurrentUser(),
+	]);
 
 	return (
 		<>
@@ -83,6 +96,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 							tweets={data.results}
 							ariaLabel={`「${query}」の検索結果`}
 							emptyMessage="一致するツイートはありません。"
+							currentUserHandle={currentUser?.username}
+							currentUserPreferredLanguage={currentUser?.preferred_language}
+							currentUserAutoTranslate={currentUser?.auto_translate}
 						/>
 					</section>
 				)}

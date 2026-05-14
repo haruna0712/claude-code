@@ -227,6 +227,8 @@ export default async function TweetDetailPage({ params }: PageProps) {
 							tweets={ancestors}
 							ariaLabel="親ツイート"
 							currentUserHandle={currentUser?.username}
+							currentUserPreferredLanguage={currentUser?.preferred_language}
+							currentUserAutoTranslate={currentUser?.auto_translate}
 						/>
 					</section>
 				) : null}
@@ -237,6 +239,8 @@ export default async function TweetDetailPage({ params }: PageProps) {
 					focal={tweet}
 					initialReplies={replies}
 					currentUserHandle={currentUser?.username}
+					currentUserPreferredLanguage={currentUser?.preferred_language}
+					currentUserAutoTranslate={currentUser?.auto_translate}
 				/>
 			</article>
 		</>

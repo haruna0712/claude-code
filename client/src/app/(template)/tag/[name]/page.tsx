@@ -4,6 +4,15 @@ import { notFound } from "next/navigation";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
+import type { CurrentUser } from "@/lib/api/users";
+
+async function loadCurrentUser(): Promise<CurrentUser | null> {
+	try {
+		return await serverFetch<CurrentUser>("/users/me/");
+	} catch {
+		return null;
+	}
+}
 
 interface TagDetail {
 	name: string;
@@ -65,7 +74,10 @@ export async function generateMetadata({
 export default async function TagPage({ params }: PageProps) {
 	const tag = await loadTag(params.name);
 	if (!tag) notFound();
-	const tweets = await loadTweets(tag.name);
+	const [tweets, currentUser] = await Promise.all([
+		loadTweets(tag.name),
+		loadCurrentUser(),
+	]);
 
 	return (
 		<>
@@ -133,6 +145,9 @@ export default async function TagPage({ params }: PageProps) {
 						tweets={tweets}
 						ariaLabel={`${tag.display_name} タグのツイート`}
 						emptyMessage="まだこのタグのツイートはありません。"
+						currentUserHandle={currentUser?.username}
+						currentUserPreferredLanguage={currentUser?.preferred_language}
+						currentUserAutoTranslate={currentUser?.auto_translate}
 					/>
 				</section>
 			</div>
