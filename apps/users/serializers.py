@@ -73,6 +73,9 @@ class CustomUserSerializer(UserSerializer):
             # ChoiceField validator) で行われる。
             "preferred_language",
             "auto_translate",
+            # #735: 鍵アカ機能。 PATCH /users/me/ で toggle 可能。
+            # spec: docs/specs/private-account-spec.md §3.1
+            "is_private",
             "date_joined",
         ]
         # username / email / is_premium は変更不可 (is_premium は Stripe webhook でのみ更新)。
@@ -135,6 +138,9 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     # フォローしているか。未ログイン時 / 自分自身 / target 不在は false。
     # 1 query (Follow.objects.filter(...).exists()) で済むので N+1 リスク無し。
     is_following = serializers.SerializerMethodField()
+    # #735: 鍵アカ user に対し、 閲覧者が approved follower か / pending かを
+    # frontend が「フォロー中 / 承認待ち / フォローする」 button 状態に使う。
+    follow_status = serializers.SerializerMethodField()
 
     # Phase 4B (#448): ProfileKebab の初期状態判定用。
     is_blocking = serializers.SerializerMethodField()
@@ -152,7 +158,26 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         # circular import 回避のため遅延 import (apps.follows は users に依存)
         from apps.follows.models import Follow
 
-        return Follow.objects.filter(follower=viewer, followee=obj).exists()
+        # #735: pending な follow は「フォロー中」 ではないので除外
+        return Follow.objects.filter(
+            follower=viewer, followee=obj, status=Follow.Status.APPROVED
+        ).exists()
+
+    def get_follow_status(self, obj: User) -> str | None:
+        """#735: 閲覧者の自分から `obj` への follow 状態を返す。
+
+        返り値: ``"approved"`` | ``"pending"`` | ``None`` (フォロー無し / 匿名)
+        """
+        request = self.context.get("request")
+        if not request or not getattr(request, "user", None):
+            return None
+        viewer = request.user
+        if not viewer.is_authenticated or viewer.pk == obj.pk:
+            return None
+        from apps.follows.models import Follow
+
+        f = Follow.objects.filter(follower=viewer, followee=obj).only("status").first()
+        return f.status if f else None
 
     def get_is_blocking(self, obj: User) -> bool:
         request = self.context.get("request")
@@ -200,6 +225,11 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             # #421: フォロー数 / フォロワー数 (X 風プロフィール表示)
             "followers_count",
             "following_count",
+            # #735: 鍵アカ機能の UI 判定用。
+            # - is_private: 鍵アカなら true (UI で「このアカウントは非公開です」 表示)
+            # - follow_status: viewer→obj への follow 状態 (approved | pending | null)
+            "is_private",
+            "follow_status",
         ]
         # 公開 API はすべて read_only (PATCH は /me/ 経由のみ)。
         # ``fields`` と同じ list を参照させると、DRF 内部で片方に mutate が走った

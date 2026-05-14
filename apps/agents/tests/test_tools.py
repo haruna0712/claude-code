@@ -277,6 +277,57 @@ class TestDraftsHiddenFromAgentTools:
 
 
 # ---------------------------------------------------------------------------
+# #735: 鍵アカ user の tweet は agent tool に露出してはならない
+# (viewer が approved follower 関係で無いとき)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestPrivateAccountHiddenFromAgentTools:
+    def test_home_timeline_excludes_private_non_follower(self):
+        from apps.timeline.services import build_home_tl
+
+        me = _make_user("me-priv-tl@example.com", "me_priv_tl")
+        private_author = _make_user("priv-author-tl@example.com", "priv_author_tl")
+        private_author.is_private = True
+        private_author.save()
+        Tweet.objects.create(author=private_author, body="PRIVATE-TL-SECRET")
+        items = build_home_tl(me, limit=20)
+        for t in items:
+            assert "PRIVATE-TL-SECRET" not in t.body
+
+    def test_search_excludes_private_non_follower(self):
+        """non-follower の agent から鍵アカの tag tweet が見えないこと。
+
+        `_query_global` で `author__is_private=False` filter が効いて、
+        search_tweets_by_tag は `Tweet.objects.filter(tags__name=...)` で
+        manager 既定経由なので、 個別 view 層の visible_to を介さない。
+        現状の `search_tweets_by_tag` は manager 既定だけで draft は除外して
+        いるが、 **private filter は未統合**。 ここでは将来 search 側にも
+        visibility filter を入れる前提で、 manager の `visible_to()` で
+        フィルタした queryset でも同じ結果が出ることを確認する。
+        """
+        me = _make_user("me-priv-tag@example.com", "me_priv_tag")
+        private_author = _make_user("priv-author-tag@example.com", "priv_author_tag")
+        private_author.is_private = True
+        private_author.save()
+        tag = Tag.objects.create(
+            name="priv-secret-735",
+            display_name="PS",
+            is_approved=True,
+        )
+        t = Tweet.objects.create(author=private_author, body="PRIVATE-TAG-SECRET")
+        t.tags.add(tag)
+        # manager の visible_to で me から見たら鍵アカ tweet は出ないこと
+        visible_ids = list(
+            Tweet.objects.filter(tags__name="priv-secret-735")
+            .visible_to(me)
+            .values_list("id", flat=True)
+        )
+        assert t.id not in visible_ids
+
+
+# ---------------------------------------------------------------------------
 # compose_tweet_draft
 # ---------------------------------------------------------------------------
 

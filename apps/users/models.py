@@ -105,6 +105,20 @@ class User(AbstractUser):
         help_text=_("Number of users this user follows."),
     )
 
+    # ---- #735 鍵アカ (非公開アカウント) ----
+    # spec: docs/specs/private-account-spec.md §2.1
+    # True にすると新規 follow が承認制 (Follow.status=pending) になり、
+    # 既存 follower は維持される。 鍵アカ user の tweet は承認済み follower
+    # + 本人のみ閲覧可能 (Tweet.objects.visible_to(viewer) で判定)。
+    is_private = models.BooleanField(
+        verbose_name=_("Is Private (鍵アカ)"),
+        default=False,
+        help_text=_(
+            "Whether this account is private. New follow requests require "
+            "approval, and only approved followers can see this user's tweets."
+        ),
+    )
+
     # ---- 課金 / オンボーディング ----
     is_premium = models.BooleanField(
         verbose_name=_("Is Premium"),

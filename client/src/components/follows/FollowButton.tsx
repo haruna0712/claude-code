@@ -25,6 +25,16 @@ interface FollowButtonProps {
 	targetHandle: string;
 	/** 初期 follow 状態 (PublicProfile.is_following 由来)。未指定なら false。 */
 	initialIsFollowing?: boolean;
+	/**
+	 * #735: 初期 follow 状態の詳細 (PublicProfile.follow_status 由来)。
+	 * - `"approved"`: フォロー中
+	 * - `"pending"`: 承認待ち (鍵アカへの follow 申請後)
+	 * - `null` / undefined: フォローしていない
+	 *
+	 * 指定があれば `initialIsFollowing` より優先される (= 鍵アカ pending の
+	 * 状態を「承認待ち」 表示にする)。
+	 */
+	initialFollowStatus?: "approved" | "pending" | null;
 	/** 表示サイズ。WhoToFollow は sm、profile header は md。 */
 	size?: "sm" | "md";
 	/** click 後の callback (任意)。親が件数 badge 等を更新する場合に使う。 */
@@ -34,12 +44,24 @@ interface FollowButtonProps {
 export default function FollowButton({
 	targetHandle,
 	initialIsFollowing = false,
+	initialFollowStatus,
 	size = "md",
 	onChange,
 }: FollowButtonProps) {
 	const { profile } = useUserProfile();
 	const selfHandle = profile?.username;
-	const [isFollowing, setIsFollowing] = useState(initialIsFollowing);
+	// #735: 3 状態を初期化。 initialFollowStatus が来ていればそちら優先。
+	const initial: "approved" | "pending" | null =
+		initialFollowStatus !== undefined
+			? initialFollowStatus
+			: initialIsFollowing
+				? "approved"
+				: null;
+	const [followStatus, setFollowStatus] = useState<
+		"approved" | "pending" | null
+	>(initial);
+	const isFollowing = followStatus === "approved";
+	const isPendingRequest = followStatus === "pending";
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [followUser, { isLoading: isFollowingPending }] =
 		useFollowUserMutation();
@@ -52,20 +74,30 @@ export default function FollowButton({
 
 	const handleClick = async () => {
 		setErrorMessage(null);
-		const willFollow = !isFollowing;
-		// 楽観 UI: 状態を先に切り替える
-		setIsFollowing(willFollow);
-		onChange?.(willFollow);
+		// #735: 3 状態間の遷移:
+		// - approved | pending → null (= unfollow / 申請キャンセル)
+		// - null → approved (公開アカ) or pending (鍵アカ、 backend が判断)
+		const willUnfollow = followStatus !== null;
+		const optimisticNext: "approved" | "pending" | null = willUnfollow
+			? null
+			: "approved"; // 公開アカ前提で approved を仮置き。 鍵アカなら下で pending に補正
+		const previousStatus = followStatus;
+		setFollowStatus(optimisticNext);
+		onChange?.(optimisticNext === "approved");
 		try {
-			if (willFollow) {
-				await followUser(targetHandle).unwrap();
-			} else {
+			if (willUnfollow) {
 				await unfollowUser(targetHandle).unwrap();
+			} else {
+				// #735: backend response の status を見て pending or approved
+				// に確定する。
+				const res = await followUser(targetHandle).unwrap();
+				const serverStatus = res?.status ?? "approved";
+				setFollowStatus(serverStatus);
+				onChange?.(serverStatus === "approved");
 			}
 		} catch (err) {
-			// 失敗で元に戻す
-			setIsFollowing(!willFollow);
-			onChange?.(!willFollow);
+			setFollowStatus(previousStatus);
+			onChange?.(previousStatus === "approved");
 			const status = (err as { status?: number })?.status;
 			if (status === 401) {
 				setErrorMessage("ログインが必要です");
@@ -73,21 +105,30 @@ export default function FollowButton({
 				setErrorMessage("このユーザーをフォローできません");
 			} else {
 				setErrorMessage(
-					willFollow ? "フォローに失敗しました" : "フォロー解除に失敗しました",
+					willUnfollow
+						? "フォロー解除に失敗しました"
+						: "フォローに失敗しました",
 				);
 			}
 		}
 	};
 
 	const sizeClass = size === "sm" ? "px-3 py-1 text-xs" : "px-4 py-1.5 text-sm";
-	const variantClass = isFollowing
-		? "bg-transparent border border-border text-foreground hover:bg-baby_red/10 hover:text-baby_red hover:border-baby_red/40"
-		: "bg-baby_blue text-baby_white hover:bg-baby_blue/90";
+	const variantClass =
+		isFollowing || isPendingRequest
+			? "bg-transparent border border-border text-foreground hover:bg-baby_red/10 hover:text-baby_red hover:border-baby_red/40"
+			: "bg-baby_blue text-baby_white hover:bg-baby_blue/90";
+	// #735: 3 状態の label:
+	// - pending: 「承認待ち」 (click でキャンセル = follow 申請取り消し)
+	// - approved: 「フォロー中」 (click で unfollow)
+	// - null: 「フォロー」 (click で follow)
 	const label = isPending
 		? "処理中..."
-		: isFollowing
-			? "フォロー中"
-			: "フォロー"; // #408: 「フォローする」 → 「フォロー」 (X 流の短い表記)
+		: isPendingRequest
+			? "承認待ち"
+			: isFollowing
+				? "フォロー中"
+				: "フォロー";
 
 	return (
 		<div className="inline-flex flex-col items-end gap-1">

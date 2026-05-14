@@ -30,6 +30,9 @@ export interface CurrentUser {
 	// P13-04: Phase 13 自動翻訳機能 (auto-translate)
 	preferred_language: string;
 	auto_translate: boolean;
+	// #735: 鍵アカ機能。 true ならアカウント非公開。
+	// spec: docs/specs/private-account-spec.md
+	is_private: boolean;
 	date_joined: string;
 }
 
@@ -50,6 +53,8 @@ export interface UpdateProfilePayload {
 	// P13-04: 翻訳設定の更新
 	preferred_language?: string;
 	auto_translate?: boolean;
+	// #735: 鍵アカ機能の toggle。
+	is_private?: boolean;
 }
 
 export async function fetchCurrentUser(

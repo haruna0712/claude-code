@@ -58,6 +58,9 @@ urlpatterns = [
     # urls_profile 側の me/ 系も static path だが follows.urls には me/ パターン
     # が無いので衝突しない。
     path("api/v1/users/", include("apps.follows.urls")),
+    # #735: フォロー申請承認 API は handle と無関係の resource なので別 prefix。
+    # /api/v1/follows/requests/ (GET) / .../<id>/approve/ / .../<id>/reject/
+    path("api/v1/follows/", include("apps.follows.urls_requests")),
     # P1-03 #89: プロフィール API (SPEC §2)。
     # /api/v1/users/me/ (GET/PATCH) と /api/v1/users/<handle>/ (GET) を提供。
     # 認証系 (/api/v1/auth/) と分離するため apps.users.urls_profile として別登録。

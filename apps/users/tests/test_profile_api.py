@@ -58,6 +58,9 @@ EXPECTED_PUBLIC_KEYS = {
     "is_blocking",
     "is_muting",
     "user_id",
+    # #735: 鍵アカ機能。 FollowButton の 3 状態 + 「非公開アカウント」 表示用。
+    "is_private",
+    "follow_status",
 }
 
 

@@ -18,8 +18,9 @@ import logging
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.db.models import QuerySet
+from django.db.models import F, QuerySet
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import CursorPagination
@@ -81,19 +82,36 @@ class FollowView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # #735: 鍵アカ宛なら pending、 公開アカなら approved で作成。
+        # spec: docs/specs/private-account-spec.md §3.2
+        if followee.is_private:
+            initial_status = Follow.Status.PENDING
+            initial_approved_at = None
+        else:
+            initial_status = Follow.Status.APPROVED
+            initial_approved_at = timezone.now()
+
         try:
             with transaction.atomic():
-                follow, created = Follow.objects.get_or_create(follower=follower, followee=followee)
+                follow, created = Follow.objects.get_or_create(
+                    follower=follower,
+                    followee=followee,
+                    defaults={
+                        "status": initial_status,
+                        "approved_at": initial_approved_at,
+                    },
+                )
         except IntegrityError:
             # 万一の同時作成 race を idempotent 化 (UniqueConstraint で発生)。
-            # follow オブジェクト自体は payload で参照しないので fetch 不要。
             created = False
+            follow = Follow.objects.get(follower=follower, followee=followee)
 
         payload = FollowResponseSerializer(
             {
                 "follower": follower.id,
                 "followee": followee.id,
                 "created": created,
+                "status": follow.status,
             }
         ).data
         return Response(
@@ -199,3 +217,137 @@ class PopularUsersView(APIView):
         else:
             rows = get_popular_users(limit=limit)
         return Response({"results": rows})
+
+
+# ---------------------------------------------------------------------------
+# #735 鍵アカ / フォロー承認制
+# ---------------------------------------------------------------------------
+
+
+class _FollowRequestPagination(CursorPagination):
+    """`/follows/requests/` 専用 cursor pagination (= Follow queryset 用)。
+
+    FollowCursorPagination は User queryset 用に `date_joined` を ordering に
+    使っているので、 Follow queryset では FieldError になる。 こちらは
+    `created_at` を使う (Follow.created_at は auto_now_add で常にある)。
+    """
+
+    page_size = 20
+    ordering = "-created_at"
+    cursor_query_param = "cursor"
+    max_page_size = 100
+
+
+class FollowRequestsListView(ListAPIView):
+    """GET /api/v1/follows/requests/
+
+    自分宛の pending フォロー申請一覧 (鍵アカ user 用)。 新しい順で paginate。
+    spec: docs/specs/private-account-spec.md §3.3
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = _FollowRequestPagination
+
+    def get_queryset(self) -> QuerySet[Follow]:
+        return (
+            Follow.objects.filter(
+                followee=self.request.user,
+                status=Follow.Status.PENDING,
+            )
+            .select_related("follower")
+            .order_by("-created_at")
+        )
+
+    def list(self, request: Request, *args, **kwargs) -> Response:
+        qs = self.get_queryset()
+        page = self.paginate_queryset(qs)
+        rows = page if page is not None else list(qs)
+        results = [
+            {
+                "follow_id": f.id,
+                "follower": {
+                    "id": str(f.follower.id),
+                    "handle": f.follower.username,
+                    "display_name": f.follower.display_name or f.follower.username,
+                    "avatar_url": f.follower.avatar_url or "",
+                },
+                "created_at": f.created_at,
+            }
+            for f in rows
+        ]
+        if page is not None:
+            return self.get_paginated_response(results)
+        return Response({"results": results})
+
+
+class FollowRequestActionView(APIView):
+    """POST /api/v1/follows/requests/<int:follow_id>/approve|reject/
+
+    自分宛の pending Follow を承認 / 拒否する。 spec §3.4
+
+    approve: status=approved + approved_at=now() + counters +1 (signal で)
+    reject: Follow 行を物理削除 (X 仕様準拠、 audit 不要)
+    """
+
+    permission_classes = [IsAuthenticated]
+    # サブクラスで上書き
+    action: str = "approve"
+
+    def post(self, request: Request, follow_id: int) -> Response:
+        follow = (
+            Follow.objects.select_related("follower", "followee")
+            .filter(pk=follow_id, followee=request.user)
+            .first()
+        )
+        if follow is None:
+            # 自分宛でない / 存在しない → 404 (= 他人の request の存在を漏らさない)
+            return Response(
+                {"detail": "Not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if follow.status != Follow.Status.PENDING:
+            return Response(
+                {"detail": "already_processed"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if self.action == "approve":
+            # signal が status=APPROVED な行の post_save を見て counters +1 する。
+            # post_save は created=False のとき早期 return するので、 ここでは
+            # bulk update ではなく save() で渡す必要がある (signal 経由でなく)。
+            # → counters は手動で +1 する (signal の post_save は created=True
+            # のときだけ動く)。
+            follow.status = Follow.Status.APPROVED
+            follow.approved_at = timezone.now()
+            with transaction.atomic():
+                follow.save(update_fields=["status", "approved_at"])
+                # signal は created=False で早期 return するので、 手動 +1。
+                from django.contrib.auth import get_user_model
+                from django.db.models.functions import Greatest
+
+                _U = get_user_model()
+                _U.objects.filter(pk=follow.follower_id).update(
+                    following_count=Greatest(F("following_count") + 1, 0),
+                )
+                _U.objects.filter(pk=follow.followee_id).update(
+                    followers_count=Greatest(F("followers_count") + 1, 0),
+                )
+            return Response(
+                {
+                    "follow_id": follow.id,
+                    "status": follow.status,
+                    "approved_at": follow.approved_at,
+                },
+                status=status.HTTP_200_OK,
+            )
+        # reject: 物理削除
+        follow.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class FollowApproveView(FollowRequestActionView):
+    action = "approve"
+
+
+class FollowRejectView(FollowRequestActionView):
+    action = "reject"

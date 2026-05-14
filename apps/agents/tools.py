@@ -214,6 +214,9 @@ def search_tweets_by_tag(
             is_deleted=False,
             type=TweetType.ORIGINAL,
         )
+        # #735: 鍵アカ author の tweet は viewer (= agent 起動者) が approved
+        # follower でない場合は除外。 ``visible_to(user)`` で 1 行 filter で済む。
+        .visible_to(user)
         .order_by("-created_at")
         .select_related("author")
         .distinct()[: n * 3]  # block filter 後に件数が減る前提で余分に取得

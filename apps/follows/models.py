@@ -21,7 +21,17 @@ class Follow(models.Model):
 
     フォロー方向は ``follower → followee`` (follower が followee を follow している)。
     削除時は signals で User.followers_count / following_count を ``F-1`` でデクリメント。
+
+    #735 鍵アカ機能:
+    - 公開アカへの follow は即 ``status=approved`` (= 既存挙動)
+    - 鍵アカへの follow は ``status=pending`` (= 承認待ち)
+    - 承認 → ``status=approved`` + ``approved_at=now()`` + counters +1
+    - 拒否 → 行を物理削除 (= もう一度 follow 可能、 X 仕様準拠)
     """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "承認待ち"
+        APPROVED = "approved", "承認済み"
 
     follower = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -34,6 +44,24 @@ class Follow(models.Model):
         on_delete=models.CASCADE,
         related_name="follower_set",
         help_text="The user being followed.",
+    )
+    # #735: 鍵アカ承認制。 公開アカへの follow は即 approved、 鍵アカへの follow
+    # は pending → 承認 / 拒否で確定する。 既存 Follow は migration で全て
+    # approved に backfill (= 後方互換)。
+    # spec: docs/specs/private-account-spec.md §2.2
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+        default=Status.APPROVED,
+        help_text=(
+            "公開アカへの follow は即 approved、 鍵アカへの follow は pending → "
+            "承認 / 拒否で確定する。"
+        ),
+    )
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="承認時刻 (status=approved になった時刻)。 pending 中は NULL。",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

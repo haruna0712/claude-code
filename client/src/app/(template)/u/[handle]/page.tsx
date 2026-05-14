@@ -32,6 +32,14 @@ interface PublicProfile {
 	/** #296: 閲覧者が既に target を follow しているか。未ログイン時は false。
 	 *  backend PublicProfileSerializer.get_is_following で算出。 */
 	is_following: boolean;
+	/** #735: 鍵アカ機能。 true ならアカウント非公開。 */
+	is_private?: boolean;
+	/** #735: 閲覧者→target への follow status。
+	 *  - `"approved"`: フォロー中
+	 *  - `"pending"`: 承認待ち (鍵アカ申請後)
+	 *  - `null`: フォローしていない (匿名 or 未 follow)
+	 */
+	follow_status?: "approved" | "pending" | null;
 	/** #421: X 風 — フォロワー数 / フォロー中数 */
 	followers_count: number;
 	following_count: number;
@@ -267,6 +275,7 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 								<FollowButton
 									targetHandle={profile.username}
 									initialIsFollowing={profile.is_following}
+									initialFollowStatus={profile.follow_status ?? null}
 								/>
 								<StartDMButton targetHandle={profile.username} />
 								{/* Phase 4B (#448): X 風 kebab → ミュート / ブロック / 通報 */}

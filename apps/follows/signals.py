@@ -50,8 +50,15 @@ def on_follow_created(sender: type[Follow], instance: Follow, created: bool, **k
 
     P2-08: 自分の home TL キャッシュを invalidate (follow 直後に新しいフォロイーの
     ツイートが TL に反映されるよう)。
+
+    #735: 鍵アカ機能で ``status=pending`` で作成された Follow は **counter 更新
+    しない** (= 承認時に approve view 側で counters を +1 する)。 通知も「フォロー
+    申請」 として別 kind で送る (本 signal は status=approved 限定)。
     """
     if not created:
+        return
+    # #735: pending な follow は counter / 通知の対象外
+    if instance.status != Follow.Status.APPROVED:
         return
     follower_pk = instance.follower_id
     followee_pk = instance.followee_id
@@ -92,7 +99,13 @@ def on_follow_created(sender: type[Follow], instance: Follow, created: bool, **k
 
 @receiver(post_delete, sender=Follow)
 def on_follow_deleted(sender: type[Follow], instance: Follow, **kwargs: Any) -> None:
-    """Follow 削除時に followers_count / following_count を -1 (0 で clip)."""
+    """Follow 削除時に followers_count / following_count を -1 (0 で clip).
+
+    #735: pending な follow 削除 (= follow request reject) は counter 不変。
+    """
+    # #735: pending Follow は counter に算入されていない → 削除しても変動なし
+    if instance.status != Follow.Status.APPROVED:
+        return
     follower_pk = instance.follower_id
     followee_pk = instance.followee_id
     follower_obj = instance.follower
