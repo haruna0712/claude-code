@@ -91,6 +91,9 @@ urlpatterns = [
     # /mentors/me/ + /mentors/me/plans/[<id>/] を提供。 /mentors/<handle>/ (公開
     # profile) は P11-13 検索 API で追加。
     path("api/v1/mentors/", include("apps.mentorship.urls_mentors")),
+    # Phase 14 P14-04: Claude Agent (Read+Compose MVP)。 POST /agent/run と
+    # GET /agent/runs/ を提供する。
+    path("api/v1/agent/", include("apps.agents.urls")),
 ]
 
 # Sentry smoke test endpoint (P0-06). DEBUG=True の環境だけ URL 登録すること自体を
