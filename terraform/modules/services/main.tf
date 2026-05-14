@@ -95,6 +95,14 @@ locals {
     # で put 済。 万一空文字が secret に書かれていても apps.translation.services
     # の `get_translator()` が NoopTranslator に fallback するので 500 にはならない。
     { name = "OPENAI_API_KEY", valueFrom = var.secret_arns["openai/api-key"] },
+    # Phase 14 P14-07: Anthropic Claude (Read+Compose Agent MVP)。 値は
+    # ハルナさんが console.anthropic.com で取得 + put-secret-value する運用:
+    # `aws secretsmanager put-secret-value --secret-id sns/stg/anthropic/api-key`
+    # placeholder のままだと apps.agents.runner の AgentRunner.__init__ は
+    # 通るが (key 文字列が空でないため) 実 API call が 401 になる。 view は
+    # 500 generic を返すので user に内部詳細は漏れない。 ANTHROPIC_API_KEY が
+    # 完全に空文字なら AgentDisabledError → 503 で kill switch として動く。
+    { name = "ANTHROPIC_API_KEY", valueFrom = var.secret_arns["anthropic/api-key"] },
   ]
 
   # Next.js (SSR) は public NEXT_PUBLIC_* のみ。Sentry DSN は build-time に build args
