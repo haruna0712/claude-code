@@ -34,6 +34,11 @@ export interface TweetMini {
 	body: string;
 	html?: string;
 	char_count?: number;
+	/**
+	 * P13-01: 自動検出された言語コード (ISO 639-1)。
+	 * 検出不可 / 短文の場合は null。 翻訳 button の表示判定に使う。
+	 */
+	language?: string | null;
 	created_at: string;
 	edit_count?: number;
 	last_edited_at?: string | null;
@@ -90,6 +95,11 @@ export interface TweetSummary {
 	 * backend が未付与の段階では undefined → 空配列扱い。
 	 */
 	bookmark_folder_ids?: number[];
+	/**
+	 * P13-01: 自動検出された言語コード (ISO 639-1)。
+	 * 検出不可 / 短文の場合は null。 翻訳 button の表示判定に使う。
+	 */
+	language?: string | null;
 }
 
 export async function createTweet(
@@ -146,4 +156,31 @@ export async function deleteTweet(
 ): Promise<void> {
 	await ensureCsrfToken(client);
 	await client.delete(`/tweets/${id}/`);
+}
+
+// ---- Phase 13 P13-03: 自動翻訳 ----
+
+export interface TweetTranslationResponse {
+	translated_text: string;
+	source_language: string;
+	target_language: string;
+	/** true なら DB cache hit (OpenAI を呼んでいない). */
+	cached: boolean;
+}
+
+/**
+ * POST /api/v1/tweets/<id>/translate/
+ *
+ * 翻訳結果を取得する。 viewer の preferred_language に翻訳される。 同一言語 /
+ * 言語検出不可は 422、 block 関係なら 403。
+ */
+export async function translateTweet(
+	id: number | string,
+	client: AxiosInstance = api,
+): Promise<TweetTranslationResponse> {
+	await ensureCsrfToken(client);
+	const res = await client.post<TweetTranslationResponse>(
+		`/tweets/${id}/translate/`,
+	);
+	return res.data;
 }

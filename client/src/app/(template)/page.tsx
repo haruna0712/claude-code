@@ -147,6 +147,7 @@ export default async function HomePage({
 				initialTab={initialTab}
 				initialTweets={initialTweets}
 				currentUserHandle={user.username}
+				currentUserPreferredLanguage={user.preferred_language}
 			/>
 		</>
 	);

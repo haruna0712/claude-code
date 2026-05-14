@@ -33,6 +33,8 @@ interface TweetCardListProps {
 	 */
 	onDescendantPosted?: (tweet: TweetSummary) => void;
 	currentUserHandle?: string;
+	/** P13-05: viewer の preferred_language (翻訳 button の表示判定に使う). */
+	currentUserPreferredLanguage?: string;
 }
 
 export default function TweetCardList({
@@ -41,6 +43,7 @@ export default function TweetCardList({
 	emptyMessage = "ツイートがありません。",
 	onDescendantPosted,
 	currentUserHandle,
+	currentUserPreferredLanguage,
 }: TweetCardListProps) {
 	const [visibleTweets, setVisibleTweets] = useState(tweets);
 	useEffect(() => {
@@ -68,6 +71,7 @@ export default function TweetCardList({
 					setsize={visibleTweets.length}
 					onDescendantPosted={onDescendantPosted}
 					currentUserHandle={currentUserHandle}
+					currentUserPreferredLanguage={currentUserPreferredLanguage}
 					onTimelineItemRemoved={handleTimelineItemRemoved}
 				/>
 			))}

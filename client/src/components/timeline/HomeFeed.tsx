@@ -31,6 +31,8 @@ interface HomeFeedProps {
 	initialTab: TabValue;
 	initialTweets: TweetSummary[];
 	currentUserHandle?: string;
+	/** P13-05: viewer の preferred_language (翻訳 button の表示判定に使う). */
+	currentUserPreferredLanguage?: string;
 }
 
 /**
@@ -49,6 +51,7 @@ export default function HomeFeed({
 	initialTab,
 	initialTweets,
 	currentUserHandle,
+	currentUserPreferredLanguage,
 }: HomeFeedProps) {
 	const [activeTab, setActiveTab] = useState<TabValue>(initialTab);
 	const [tweets, setTweets] = useState<TweetSummary[]>(
@@ -153,6 +156,7 @@ export default function HomeFeed({
 								setsize={tweets.length}
 								onDescendantPosted={handleDescendantPosted}
 								currentUserHandle={currentUserHandle}
+								currentUserPreferredLanguage={currentUserPreferredLanguage}
 								onTimelineItemRemoved={handleTimelineItemRemoved}
 							/>
 						))}
