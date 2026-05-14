@@ -89,6 +89,18 @@ class AgentRun(models.Model):
             "user には generic message を返し、 詳細はここに保存。"
         ),
     )
+    # P14 follow-up (#732): Claude が compose_tweet_draft を呼ばずに end_turn
+    # した場合 (= tool では解けない prompt) 、 Claude の text 返答をここに
+    # 保存して frontend で「Claude より:」 として表示する。 draft_text が
+    # 空のときの説明にあたる。
+    agent_message = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "compose_tweet_draft を呼ばずに end_turn したとき、 Claude が"
+            " 返した text response。 draft_text が空のとき用の説明。"
+        ),
+    )
     created_at = models.DateTimeField(
         auto_now_add=True,
         db_index=False,  # composite index (user, -created_at) でカバー

@@ -27,6 +27,12 @@ export interface AgentRunResult {
 	cache_creation_input_tokens: number;
 	cost_usd: number;
 	error: string;
+	/**
+	 * Claude が `compose_tweet_draft` を呼ばずに end_turn したとき返す text
+	 * 説明 (例: 「TL に最近の投稿が無くて下書きを作れません」)。 draft_text
+	 * が空のとき UI で「Claude より:」 として表示する (#732)。
+	 */
+	agent_message: string;
 	created_at: string;
 }
 

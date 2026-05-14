@@ -32,6 +32,7 @@ class AgentRunAdmin(admin.ModelAdmin):
         "cache_creation_input_tokens",
         "cost_usd",
         "error",
+        "agent_message",
         "created_at",
     )
 

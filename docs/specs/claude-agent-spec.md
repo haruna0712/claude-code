@@ -79,6 +79,10 @@ class AgentRun(models.Model):
     cache_creation_input_tokens = models.IntegerField(default=0)
     cost_usd = models.DecimalField(max_digits=8, decimal_places=6, default=0)
     error = models.TextField(blank=True, default="")  # 失敗時の anthropic error message
+    # #732 follow-up: Claude が compose_tweet_draft を呼ばずに end_turn した
+    # 場合 (= tool では解けない prompt) 、 text 返答をここに保存。 draft_text
+    # が空のとき frontend で「Claude より:」 として表示する。
+    agent_message = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
