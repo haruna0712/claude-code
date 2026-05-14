@@ -30,6 +30,7 @@ import {
 	MessageSquare,
 	Search,
 	Settings,
+	Sparkles,
 	User,
 	UserSearch,
 	Users,
@@ -85,6 +86,10 @@ const NAV_ITEMS: NavItemDef[] = [
 	{ href: "/mentor/wanted", label: "メンター募集", Icon: Handshake },
 	// Phase 11-B (P11-14): mentor 検索 (anon 可)。 「募集」 と区別する label。
 	{ href: "/mentors", label: "メンターを探す", Icon: Users },
+	// Phase 14 (P14-05): Claude Agent。 ログイン必須 (Anthropic 課金で
+	// per-user 10/day 制限)。 leftNavLinks (X 風 LeftNavbar) と同 entry を
+	// A direction の home にも明示する。
+	{ href: "/agent", label: "Agent", Icon: Sparkles, requiresAuth: true },
 ];
 
 function BrandMark({ size = 22 }: { size?: number }) {
