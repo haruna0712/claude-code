@@ -44,6 +44,7 @@ class AgentRunSummarySerializer(serializers.ModelSerializer):
             "cache_creation_input_tokens",
             "cost_usd",
             "error",
+            "agent_message",
             "created_at",
         ]
         read_only_fields = fields

@@ -208,43 +208,78 @@ export default function AgentPanel({ initialHistory = [] }: AgentPanelProps) {
 						</div>
 					) : null}
 
-					<Textarea
-						id="agent-draft"
-						rows={4}
-						value={draftEdit}
-						onChange={(e) => setDraftEdit(e.target.value)}
-						aria-describedby="agent-draft-counter"
-						aria-invalid={draftOver ? "true" : "false"}
-					/>
-					<p
-						id="agent-draft-counter"
-						className={
-							draftOver
-								? "text-sm text-destructive"
-								: "text-xs text-[color:var(--a-text-subtle)]"
-						}
-					>
-						{draftLen} / {DRAFT_MAX}
-					</p>
+					{result.draft_text ? (
+						<>
+							<Textarea
+								id="agent-draft"
+								rows={4}
+								value={draftEdit}
+								onChange={(e) => setDraftEdit(e.target.value)}
+								aria-describedby="agent-draft-counter"
+								aria-invalid={draftOver ? "true" : "false"}
+							/>
+							<p
+								id="agent-draft-counter"
+								className={
+									draftOver
+										? "text-sm text-destructive"
+										: "text-xs text-[color:var(--a-text-subtle)]"
+								}
+							>
+								{draftLen} / {DRAFT_MAX}
+							</p>
 
-					<div className="flex items-center justify-end gap-2">
-						<Button type="button" variant="secondary" onClick={onReset}>
-							リセット
-						</Button>
-						<Button
-							type="button"
-							onClick={onPostDraft}
-							disabled={isPosting || draftOver || !draftEdit.trim()}
-							className="inline-flex items-center gap-1.5"
+							<div className="flex items-center justify-end gap-2">
+								<Button type="button" variant="secondary" onClick={onReset}>
+									リセット
+								</Button>
+								<Button
+									type="button"
+									onClick={onPostDraft}
+									disabled={isPosting || draftOver || !draftEdit.trim()}
+									className="inline-flex items-center gap-1.5"
+								>
+									{isPosting ? (
+										<Loader2
+											className="size-4 animate-spin"
+											aria-hidden="true"
+										/>
+									) : (
+										<Send className="size-4" aria-hidden="true" />
+									)}
+									{isPosting ? "投稿中…" : "これを投稿"}
+								</Button>
+							</div>
+						</>
+					) : (
+						/* #732: draft が空のとき、 Claude の text 返答 (agent_message)
+						 * を「Claude より:」 として表示して、 user に「なぜ作れなかったか」
+						 * を伝える。 agent_message も空ならフォールバック文。 */
+						<div
+							role="note"
+							className="grid gap-2 rounded-md border border-dashed border-[color:var(--a-border)] bg-[color:var(--a-bg-muted)] p-3"
 						>
-							{isPosting ? (
-								<Loader2 className="size-4 animate-spin" aria-hidden="true" />
-							) : (
-								<Send className="size-4" aria-hidden="true" />
-							)}
-							{isPosting ? "投稿中…" : "これを投稿"}
-						</Button>
-					</div>
+							<div
+								className="font-medium"
+								style={{ fontSize: 12, color: "var(--a-text)" }}
+							>
+								Claude より:
+							</div>
+							<div
+								className="whitespace-pre-wrap text-[color:var(--a-text-muted)]"
+								style={{ fontSize: 13 }}
+							>
+								{result.agent_message
+									? result.agent_message
+									: "今回は tweet 下書きを作れませんでした。 prompt をもう少し具体的にして (例:「Python 3.13 の新機能を 1 tweet」) 再度お試しください。"}
+							</div>
+							<div className="flex items-center justify-end gap-2 pt-1">
+								<Button type="button" variant="secondary" onClick={onReset}>
+									閉じる
+								</Button>
+							</div>
+						</div>
+					)}
 				</section>
 			) : null}
 
@@ -270,6 +305,10 @@ export default function AgentPanel({ initialHistory = [] }: AgentPanelProps) {
 								{r.draft_text ? (
 									<div className="text-[color:var(--a-text-muted)]">
 										→ {r.draft_text}
+									</div>
+								) : r.agent_message ? (
+									<div className="text-[color:var(--a-text-muted)]">
+										→ (Claude より) {r.agent_message}
 									</div>
 								) : r.error ? (
 									<div className="text-destructive">→ エラー: {r.error}</div>

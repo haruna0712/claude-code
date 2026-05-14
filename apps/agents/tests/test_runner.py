@@ -330,3 +330,56 @@ class TestAgentRunnerErrors:
         assert run.tools_called == []
         assert run.input_tokens == 100
         assert run.error == ""
+        assert run.agent_message == ""
+
+    @override_settings(ANTHROPIC_API_KEY="sk-test")  # pragma: allowlist secret
+    def test_end_turn_with_text_response_saved_as_agent_message(self):
+        """#732: Claude が compose を呼ばず text で end_turn したケース。
+
+        text block を AgentRun.agent_message に保存して、 frontend で
+        「Claude より:」 として表示できるようにする。
+        """
+        user = _make_user("rh-msg@example.com", "rh_msg")
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "今日の TL に最近の投稿が無いため、 下書きを作れません。"
+        with patch("anthropic.Anthropic") as mock_anthropic_cls:
+            client = MagicMock()
+            mock_anthropic_cls.return_value = client
+            client.messages.create.return_value = _make_response(
+                "end_turn",
+                [text_block],
+                {"input_tokens": 120, "output_tokens": 40},
+            )
+
+            runner = AgentRunner()
+            run = runner.run(user, "今日のニュースで気になったものを書いて")
+
+        assert run.draft_text == ""
+        assert run.tools_called == []
+        assert run.error == ""
+        assert run.agent_message == "今日の TL に最近の投稿が無いため、 下書きを作れません。"
+
+    @override_settings(ANTHROPIC_API_KEY="sk-test")  # pragma: allowlist secret
+    def test_end_turn_with_multiple_text_blocks_joined(self):
+        """text block が複数ある場合は \\n\\n で連結して agent_message に保存。"""
+        user = _make_user("rh-msg2@example.com", "rh_msg2")
+        b1 = MagicMock(type="text")
+        b1.type = "text"
+        b1.text = "情報が見つかりませんでした。"
+        b2 = MagicMock(type="text")
+        b2.type = "text"
+        b2.text = "別の表現で試してください。"
+        with patch("anthropic.Anthropic") as mock_anthropic_cls:
+            client = MagicMock()
+            mock_anthropic_cls.return_value = client
+            client.messages.create.return_value = _make_response(
+                "end_turn",
+                [b1, b2],
+                {"input_tokens": 80, "output_tokens": 30},
+            )
+
+            runner = AgentRunner()
+            run = runner.run(user, "意味不明な prompt")
+
+        assert run.agent_message == ("情報が見つかりませんでした。\n\n別の表現で試してください。")

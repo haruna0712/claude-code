@@ -51,6 +51,14 @@ SYSTEM_PROMPT = (
     " ツールで 140 字以内の tweet 下書きを返してください。\n\n"
     "ルール:\n"
     "- 直接投稿はしません。 必ず compose_tweet_draft 経由で下書きを返してください。\n"
+    "- **`compose_tweet_draft` を呼ばずに会話を終えるのは禁止です**。 read 系ツールが"
+    "  空 / エラーを返した場合でも、 「データが無い旨を踏まえた 1 文の tweet 下書き」"
+    "  を user の prompt に沿って生成し、 必ず `compose_tweet_draft` で返してください"
+    "  (例: 「今日のニュース」 と聞かれて TL が空なら、 一般的な感想 / 質問 / 投げかけ"
+    "  形式の tweet を 1 つ作る)。\n"
+    "- どうしても tweet として成立しない (= ツールでは情報源が無く、 一般的な投稿も"
+    "  作りようがない) 場合のみ、 compose_tweet_draft を呼ばずに end_turn して、"
+    "  代わりに **なぜ draft を作れないかをユーザーに 1〜2 文の text で説明** してください。\n"
     "- 1 回の run でツールは最大 5 回まで。 同じツールを多用しないでください。\n"
     "- 出力言語は user の preferred_language (デフォルト 日本語) に合わせてください。\n"
     "- DM の本文は読めません (`read_my_notifications` の DM 種別は本文非表示)。\n"
@@ -287,7 +295,17 @@ class AgentRunner:
 
             if response.stop_reason != "tool_use":
                 # tool_use 以外で停止 (end_turn / max_tokens 等)。 compose
-                # まで届かなかったので draft_text は空のまま終わる。
+                # まで届かなかったので draft_text は空。 ただし Claude が
+                # 説明 text を返している場合があるので agent_message に保存し
+                # て frontend で「Claude より:」 として表示する (#732)。
+                texts: list[str] = []
+                for block in response.content:
+                    if getattr(block, "type", None) == "text":
+                        text = getattr(block, "text", "") or ""
+                        if text.strip():
+                            texts.append(text)
+                if texts:
+                    run.agent_message = "\n\n".join(texts).strip()
                 break
 
             # assistant の content (text + tool_use blocks) を messages に append
@@ -350,6 +368,7 @@ class AgentRunner:
                 "cache_creation_input_tokens",
                 "cost_usd",
                 "draft_text",
+                "agent_message",
             ]
         )
 

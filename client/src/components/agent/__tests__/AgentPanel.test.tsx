@@ -69,6 +69,7 @@ const sampleRun = {
 	cache_creation_input_tokens: 0,
 	cost_usd: 0.0006,
 	error: "",
+	agent_message: "",
 	created_at: "2026-05-14T00:00:00Z",
 };
 
@@ -201,5 +202,52 @@ describe("AgentPanel (P14-05)", () => {
 		expect(
 			screen.getByRole("button", { name: /これを投稿|投稿中/ }),
 		).toBeDisabled();
+	});
+
+	it("shows 'Claude より:' message when draft_text empty and agent_message present (#732)", async () => {
+		runAgentMock.mockResolvedValueOnce({
+			...sampleRun,
+			draft_text: "",
+			agent_message: "今日の TL に最近の投稿が無いため、 下書きを作れません。",
+			tools_called: ["read_home_timeline"],
+		});
+		render(<AgentPanel />);
+		await userEvent.type(
+			screen.getByLabelText("やりたいことを自然言語で"),
+			"今日のニュースの感想",
+		);
+		await userEvent.click(screen.getByRole("button", { name: "Agent 起動" }));
+
+		await screen.findByText("Claude より:");
+		// 結果 panel + 履歴 panel の両方に出るので、 少なくとも 1 件出現を確認
+		expect(
+			screen.getAllByText(/今日の TL に最近の投稿が無いため/).length,
+		).toBeGreaterThan(0);
+		// 投稿 button は出てこない (draft 不在)
+		expect(
+			screen.queryByRole("button", { name: /これを投稿/ }),
+		).not.toBeInTheDocument();
+		// 代わりに「閉じる」 button が出る
+		expect(screen.getByRole("button", { name: "閉じる" })).toBeInTheDocument();
+	});
+
+	it("falls back to default copy when both draft_text and agent_message empty", async () => {
+		runAgentMock.mockResolvedValueOnce({
+			...sampleRun,
+			draft_text: "",
+			agent_message: "",
+			tools_called: [],
+		});
+		render(<AgentPanel />);
+		await userEvent.type(
+			screen.getByLabelText("やりたいことを自然言語で"),
+			"test",
+		);
+		await userEvent.click(screen.getByRole("button", { name: "Agent 起動" }));
+
+		await screen.findByText("Claude より:");
+		expect(
+			screen.getByText(/今回は tweet 下書きを作れませんでした/),
+		).toBeInTheDocument();
 	});
 });
