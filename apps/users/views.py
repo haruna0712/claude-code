@@ -3,9 +3,11 @@ import math
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db.models import FloatField, Q, QuerySet
+from django.db import transaction
+from django.db.models import F, FloatField, Q, QuerySet
 from django.db.models.expressions import RawSQL
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from djoser.social.views import ProviderAuthView
 from rest_framework import serializers, status
 from rest_framework.exceptions import NotAuthenticated, ValidationError
@@ -491,14 +493,49 @@ class MeView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def patch(self, request: Request, *args, **kwargs) -> Response:
+        # #735: 鍵化解除を検知して、 自分宛の pending follow を全部 approved に
+        # 自動昇格させる。 spec: docs/specs/private-account-spec.md §3.1
+        was_private = bool(getattr(request.user, "is_private", False))
         serializer = CustomUserSerializer(
             request.user,
             data=request.data,
             partial=True,
         )
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        with transaction.atomic():
+            serializer.save()
+            request.user.refresh_from_db()
+            if was_private and not request.user.is_private:
+                _auto_approve_pending_follows(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+def _auto_approve_pending_follows(user) -> None:
+    """#735: 鍵を外したときに自分宛の pending follow を一括 approved 化する。
+
+    counters は signal 経由ではなく **手動で +N** する (signal は created=True
+    の post_save 1 回しか動かないため、 bulk update では発火しない)。
+    """
+    from django.contrib.auth import get_user_model
+    from django.db.models.functions import Greatest
+
+    from apps.follows.models import Follow
+
+    User = get_user_model()
+    now = timezone.now()
+    pending_qs = Follow.objects.filter(followee=user, status=Follow.Status.PENDING)
+    pending = list(pending_qs.values_list("follower_id", flat=True))
+    if not pending:
+        return
+    pending_qs.update(status=Follow.Status.APPROVED, approved_at=now)
+    # followee (= user) の followers_count += len(pending)
+    User.objects.filter(pk=user.pk).update(
+        followers_count=Greatest(F("followers_count") + len(pending), 0),
+    )
+    # 各 follower の following_count += 1
+    User.objects.filter(pk__in=pending).update(
+        following_count=Greatest(F("following_count") + 1, 0),
+    )
 
 
 class CompleteOnboardingView(APIView):

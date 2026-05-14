@@ -47,7 +47,7 @@ class _RepostResponseSerializer(drf_serializers.Serializer):
     created = drf_serializers.BooleanField(read_only=True)
 
 
-def _resolve_target(tweet_id: int) -> Tweet:
+def _resolve_target(tweet_id: int, viewer: Any | None = None) -> Tweet:
     """元ツイートを取得する (alive のみ、削除済み / 存在しないなら 404)。
 
     #346 (X 互換): tweet_id が REPOST tweet を指している場合、その REPOST 自身
@@ -59,6 +59,9 @@ def _resolve_target(tweet_id: int) -> Tweet:
     解決後の target は ORIGINAL / QUOTE / REPLY のいずれかになる。万一壊れた
     データでチェーン (REPOST→REPOST) が残っていた場合は wrong-result を返す
     リスクがあるため、解決後の type を再チェックして 404 にする。
+
+    #735: ``viewer`` が指定されていれば、 鍵アカ author の tweet を非 follower
+    が repost / quote / reply しようとしたとき 404 隠蔽する。
     """
     target = get_object_or_404(Tweet, pk=tweet_id)
     if target.type == TweetType.REPOST:
@@ -77,6 +80,22 @@ def _resolve_target(tweet_id: int) -> Tweet:
                 extra={"original_id": tweet_id, "resolved_id": target.pk},
             )
             raise Http404("リポストのチェーンは許容されません")
+    # #735: 鍵アカ user の tweet visibility check (= 404 隠蔽)。
+    if (
+        viewer is not None
+        and getattr(viewer, "is_authenticated", False)
+        and target.author.is_private
+        and target.author_id != viewer.pk
+    ):
+        from apps.follows.models import Follow
+
+        approved = Follow.objects.filter(
+            follower=viewer,
+            followee_id=target.author_id,
+            status=Follow.Status.APPROVED,
+        ).exists()
+        if not approved:
+            raise Http404("Not found.")
     return target
 
 
@@ -97,7 +116,7 @@ class RepostView(APIView):
     authentication_classes = [CookieAuthentication]
 
     def post(self, request: Request, tweet_id: int) -> Response:
-        target = _resolve_target(tweet_id)
+        target = _resolve_target(tweet_id, request.user)
         if (resp := _check_block_or_403(request.user, target)) is not None:
             return resp
 
@@ -138,7 +157,7 @@ class RepostView(APIView):
         )
 
     def delete(self, request: Request, tweet_id: int) -> Response:
-        target = _resolve_target(tweet_id)
+        target = _resolve_target(tweet_id, request.user)
         deleted, _ = Tweet.objects.filter(
             author=request.user,
             type=TweetType.REPOST,
@@ -167,7 +186,7 @@ class _QuoteOrReplyBaseView(APIView):
     fk_field_name: str = ""
 
     def post(self, request: Request, tweet_id: int) -> Response:
-        target = _resolve_target(tweet_id)
+        target = _resolve_target(tweet_id, request.user)
         if (resp := _check_block_or_403(request.user, target)) is not None:
             return resp
 

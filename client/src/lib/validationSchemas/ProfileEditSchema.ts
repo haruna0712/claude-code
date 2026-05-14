@@ -49,6 +49,8 @@ export const profileEditSchema = z.object({
 	// P13-04: 翻訳設定
 	preferred_language: z.enum(PREFERRED_LANGUAGES).default("ja"),
 	auto_translate: z.boolean().default(false),
+	// #735: 鍵アカ機能。 ON でアカウント非公開化、 新規 follow が承認制になる。
+	is_private: z.boolean().default(false),
 });
 
 export type TProfileEditSchema = z.infer<typeof profileEditSchema>;

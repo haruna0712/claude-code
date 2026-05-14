@@ -43,8 +43,14 @@ class PublicUserMiniSerializer(serializers.ModelSerializer):
 
 
 class FollowResponseSerializer(serializers.Serializer):
-    """POST /follow/ の戻り値 (idempotent: created or existing)."""
+    """POST /follow/ の戻り値 (idempotent: created or existing)。
+
+    #735: ``status`` を含める (= 公開アカなら ``"approved"``、 鍵アカなら
+    ``"pending"``)。 frontend FollowButton が 3 状態 (承認待ち / フォロー中 /
+    フォローする) を切り替えるために使う。
+    """
 
     follower = serializers.UUIDField(read_only=True)
     followee = serializers.UUIDField(read_only=True)
     created = serializers.BooleanField(read_only=True)
+    status = serializers.CharField(read_only=True)

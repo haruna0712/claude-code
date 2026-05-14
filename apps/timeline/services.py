@@ -130,8 +130,14 @@ def _query_following(user, blocked_ids: set[int], limit: int) -> list[Tweet]:
     qs = (
         Tweet.objects.select_related("author", "repost_of")
         .filter(
-            # フォロイーのツイート OR 自分のツイート
-            Q(author__follower_set__follower=user) | Q(author=user),
+            # #735: フォロイー (= approved follow されている) のツイート OR 自分のツイート。
+            # pending な follow からは TL に出さない (鍵アカの follow 中に
+            # tweet を覗くのを防ぐ)。
+            Q(
+                author__follower_set__follower=user,
+                author__follower_set__status="approved",
+            )
+            | Q(author=user),
             created_at__gte=cutoff,
             # #334: reply は home TL に出さない
             type__in=[TweetType.ORIGINAL, TweetType.REPOST, TweetType.QUOTE],
@@ -164,6 +170,12 @@ def _query_global(blocked_ids: set[int], exclude_author_id: int | None, limit: i
     base_qs = Tweet.objects.select_related("author").filter(
         created_at__gte=cutoff,
         type__in=[TweetType.ORIGINAL, TweetType.QUOTE],
+        # #735: global 候補は公開アカ user の tweet のみ。 鍵アカ user の tweet
+        # は viewer が approved follower かどうか判定できない (= viewer 情報を
+        # `_query_global` に渡していないので、 接続不可)。 ここでは安全側に
+        # 倒して **公開アカのみ** に絞る (= 鍵アカ tweet を見たい場合は
+        # _query_following で approved follow 経由で来る)。
+        author__is_private=False,
     )
     if blocked_ids:
         base_qs = base_qs.exclude(author_id__in=blocked_ids)

@@ -66,6 +66,7 @@ const BASE_USER: CurrentUser = {
 	linkedin_url: "",
 	preferred_language: "ja",
 	auto_translate: false,
+	is_private: false,
 	date_joined: "2026-01-01T00:00:00Z",
 };
 

@@ -96,6 +96,8 @@ export default function ProfileEditForm({ initialUser }: ProfileEditFormProps) {
 				? (initialUser.preferred_language as PreferredLanguage)
 				: "ja") as PreferredLanguage,
 			auto_translate: initialUser.auto_translate ?? false,
+			// #735: 鍵アカ機能の初期値 (default False)。
+			is_private: initialUser.is_private ?? false,
 		},
 	});
 
@@ -269,6 +271,31 @@ export default function ProfileEditForm({ initialUser }: ProfileEditFormProps) {
 						>
 							ON にすると、 異なる言語のツイートを自動的に翻訳します。
 							翻訳結果は「原文を表示」 で元に戻せます。
+						</p>
+					</div>
+				</div>
+
+				{/* #735: 鍵アカ toggle */}
+				<div className="flex items-start gap-2 border-t border-border pt-4">
+					<input
+						id="is_private"
+						type="checkbox"
+						{...register("is_private")}
+						className="mt-1 size-4 rounded border-input"
+						aria-describedby="is_private_help"
+					/>
+					<div className="grid gap-1">
+						<label htmlFor="is_private" className="text-sm font-medium">
+							アカウントを非公開にする (鍵アカ)
+						</label>
+						<p
+							id="is_private_help"
+							className="text-[color:var(--a-text-subtle)]"
+							style={{ fontSize: 12 }}
+						>
+							ON にすると新規フォロー申請が承認制になります。 既存のフォロワー
+							はそのまま継続します。 鍵アカのツイートは承認済みフォロワーと
+							あなた本人だけが閲覧できます。
 						</p>
 					</div>
 				</div>

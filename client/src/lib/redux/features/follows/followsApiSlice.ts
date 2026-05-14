@@ -10,9 +10,21 @@
  */
 import { baseApiSlice } from "@/lib/redux/features/api/baseApiSlice";
 
+/**
+ * #735: follow POST の response shape (FollowResponseSerializer)。
+ * 公開アカへの follow は status="approved"、 鍵アカへの follow は
+ * status="pending" を返す。
+ */
+export interface FollowMutationResponse {
+	follower?: string;
+	followee?: string;
+	created?: boolean;
+	status: "approved" | "pending";
+}
+
 export const followsApiSlice = baseApiSlice.injectEndpoints({
 	endpoints: (builder) => ({
-		followUser: builder.mutation<void, string>({
+		followUser: builder.mutation<FollowMutationResponse, string>({
 			query: (handle) => ({
 				url: `/users/${handle}/follow/`,
 				method: "POST",

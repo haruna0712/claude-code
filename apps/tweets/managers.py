@@ -44,6 +44,39 @@ class TweetQuerySet(models.QuerySet):
 
         return self.filter(author=user, published_at__isnull=True)
 
+    def visible_to(self, viewer) -> TweetQuerySet:
+        """``viewer`` が見られる tweet のみに絞るチェーンメソッド。
+
+        spec: docs/specs/private-account-spec.md §2.4
+
+        #735 鍵アカ機能の visibility 判定:
+        - 公開アカ (``author.is_private=False``) の tweet: 誰でも見える
+        - 鍵アカ author の tweet:
+          - viewer が author 本人 → 見える
+          - viewer が approved follower → 見える
+          - それ以外 (匿名 / 非 follower / pending) → 見えない
+
+        viewer が None (or 未認証) のときは公開アカのみを返す。 view 層から:
+
+            qs = Tweet.objects.all().visible_to(request.user)
+
+        の形で呼ぶ運用。 manager の `get_queryset()` で勝手に viewer を取れない
+        (request context は無い) ので、 viewer に応じた filter は view 層責務。
+        """
+        from django.db.models import Q
+
+        if viewer is None or not getattr(viewer, "is_authenticated", False):
+            return self.filter(author__is_private=False)
+        return self.filter(
+            Q(author__is_private=False)
+            | Q(author=viewer)
+            | Q(
+                author__is_private=True,
+                author__follower_set__follower=viewer,
+                author__follower_set__status="approved",
+            )
+        ).distinct()
+
 
 class TweetManager(models.Manager.from_queryset(TweetQuerySet)):
     """既定で `is_deleted=False` + `published_at__isnull=False` の Tweet のみを返す Manager。

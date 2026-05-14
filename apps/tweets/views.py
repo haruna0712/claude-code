@@ -161,6 +161,13 @@ class TweetViewSet(viewsets.ModelViewSet):
         if request is None:
             return qs
 
+        # #735: 公開 read action (list / retrieve) に visible_to で鍵アカ filter
+        # を適用。 state 変更系 (update / destroy / publish / drafts) は author
+        # scope を action 内で enforce するので、 ここでは applique しない
+        # (= 自分の鍵アカ tweet が編集できなくなる事故を防ぐ)。
+        if self.action in _READ_ACTIONS:
+            qs = qs.visible_to(request.user)
+
         author = request.query_params.get("author")
         if author:
             # username は大文字小文字を区別しない (users 側と揃える)
@@ -227,6 +234,29 @@ class TweetViewSet(viewsets.ModelViewSet):
                 {"detail": "Not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        # #735: 鍵アカ user の tweet は本人 / approved follower のみ閲覧可能。
+        # 非 follower / 匿名 / pending は 404 隠蔽 (= 存在を漏らさない)。
+        if tweet.author.is_private:
+            viewer = request.user
+            if not viewer.is_authenticated:
+                return Response(
+                    {"detail": "Not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            if tweet.author_id != viewer.pk:
+                from apps.follows.models import Follow
+
+                is_approved_follower = Follow.objects.filter(
+                    follower=viewer,
+                    followee_id=tweet.author_id,
+                    status=Follow.Status.APPROVED,
+                ).exists()
+                if not is_approved_follower:
+                    return Response(
+                        {"detail": "Not found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
 
         serializer = self.get_serializer(tweet)
         return Response(serializer.data, status=status.HTTP_200_OK)
