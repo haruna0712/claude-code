@@ -15,6 +15,20 @@ const optionalUrl = z
 	.optional()
 	.default("");
 
+// P13-04: backend の User.PREFERRED_LANGUAGE_CHOICES と同期。
+// 増やすときは backend の models.py 側の choices にも追加する必要がある
+// (drift すると PATCH で 400 になる)。
+export const PREFERRED_LANGUAGES = [
+	"ja",
+	"en",
+	"ko",
+	"zh-cn",
+	"es",
+	"fr",
+	"pt",
+] as const;
+export type PreferredLanguage = (typeof PREFERRED_LANGUAGES)[number];
+
 export const profileEditSchema = z.object({
 	display_name: z
 		.string()
@@ -32,6 +46,9 @@ export const profileEditSchema = z.object({
 	qiita_url: optionalUrl,
 	note_url: optionalUrl,
 	linkedin_url: optionalUrl,
+	// P13-04: 翻訳設定
+	preferred_language: z.enum(PREFERRED_LANGUAGES).default("ja"),
+	auto_translate: z.boolean().default(false),
 });
 
 export type TProfileEditSchema = z.infer<typeof profileEditSchema>;

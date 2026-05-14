@@ -68,6 +68,11 @@ class CustomUserSerializer(UserSerializer):
             "qiita_url",
             "note_url",
             "linkedin_url",
+            # P13-04: 翻訳設定 (Phase 13)。 settings/profile から PATCH で更新可能。
+            # choices による不正コードの reject は model field 由来 (DRF が自動生成する
+            # ChoiceField validator) で行われる。
+            "preferred_language",
+            "auto_translate",
             "date_joined",
         ]
         # username / email / is_premium は変更不可 (is_premium は Stripe webhook でのみ更新)。

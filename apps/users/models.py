@@ -157,6 +157,36 @@ class User(AbstractUser):
         validators=[_HTTPS_URL_VALIDATOR],
     )
 
+    # ---- P13-04: 翻訳設定 (Phase 13 自動翻訳機能) ----
+    # UI 表示言語 (ISO 639-1)。 default は ja (日本語話者向け SNS)。
+    # 翻訳 button の表示判定: tweet.language != user.preferred_language なら表示。
+    # choices で固定 list に絞ることで、 不正値 (xx 等) や frontend 側の typo を
+    # 弾く + Admin で select に出る (UX)。 spec: docs/specs/auto-translate-spec.md §4.2
+    PREFERRED_LANGUAGE_CHOICES = (
+        ("ja", "日本語"),
+        ("en", "English"),
+        ("ko", "한국어"),
+        ("zh-cn", "简体中文"),
+        ("es", "Español"),
+        ("fr", "Français"),
+        ("pt", "Português"),
+    )
+    preferred_language = models.CharField(
+        verbose_name=_("Preferred Language"),
+        max_length=8,
+        choices=PREFERRED_LANGUAGE_CHOICES,
+        default="ja",
+        help_text=_("UI display language and default translation target."),
+    )
+    # グローバル auto translate (default False、 X / Twitter と同じ opt-in)。
+    # ON のときは tweet.language != user.preferred_language の TL 表示で
+    # 自動的に翻訳済みに切り替わる (P13-07)。
+    auto_translate = models.BooleanField(
+        verbose_name=_("Auto Translate"),
+        default=False,
+        help_text=_("Automatically translate foreign-language tweets on render."),
+    )
+
     EMAIL_FIELD = "email"
     USERNAME_FIELD = "email"
 

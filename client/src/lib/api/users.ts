@@ -27,6 +27,9 @@ export interface CurrentUser {
 	qiita_url: string;
 	note_url: string;
 	linkedin_url: string;
+	// P13-04: Phase 13 自動翻訳機能 (auto-translate)
+	preferred_language: string;
+	auto_translate: boolean;
 	date_joined: string;
 }
 
@@ -44,6 +47,9 @@ export interface UpdateProfilePayload {
 	qiita_url?: string;
 	note_url?: string;
 	linkedin_url?: string;
+	// P13-04: 翻訳設定の更新
+	preferred_language?: string;
+	auto_translate?: boolean;
 }
 
 export async function fetchCurrentUser(
