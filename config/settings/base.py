@@ -123,6 +123,9 @@ LOCAL_APPS = [
     "apps.mentorship",
     # Phase 13: 自動翻訳機能 (P13-02)。 service layer のみ (model なし)。
     "apps.translation",
+    # Phase 14: Claude Agent (P14-01)。 AgentRun audit log + tool layer +
+    # AgentRunner service。 spec: docs/specs/claude-agent-spec.md
+    "apps.agents",
 ]
 
 # --- Channels / Daphne (P3-02 / Issue #227) ---
