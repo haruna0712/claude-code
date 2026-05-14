@@ -20,6 +20,7 @@ import {
 	Home,
 	MessageSquare,
 	MessagesSquare,
+	Pencil,
 	Search,
 	Sparkles,
 	User,
@@ -45,6 +46,7 @@ const ICON_MAP: Record<
 	FileText,
 	Handshake,
 	Sparkles,
+	Pencil,
 };
 
 function resolveLinkPath(

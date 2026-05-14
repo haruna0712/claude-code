@@ -75,6 +75,14 @@ export const leftNavLinks: LeftNavLink[] = [
 		requiresAuth: true,
 	},
 	{
+		// #734: 下書き機能。 ログイン必須 (本人のみ閲覧可)。
+		// spec: docs/specs/tweet-drafts-spec.md §4.3
+		path: "/drafts",
+		label: "下書き",
+		iconName: "Pencil",
+		requiresAuth: true,
+	},
+	{
 		// path は LeftNavbar 側で `/u/<self.handle>` に動的に組み替える
 		path: "",
 		label: "プロフィール",

@@ -26,6 +26,7 @@ import {
 	Home,
 	MessageSquare,
 	Menu as MenuIcon,
+	Pencil,
 	Search,
 	Sparkles,
 	User,
@@ -268,6 +269,13 @@ function DrawerNav({ onItemClick }: { onItemClick: () => void }) {
 			href: "/agent",
 			label: "Agent",
 			Icon: Sparkles,
+			requiresAuth: true,
+		},
+		// #734: 下書き機能。 mobile drawer にも明示する。
+		{
+			href: "/drafts",
+			label: "下書き",
+			Icon: Pencil,
 			requiresAuth: true,
 		},
 	];

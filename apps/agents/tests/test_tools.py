@@ -216,6 +216,67 @@ class TestSearchTweetsByTagBlockFilter:
 
 
 # ---------------------------------------------------------------------------
+# #734: 下書き (published_at IS NULL) は agent tool に露出してはならない
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestDraftsHiddenFromAgentTools:
+    """Tweet.objects manager の既定変更で draft が agent tool から自動除外される。
+
+    Manager の挙動が将来 `all_with_drafts()` に書き換えられる事故を検出する
+    回帰テスト。
+    """
+
+    def test_read_my_recent_tweets_excludes_own_drafts(self):
+        """自分の draft であっても agent には見せない (prompt injection 経由
+        漏洩を防ぐため)。"""
+        me = _make_user("me-d-rec@example.com", "me_d_rec")
+        Tweet.objects.create(author=me, body="published one")
+        Tweet.objects.create(
+            author=me,
+            body="DRAFT-SECRET",
+            published_at=None,
+        )
+        out = read_my_recent_tweets(me)
+        assert "published one" in out
+        assert "DRAFT-SECRET" not in out
+
+    def test_read_home_timeline_excludes_drafts(self):
+        me = _make_user("me-d-tl@example.com", "me_d_tl")
+        author = _make_user("auth-d-tl@example.com", "auth_d_tl")
+        Tweet.objects.create(author=author, body="public news")
+        Tweet.objects.create(
+            author=author,
+            body="DRAFT-NEWS",
+            published_at=None,
+        )
+        out = read_home_timeline(me)
+        assert "DRAFT-NEWS" not in out
+
+    def test_search_tweets_by_tag_excludes_drafts(self):
+        me = _make_user("me-d-tag@example.com", "me_d_tag")
+        tag = Tag.objects.create(
+            name="py-secret-734",
+            display_name="PY",
+            is_approved=True,
+        )
+        # 公開 tweet
+        t1 = Tweet.objects.create(author=me, body="public py tweet")
+        t1.tags.add(tag)
+        # draft tweet (同タグ)
+        t2 = Tweet.objects.create(
+            author=me,
+            body="DRAFT-PY-SECRET",
+            published_at=None,
+        )
+        t2.tags.add(tag)
+        out = search_tweets_by_tag(me, "py-secret-734")
+        assert "public py tweet" in out
+        assert "DRAFT-PY-SECRET" not in out
+
+
+# ---------------------------------------------------------------------------
 # compose_tweet_draft
 # ---------------------------------------------------------------------------
 

@@ -28,6 +28,7 @@ import {
 	Home,
 	LogOut,
 	MessageSquare,
+	Pencil,
 	Search,
 	Settings,
 	Sparkles,
@@ -90,6 +91,9 @@ const NAV_ITEMS: NavItemDef[] = [
 	// per-user 10/day 制限)。 leftNavLinks (X 風 LeftNavbar) と同 entry を
 	// A direction の home にも明示する。
 	{ href: "/agent", label: "Agent", Icon: Sparkles, requiresAuth: true },
+	// #734: 下書き機能。 ログイン必須 (本人のみ閲覧可)。
+	// spec: docs/specs/tweet-drafts-spec.md §4.3
+	{ href: "/drafts", label: "下書き", Icon: Pencil, requiresAuth: true },
 ];
 
 function BrandMark({ size = 22 }: { size?: number }) {
