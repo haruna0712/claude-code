@@ -494,6 +494,10 @@ _THROTTLE_RATES_BASE = {
     # TL を眺めながら数件押す通常 UX に十分な余裕、 cache hit は OpenAI を叩かないので
     # 同一ツイートを繰り返し押しても枠は消費しない (cache miss だけがコスト要因)。
     "translate": "60/hour" if not _IS_STG else "600/hour",
+    # Phase 14 P14-04 (claude-agent-spec §6):
+    # POST /api/v1/agent/run は Anthropic 課金が発生するので per-user 10/day。
+    # stg は 100/day に緩和して E2E 動作確認しやすくする。
+    "agent_run": "10/day" if not _IS_STG else "100/day",
 }
 
 REST_FRAMEWORK = {
