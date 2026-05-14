@@ -16,5 +16,8 @@ export type {
 export { onboardingSchema } from "./OnboardingSchema";
 export type { TOnboardingSchema } from "./OnboardingSchema";
 
-export { profileEditSchema } from "./ProfileEditSchema";
-export type { TProfileEditSchema } from "./ProfileEditSchema";
+export { profileEditSchema, PREFERRED_LANGUAGES } from "./ProfileEditSchema";
+export type {
+	TProfileEditSchema,
+	PreferredLanguage,
+} from "./ProfileEditSchema";

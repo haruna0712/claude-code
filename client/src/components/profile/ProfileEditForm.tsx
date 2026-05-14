@@ -14,13 +14,27 @@ import { Textarea } from "@/components/ui/textarea";
 import type { CurrentUser } from "@/lib/api/users";
 import { updateCurrentUser } from "@/lib/api/users";
 import {
+	PREFERRED_LANGUAGES,
 	profileEditSchema,
+	type PreferredLanguage,
 	type TProfileEditSchema,
-} from "@/lib/validationSchemas";
+} from "@/lib/validationSchemas/ProfileEditSchema";
 
 interface ProfileEditFormProps {
 	initialUser: CurrentUser;
 }
+
+// P13-04: PREFERRED_LANGUAGES と同期。 backend の choices と表示名を合わせる
+// (ja: 日本語 / en: English …)。 順序は backend と同じ (ja を先頭、 主要言語順)。
+const LANGUAGE_OPTIONS: Array<{ value: PreferredLanguage; label: string }> = [
+	{ value: "ja", label: "日本語" },
+	{ value: "en", label: "English" },
+	{ value: "ko", label: "한국어" },
+	{ value: "zh-cn", label: "简体中文" },
+	{ value: "es", label: "Español" },
+	{ value: "fr", label: "Français" },
+	{ value: "pt", label: "Português" },
+];
 
 const SNS_FIELDS: Array<{
 	name: keyof Pick<
@@ -75,6 +89,13 @@ export default function ProfileEditForm({ initialUser }: ProfileEditFormProps) {
 			qiita_url: initialUser.qiita_url || "",
 			note_url: initialUser.note_url || "",
 			linkedin_url: initialUser.linkedin_url || "",
+			// P13-04: 翻訳設定の初期値 (backend default は ja / false)。
+			preferred_language: (PREFERRED_LANGUAGES.includes(
+				initialUser.preferred_language as PreferredLanguage,
+			)
+				? (initialUser.preferred_language as PreferredLanguage)
+				: "ja") as PreferredLanguage,
+			auto_translate: initialUser.auto_translate ?? false,
 		},
 	});
 
@@ -189,6 +210,59 @@ export default function ProfileEditForm({ initialUser }: ProfileEditFormProps) {
 						) : null}
 					</div>
 				))}
+			</section>
+
+			<section className="grid gap-4">
+				<h2 className="text-base font-semibold">翻訳設定</h2>
+				<p
+					className="text-[color:var(--a-text-subtle)]"
+					style={{ fontSize: 12 }}
+				>
+					UI 表示言語と異なるツイートに「翻訳」 button が出ます (Phase 13)。
+				</p>
+				<div className="grid gap-2">
+					<label htmlFor="preferred_language" className="text-sm font-medium">
+						UI 表示言語
+					</label>
+					<select
+						id="preferred_language"
+						{...register("preferred_language")}
+						className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+						aria-invalid={errors.preferred_language ? "true" : "false"}
+					>
+						{LANGUAGE_OPTIONS.map((opt) => (
+							<option key={opt.value} value={opt.value}>
+								{opt.label}
+							</option>
+						))}
+					</select>
+					{errors.preferred_language?.message ? (
+						<p className="text-sm text-destructive">
+							{errors.preferred_language.message}
+						</p>
+					) : null}
+				</div>
+				<div className="flex items-start gap-2">
+					<input
+						id="auto_translate"
+						type="checkbox"
+						{...register("auto_translate")}
+						className="mt-1 size-4 rounded border-input"
+						aria-describedby="auto_translate_help"
+					/>
+					<div className="grid gap-1">
+						<label htmlFor="auto_translate" className="text-sm font-medium">
+							自動翻訳を有効にする
+						</label>
+						<p
+							id="auto_translate_help"
+							className="text-[color:var(--a-text-subtle)]"
+							style={{ fontSize: 12 }}
+						>
+							ON にすると外国語のツイートが初期表示で翻訳されます。
+						</p>
+					</div>
+				</div>
 			</section>
 
 			<div className="flex items-center justify-end gap-3 border-t border-border pt-4">
