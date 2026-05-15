@@ -20,6 +20,9 @@ vi.mock("react-toastify", () => ({
 describe("PostDialog — reply mode", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		if (typeof window !== "undefined") {
+			window.localStorage.clear();
+		}
 	});
 
 	it("calls replyToTweet on submit", async () => {
@@ -65,6 +68,9 @@ describe("PostDialog — reply mode", () => {
 describe("PostDialog — quote mode", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		if (typeof window !== "undefined") {
+			window.localStorage.clear();
+		}
 	});
 
 	it("calls quoteTweet on submit", async () => {

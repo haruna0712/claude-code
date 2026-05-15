@@ -41,6 +41,8 @@ describe("TweetComposer 下書き保存 (#734)", () => {
 		createTweetMock.mockReset();
 		toastSuccessSpy.mockReset();
 		toastErrorSpy.mockReset();
+		// #739: autosave key が localStorage に残らないようリセット
+		localStorage.clear();
 	});
 
 	afterEach(() => {

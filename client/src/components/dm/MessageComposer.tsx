@@ -22,6 +22,7 @@ import {
 } from "react";
 
 import AttachmentUploader from "@/components/dm/AttachmentUploader";
+import { useAutoSaveDraft } from "@/hooks/useAutoSaveDraft";
 import { uploadAttachment, type ConfirmResponse } from "@/lib/dm/attachments";
 
 interface MessageComposerProps {
@@ -57,7 +58,15 @@ export default function MessageComposer({
 	placeholder = "メッセージを入力",
 	roomId,
 }: MessageComposerProps) {
-	const [value, setValue] = useState("");
+	// #739: roomId 単位で書きかけ autosave (= room を切り替えて戻ってきても残る)。
+	// roomId 未指定時は固定 key "draft" にして 1 つだけ保持 (= 接続前の dialog 等)。
+	const autosaveKey =
+		roomId !== undefined ? `composer:dm:${roomId}` : "composer:dm:draft";
+	const {
+		value,
+		setValue,
+		clear: clearValueAutosave,
+	} = useAutoSaveDraft(autosaveKey);
 	const [submitting, setSubmitting] = useState(false);
 	const [submitError, setSubmitError] = useState<string | null>(null);
 	const [attached, setAttached] = useState<AttachedFile[]>([]);
@@ -76,7 +85,8 @@ export default function MessageComposer({
 				trimmed,
 				attached.map((a) => a.id),
 			);
-			setValue("");
+			// #739: 送信成功で autosave key を消す
+			clearValueAutosave();
 			setAttached([]);
 		} catch (error: unknown) {
 			const msg = error instanceof Error ? error.message : "送信に失敗しました";
@@ -84,7 +94,7 @@ export default function MessageComposer({
 		} finally {
 			setSubmitting(false);
 		}
-	}, [value, attached, onSubmit, submitting]);
+	}, [value, attached, onSubmit, submitting, clearValueAutosave]);
 
 	const onKeyDown = useCallback(
 		(event: KeyboardEvent<HTMLTextAreaElement>) => {

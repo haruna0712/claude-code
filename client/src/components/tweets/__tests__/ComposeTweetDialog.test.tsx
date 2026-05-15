@@ -52,6 +52,9 @@ vi.mock("@/components/tweets/TweetComposer", () => ({
 describe("ComposeTweetDialog", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		if (typeof window !== "undefined") {
+			window.localStorage.clear();
+		}
 	});
 
 	it("renders a dialog with TweetComposer when open=true", () => {

@@ -22,6 +22,8 @@ const uploadAttachmentMock = vi.mocked(attachments.uploadAttachment);
 
 beforeEach(() => {
 	uploadAttachmentMock.mockReset();
+	// #739: autosave が localStorage に書き込むため、 テスト間で leak を防止
+	localStorage.clear();
 });
 
 vi.mock("@/components/dm/AttachmentUploader", () => ({
