@@ -73,16 +73,19 @@ export function useAutoSaveDraft(
 
 ### 2.4 key 命名規約
 
-| Composer                        | Key                             | 一意性            |
-| ------------------------------- | ------------------------------- | ----------------- |
-| TweetComposer (新規 tweet)      | `composer:tweet:new`            | 1 ユーザー 1 入力 |
-| PostDialog (reply)              | `composer:reply:<tweet_id>`     | tweet 毎          |
-| PostDialog (quote)              | `composer:quote:<tweet_id>`     | tweet 毎          |
-| MessageComposer (DM)            | `composer:dm:<room_id>`         | room 毎           |
-| ArticleEditor (新規)            | `composer:article:new`          | 1 ユーザー 1 新規 |
-| ArticleEditor (編集)            | `composer:article:<article_id>` | 記事 毎           |
-| ThreadComposer (掲示板スレ立て) | `composer:thread:new`           | 1 ユーザー 1 新規 |
-| PostComposer (掲示板 reply)     | `composer:post:<thread_id>`     | thread 毎         |
+| Composer                    | Key                                                          | 一意性            |
+| --------------------------- | ------------------------------------------------------------ | ----------------- |
+| TweetComposer (新規 tweet)  | `composer:tweet:new`                                         | 1 ユーザー 1 入力 |
+| PostDialog (reply)          | `composer:reply:<tweet_id>`                                  | tweet 毎          |
+| PostDialog (quote)          | `composer:quote:<tweet_id>`                                  | tweet 毎          |
+| MessageComposer (DM)        | `composer:dm:<room_id>` (未確定 room は `composer:dm:draft`) | room 毎           |
+| ArticleEditor (新規) title  | `composer:article:new:title`                                 | 1 ユーザー 1 新規 |
+| ArticleEditor (新規) body   | `composer:article:new:body`                                  | 同上              |
+| ArticleEditor (編集) title  | `composer:article:edit:<slug>:title`                         | 記事 slug 毎      |
+| ArticleEditor (編集) body   | `composer:article:edit:<slug>:body`                          | 同上              |
+| ThreadComposer title        | `composer:thread:<board_slug>:new:title`                     | board 毎          |
+| ThreadComposer body         | `composer:thread:<board_slug>:new:body`                      | 同上              |
+| PostComposer (掲示板 reply) | `composer:post:<thread_id>`                                  | thread 毎         |
 
 prefix `composer:` で揃えることで、 デバッグ時の localStorage inspect / 一括クリア が楽になる。
 

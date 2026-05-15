@@ -102,8 +102,10 @@ export function useAutoSaveDraft(
 	const latestValueRef = useRef<string>(initial);
 	// 最新の key を ref で保持 (cleanup で stale key に書き込まないため)
 	const keyRef = useRef<string>(key);
-	// Strict Mode 2 回 mount で isRestored が trip しないよう、復元は session 中 1 度だけ
-	const hasRestoredRef = useRef<boolean>(false);
+	// 直前に復元した key を ref で保持。 Strict Mode の double-mount では同じ key
+	// で 2 回目の effect が走るが、 既にその key で復元済みなのでスキップする。
+	// 真に key が変わったとき (例: MessageComposer の room 切替) は再復元する。
+	const restoredForKeyRef = useRef<string | null>(null);
 
 	useEffect(() => {
 		keyRef.current = key;
@@ -111,13 +113,16 @@ export function useAutoSaveDraft(
 
 	// mount: localStorage から復元 (SSR hydration mismatch を避けるため useEffect 内)
 	useEffect(() => {
-		if (!hasRestoredRef.current) {
-			hasRestoredRef.current = true;
+		if (restoredForKeyRef.current !== key) {
+			restoredForKeyRef.current = key;
 			const stored = safeGetItem(key);
 			if (stored !== null && stored !== "") {
 				setValueState(stored);
 				latestValueRef.current = stored;
 				setIsRestored(true);
+			} else {
+				// 新しい key で stored が無いなら state も reset
+				setIsRestored(false);
 			}
 		}
 		// cleanup: unmount で pending debounce を flush する (現在の key に対して)
@@ -211,6 +216,10 @@ export function useAutoSaveSync(
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const latestValueRef = useRef<string>(value);
 	const keyRef = useRef<string>(key);
+	// 最初の effect run では LS に書かない (= server-provided initial を
+	// LS に持ち込まない)。 ArticleEditor の edit mode で initial?.body_markdown
+	// を即 LS に caching してしまう副作用を防ぐ。
+	const hasUserChangedRef = useRef<boolean>(false);
 
 	useEffect(() => {
 		keyRef.current = key;
@@ -218,6 +227,11 @@ export function useAutoSaveSync(
 
 	useEffect(() => {
 		latestValueRef.current = value;
+		if (!hasUserChangedRef.current) {
+			// 初回 effect run: 書き込みスキップ
+			hasUserChangedRef.current = true;
+			return;
+		}
 		if (timerRef.current !== null) {
 			clearTimeout(timerRef.current);
 		}
