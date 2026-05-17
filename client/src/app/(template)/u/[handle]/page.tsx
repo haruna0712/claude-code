@@ -181,6 +181,7 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 		]);
 	const isOwnProfile = currentUser?.username === profile.username;
 	const hasMentorProfile = mentorProfile !== null;
+	const hidesTweetsForViewer = Boolean(profile.is_private && !isOwnProfile);
 
 	const jsonLd = {
 		"@context": "https://schema.org",
@@ -459,7 +460,11 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 						<TweetCardList
 							tweets={tweets}
 							ariaLabel={`@${profile.username} のツイート`}
-							emptyMessage="まだツイートがありません。"
+							emptyMessage={
+								hidesTweetsForViewer
+									? "このアカウントの投稿は非公開です。"
+									: "まだツイートがありません。"
+							}
 							currentUserHandle={currentUser?.username}
 							currentUserPreferredLanguage={currentUser?.preferred_language}
 							currentUserAutoTranslate={currentUser?.auto_translate}

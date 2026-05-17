@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from django.contrib.auth import get_user_model
 
+from apps.follows.models import Follow
 from apps.search.services import MAX_LIMIT, search_tweets
 from apps.tweets.models import Tweet
 
@@ -55,3 +56,46 @@ class TestSearchTweets:
     def test_strips_whitespace_around_query(self, tweets):
         results = search_tweets("  python  ")
         assert len(results) == 2
+
+    def test_hides_private_author_tweets_from_anon(self, db):
+        private_author = User.objects.create_user(
+            username="private_author",
+            email="private@example.com",
+            password="x",
+            is_private=True,
+        )
+        Tweet.objects.create(author=private_author, body="private marker")
+
+        assert search_tweets("private marker") == []
+
+    def test_private_author_tweets_visible_to_owner(self, db):
+        private_author = User.objects.create_user(
+            username="private_owner",
+            email="private-owner@example.com",
+            password="x",
+            is_private=True,
+        )
+        tweet = Tweet.objects.create(author=private_author, body="owner marker")
+
+        assert search_tweets("owner marker", viewer=private_author) == [tweet]
+
+    def test_private_author_tweets_visible_to_approved_follower(self, db):
+        private_author = User.objects.create_user(
+            username="private_followee",
+            email="private-followee@example.com",
+            password="x",
+            is_private=True,
+        )
+        follower = User.objects.create_user(
+            username="approved_follower",
+            email="approved@example.com",
+            password="x",
+        )
+        tweet = Tweet.objects.create(author=private_author, body="approved marker")
+        Follow.objects.create(
+            follower=follower,
+            followee=private_author,
+            status=Follow.Status.APPROVED,
+        )
+
+        assert search_tweets("approved marker", viewer=follower) == [tweet]

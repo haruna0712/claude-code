@@ -66,7 +66,10 @@ export default async function ResidenceSettingsPage() {
 				</div>
 			</header>
 			<div className="p-5">
-				<ResidenceSettingsForm initialResidence={residence} />
+				<ResidenceSettingsForm
+					initialResidence={residence}
+					profileHandle={currentUser.username}
+				/>
 			</div>
 		</>
 	);

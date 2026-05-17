@@ -11,6 +11,7 @@
  */
 
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { parseDrfErrors } from "@/lib/api/errors";
@@ -38,6 +39,7 @@ const DEFAULT_CENTER = { lat: 35.681236, lng: 139.767125 };
 
 interface ResidenceSettingsFormProps {
 	initialResidence: UserResidence | null;
+	profileHandle: string;
 }
 
 type SaveStatus =
@@ -49,7 +51,9 @@ type SaveStatus =
 
 export default function ResidenceSettingsForm({
 	initialResidence,
+	profileHandle,
 }: ResidenceSettingsFormProps) {
+	const router = useRouter();
 	// 不正な数値が来ても map が壊れないよう Number.isFinite で fallback。
 	// backend は DecimalField + CheckConstraint で範囲を保証するが、
 	// 防御的に DEFAULT_CENTER に倒す (初期値だけが影響、 保存時に再 enforce)。
@@ -73,6 +77,8 @@ export default function ResidenceSettingsForm({
 				radius_m: radiusM,
 			});
 			setStatus({ kind: "saved" });
+			router.refresh();
+			router.push(`/u/${encodeURIComponent(profileHandle)}`);
 		} catch (error: unknown) {
 			setStatus({
 				kind: "error",
@@ -86,6 +92,7 @@ export default function ResidenceSettingsForm({
 		try {
 			await deleteMyResidence();
 			setStatus({ kind: "deleted" });
+			router.refresh();
 		} catch (error: unknown) {
 			setStatus({
 				kind: "error",

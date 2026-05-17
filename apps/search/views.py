@@ -29,6 +29,6 @@ class SearchView(APIView):
         except (TypeError, ValueError):
             limit = DEFAULT_LIMIT
 
-        tweets = search_tweets(query, limit=limit)
+        tweets = search_tweets(query, limit=limit, viewer=request.user)
         data = TweetListSerializer(tweets, many=True, context={"request": request}).data
         return Response({"query": query, "results": data, "count": len(data)})

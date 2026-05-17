@@ -13,6 +13,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import NearMeFilter from "@/components/search/NearMeFilter";
+import SearchModeTabs from "@/components/search/SearchModeTabs";
 import UserSearchBox from "@/components/search/UserSearchBox";
 import UserSearchResultCard from "@/components/search/UserSearchResultCard";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
@@ -102,7 +103,7 @@ async function loadUserSearch(query: SearchQuery): Promise<SearchOutcome> {
 			// typescript-reviewer HIGH (#681) 指摘: 401/403 conflation を解消。
 			return { kind: "error", message: `エラー (${error.status})` };
 		}
-		throw error;
+		return { kind: "error", message: "検索 API に接続できませんでした" };
 	}
 }
 
@@ -170,7 +171,7 @@ export default async function UserSearchPage({
 						className="truncate font-semibold tracking-tight"
 						style={{ fontSize: 15, letterSpacing: -0.2 }}
 					>
-						ユーザー検索
+						検索
 					</h1>
 					{(query.q || query.nearMe) && (
 						<p
@@ -184,7 +185,8 @@ export default async function UserSearchPage({
 				</div>
 			</header>
 
-			<div className="px-5 py-5">
+			<div className="p-5">
+				<SearchModeTabs mode="users" query={query.q} />
 				<div className="mb-3">
 					<UserSearchBox initialValue={query.q} />
 				</div>

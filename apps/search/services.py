@@ -59,7 +59,7 @@ def _apply_filters(qs: QuerySet[Tweet], parsed: ParsedQuery) -> QuerySet[Tweet]:
     return qs
 
 
-def search_tweets(query: str, limit: int = DEFAULT_LIMIT) -> list[Tweet]:
+def search_tweets(query: str, limit: int = DEFAULT_LIMIT, viewer=None) -> list[Tweet]:
     """Tweet を ``query`` で検索する。
 
     クエリ文字列は ``parse_search_query`` で operator + keywords に分解し、
@@ -80,7 +80,7 @@ def search_tweets(query: str, limit: int = DEFAULT_LIMIT) -> list[Tweet]:
         return []
 
     capped = max(1, min(limit, MAX_LIMIT))
-    qs: QuerySet[Tweet] = Tweet.objects.select_related("author")
+    qs: QuerySet[Tweet] = Tweet.objects.select_related("author").visible_to(viewer)
     qs = _apply_filters(qs, parsed)
     if parsed.keywords:
         qs = qs.filter(body__icontains=parsed.keywords)

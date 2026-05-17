@@ -30,7 +30,6 @@ import {
 	Search,
 	Sparkles,
 	User,
-	UserSearch,
 	X,
 	type LucideIcon,
 } from "lucide-react";
@@ -50,6 +49,7 @@ interface BottomTabItem {
 const BOTTOM_TABS: BottomTabItem[] = [
 	{ href: "/", label: "ホーム", Icon: Home },
 	{ href: "/explore", label: "Explore", Icon: Compass },
+	{ href: "/search", label: "検索", Icon: Search },
 	{ href: "/notifications", label: "通知", Icon: Bell, requiresAuth: true },
 	{ href: "/messages", label: "DM", Icon: MessageSquare, requiresAuth: true },
 ];
@@ -252,7 +252,6 @@ function DrawerNav({ onItemClick }: { onItemClick: () => void }) {
 		{ href: "/", label: "ホーム", Icon: Home },
 		{ href: "/explore", label: "Explore", Icon: Compass },
 		{ href: "/search", label: "検索", Icon: Search },
-		{ href: "/search/users", label: "ユーザー検索", Icon: UserSearch },
 		{ href: "/notifications", label: "通知", Icon: Bell, requiresAuth: true },
 		{
 			href: "/messages",

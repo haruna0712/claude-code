@@ -15,6 +15,7 @@
 import type { Metadata } from "next";
 
 import SearchBox from "@/components/search/SearchBox";
+import SearchModeTabs from "@/components/search/SearchModeTabs";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { fetchSearch } from "@/lib/api/search";
 import { serverFetch } from "@/lib/api/server";
@@ -79,7 +80,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 				</div>
 			</header>
 
-			<div className="px-5 py-5">
+			<div className="p-5">
+				<SearchModeTabs mode="tweets" query={query} />
 				<div className="mb-6">
 					<SearchBox initialValue={query} />
 				</div>
