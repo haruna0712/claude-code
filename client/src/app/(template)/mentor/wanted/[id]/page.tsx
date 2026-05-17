@@ -66,7 +66,8 @@ export async function generateMetadata({
 	const req = await fetchRequest(pk);
 	if (!req) return { title: "募集が見つかりません" };
 	return {
-		title: `${req.title} — メンター募集`,
+		// #744: nav label と揃える ( メンター募集 → 相談を募集中 )。
+		title: `${req.title} — 相談を募集中`,
 		description: req.body.slice(0, 160),
 		robots: req.status === "open" ? undefined : { index: false },
 	};
@@ -105,7 +106,7 @@ export default async function MentorRequestDetailPage({ params }: PageProps) {
 					className="rounded text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 					style={{ fontSize: 12.5 }}
 				>
-					← 募集一覧
+					← 相談を募集中
 				</Link>
 				<div className="ml-2 min-w-0 flex-1">
 					<h1

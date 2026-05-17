@@ -14,7 +14,8 @@ import { type MentorProfileDetail } from "@/lib/api/mentor";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 
 export const metadata: Metadata = {
-	title: "メンターを探す — エンジニア SNS",
+	// #744: nav label と揃えて「メンター一覧」 に統一。
+	title: "メンター一覧 — エンジニア SNS",
 	description:
 		"エンジニア SNS のメンター一覧。 受付中のメンターをスキルタグで絞り込み、 提案前にプロフィールと plan を確認できます。",
 };
@@ -63,7 +64,7 @@ export default async function MentorsListPage({ searchParams }: PageProps) {
 						className="truncate font-semibold tracking-tight"
 						style={{ fontSize: 15, letterSpacing: -0.2 }}
 					>
-						メンターを探す
+						メンター一覧
 					</h1>
 					<p
 						className="truncate text-[color:var(--a-text-subtle)]"

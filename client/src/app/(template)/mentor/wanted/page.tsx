@@ -23,9 +23,10 @@ import {
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 
 export const metadata: Metadata = {
-	title: "メンター募集 — エンジニア SNS",
+	// #744: nav label と揃えて「相談を募集中」 に統一 (whiplash 回避)。
+	title: "相談を募集中 — エンジニア SNS",
 	description:
-		"エンジニア SNS のメンター募集 board。 学習中の人が現役エンジニアに 1 on 1 で教わりたい内容を投稿、 mentor が提案を出して契約成立で DM が始まります。",
+		"エンジニア SNS の相談募集 board。 学習中の人が現役エンジニアに 1 on 1 で教わりたい内容を投稿、 mentor が提案を出して契約成立で DM が始まります。",
 };
 
 async function fetchListSSR(
@@ -64,7 +65,7 @@ export default async function MentorWantedListPage({
 	return (
 		<>
 			<header
-				aria-label="メンター募集 board ヘッダー"
+				aria-label="相談募集 board ヘッダー"
 				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
 				style={{
 					borderBottom: "1px solid var(--a-border)",
@@ -81,7 +82,7 @@ export default async function MentorWantedListPage({
 						className="truncate font-semibold tracking-tight"
 						style={{ fontSize: 15, letterSpacing: -0.2 }}
 					>
-						メンター募集
+						相談を募集中
 					</h1>
 					<p
 						className="truncate text-[color:var(--a-text-subtle)]"
