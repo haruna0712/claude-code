@@ -17,6 +17,7 @@ import type { Metadata } from "next";
 import HeroBanner from "@/components/explore/HeroBanner";
 import StickyLoginBanner from "@/components/explore/StickyLoginBanner";
 import SearchBox from "@/components/search/SearchBox";
+import WhoToFollow from "@/components/sidebar/WhoToFollow";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import { fetchExploreTimeline } from "@/lib/api/explore";
@@ -61,6 +62,12 @@ const websiteJsonLd = {
 export default async function ExplorePage() {
 	const authed = await isAuthenticated();
 
+	// #746: fetchExploreTimeline が throw した (network / 5xx / timeout) 場合、
+	// 空 page を返して下流の empty-state branch に流す。 「trending tweets が
+	// 集計されてない」 と「 backend エラー」 は UI 上 区別せず、 どちらでも
+	// WhoToFollow fallback を出す (blank page よりは discovery surface を見せる
+	// 方が UX が良い)。 観測性は別途 Sentry / structlog が拾うので、 UI で
+	// distinguish しない方針。
 	const page = await fetchExploreTimeline(20).catch(() => ({
 		results: [],
 		count: 0,
@@ -134,6 +141,30 @@ export default async function ExplorePage() {
 						emptyMessage="今は表示できるツイートがありません。"
 					/>
 				</section>
+
+				{/*
+				 * #746: trending tweets が空のとき (まだ集計されていない、
+				 * 一時的に backend がデータを返せない、 等)、 ページが「壊れて見える」
+				 * ほどスパースになるのを防ぐため、 既存 `WhoToFollow` を inline で
+				 * fallback render する。 logged-in なら personalised recommendations、
+				 * anon なら popular users (component 内で auth state 判定済)。
+				 *
+				 * 右 rail にも WhoToFollow があるが、 (a) 右 rail は lg+ のみ表示
+				 * (mobile/tablet で消える)、 (b) 中央 column の inline 表示は
+				 * desktop でも「次の action はこれ」 として導線強化になる、 ので
+				 * 重複を許容。
+				 *
+				 * 見出しは WhoToFollow 内蔵 h2「おすすめユーザー」 をそのまま使う:
+				 * - 外側に「代わりに…」 のような追加 h2 を置くと nested heading 重複
+				 *   + 「primary content が壊れた」 と読ませる framing になる
+				 *   (code-reviewer 指摘)
+				 * - bare=false (default) で card style も維持
+				 */}
+				{page.results.length === 0 && (
+					<div className="mt-6 px-5">
+						<WhoToFollow isAuthenticated={authed} />
+					</div>
+				)}
 			</article>
 
 			{!authed && <StickyLoginBanner />}

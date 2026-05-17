@@ -100,6 +100,70 @@ test.describe("#741 /explore + search + right rail IA refactor", () => {
 		await ctx.close();
 	});
 
+	// ───────────────────────────────────────────────── /explore empty fallback (#746)
+
+	test("EMPTY-1: trending 空のとき WhoToFollow が inline fallback として出る", async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		await loginViaApi(ctx.request, USER1);
+		await page.goto(`${BASE}/explore`);
+
+		// trending feed の現在の状態を判定 (stg は通常 empty だが populated でも
+		// 正しく動くよう conditional assertion):
+		//   - empty: 「今は表示できるツイートがありません。」 が見える
+		//             → 中央 column 内に WhoToFollow の「おすすめユーザー」 h2 が
+		//               (右 rail の同名 h2 とは独立に、 main 内で) 見える
+		//   - populated: tweet card が複数 → 中央 column 内に WhoToFollow なし
+		//     (右 rail には依然出るので 1 個は存在しうる、 main scope に限定して判定)
+		const emptyMessage = page.getByText("今は表示できるツイートがありません。");
+		const mainColumn = page.getByRole("main", { name: /メインコンテンツ/ });
+		const fallbackHeading = mainColumn.getByRole("heading", {
+			name: /^おすすめユーザー$/,
+			level: 2,
+		});
+
+		await page
+			.getByRole("heading", { name: /トレンドツイート/, level: 2 })
+			.waitFor({ timeout: 15000 });
+
+		if (await emptyMessage.isVisible()) {
+			await expect(fallbackHeading).toBeVisible();
+		} else {
+			await expect(fallbackHeading).toHaveCount(0);
+		}
+
+		await ctx.close();
+	});
+
+	test("EMPTY-2: anon `/explore` でも空のときに WhoToFollow inline 出る", async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		await page.goto(`${BASE}/explore`);
+
+		const emptyMessage = page.getByText("今は表示できるツイートがありません。");
+		const mainColumn = page.getByRole("main", { name: /メインコンテンツ/ });
+		const fallbackHeading = mainColumn.getByRole("heading", {
+			name: /^おすすめユーザー$/,
+			level: 2,
+		});
+
+		await page
+			.getByRole("heading", { name: /トレンドツイート/, level: 2 })
+			.waitFor({ timeout: 15000 });
+
+		if (await emptyMessage.isVisible()) {
+			await expect(fallbackHeading).toBeVisible();
+		} else {
+			await expect(fallbackHeading).toHaveCount(0);
+		}
+
+		await ctx.close();
+	});
+
 	// ───────────────────────────────────────────────── /explore (anon)
 
 	test("EXP-3: /explore を logged-out で開く → Hero + Sticky + SearchBox", async ({
