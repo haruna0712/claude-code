@@ -19,7 +19,6 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
 	Bell,
-	Compass,
 	FileText,
 	Flame,
 	Handshake,
@@ -46,10 +45,11 @@ interface BottomTabItem {
 	requiresAuth?: boolean;
 }
 
+// #741: Twitter 準拠 IA — explore icon を Search (虫眼鏡) に統一、
+// 「検索」 entry は削除 (search box は /explore 最上部に統合)。
 const BOTTOM_TABS: BottomTabItem[] = [
 	{ href: "/", label: "ホーム", Icon: Home },
-	{ href: "/explore", label: "探索", Icon: Compass },
-	{ href: "/search", label: "検索", Icon: Search },
+	{ href: "/explore", label: "探索", Icon: Search },
 	{ href: "/notifications", label: "通知", Icon: Bell, requiresAuth: true },
 	{
 		href: "/messages",
@@ -194,7 +194,10 @@ export default function AMobileAppBar({ children }: { children?: ReactNode }) {
 								key={tab.href}
 								href={tab.href}
 								aria-current={isActive ? "page" : undefined}
-								className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 transition-colors focus-visible:outline-none"
+								// #741 a11y H-1: focus-visible outline を ALeftNav と同じ pattern に揃える
+								// (WCAG 2.4.7 Focus Visible)。 「検索」 削除で 5→4 entry に減って 1 個が大きく
+								// なる分、 focus indicator の存在感が UX 上重要になった。
+								className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 								style={{
 									color: isActive ? "var(--a-accent)" : "var(--a-text-muted)",
 									fontSize: 10.5,
@@ -246,14 +249,14 @@ export default function AMobileAppBar({ children }: { children?: ReactNode }) {
 function DrawerNav({ onItemClick }: { onItemClick: () => void }) {
 	const pathname = usePathname();
 	const { isAuthenticated } = useAuthNavigation();
-	// Drawer は全 nav を網羅 (bottom-tab で出ない記事 / 掲示板 / 検索 / メンター も含む)。
+	// Drawer は全 nav を網羅 (bottom-tab で出ない記事 / 掲示板 / メンター も含む)。
 	// `leftNavLinks` (constants/index.ts) と等価な構成を mobile drawer でも保つよう
 	// 維持する責務がある — 新 route を leftNavLinks に追加したらここにも追加する
 	// (#686 mobile 動線漏れ防止)。
+	// #741: 「検索」 entry は削除 (Twitter 準拠 IA、 search box は /explore 最上部)。
 	const items: BottomTabItem[] = [
 		{ href: "/", label: "ホーム", Icon: Home },
-		{ href: "/explore", label: "探索", Icon: Compass },
-		{ href: "/search", label: "検索", Icon: Search },
+		{ href: "/explore", label: "探索", Icon: Search },
 		{ href: "/notifications", label: "通知", Icon: Bell, requiresAuth: true },
 		{
 			href: "/messages",

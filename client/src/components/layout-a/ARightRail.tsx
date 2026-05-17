@@ -1,24 +1,31 @@
 "use client";
 
 /**
- * A direction Right Rail (#550 Phase 10 POC).
+ * A direction Right Rail (#550 Phase 10 POC, refactored #741).
  *
  * `/workspace/staticfiles/test/parts/home-a.jsx` RightRail の Next.js 移植。
  * 320px width、light theme、border-card panel + monospace meta。
  *
  * 既存 RightSidebar の中身 (TrendingTags / WhoToFollow) を A direction の
- * frame でラップして見た目だけ揃える。
+ * frame でラップ。
+ *
+ * #741 Twitter 準拠 IA refactor:
+ *   - search panel を削除 (search box は /explore 最上部に統合済)
+ *   - 抑制リスト拡張: /search, /agent, /messages/<id>, /articles/<slug>
+ *     focused-task / private read-write / 長文 read surface を rail から守る
+ *   - dummy footer text 削除 (about/pricing/changelog… の destination 未実装)
+ *
+ * 抑制判定は `lib/layout/focused-surfaces.ts` の `isFocusedSurface` に集約。
  */
 
 import type { ReactNode } from "react";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search } from "lucide-react";
 
 import TrendingTags from "@/components/sidebar/TrendingTags";
 import WhoToFollow from "@/components/sidebar/WhoToFollow";
 import { useAuthNavigation } from "@/hooks";
+import { shouldHideRightRail } from "@/lib/layout/focused-surfaces";
 
 function APanel({ title, children }: { title: string; children: ReactNode }) {
 	return (
@@ -41,14 +48,8 @@ function APanel({ title, children }: { title: string; children: ReactNode }) {
 export default function ARightRail() {
 	const pathname = usePathname();
 	const { isAuthenticated } = useAuthNavigation();
-	const hideOnFocusedSurface =
-		pathname.startsWith("/settings") ||
-		pathname === "/articles/new" ||
-		(pathname.startsWith("/articles/") && pathname.endsWith("/edit")) ||
-		pathname === "/mentor/wanted/new" ||
-		pathname === "/mentors/me/edit";
 
-	if (hideOnFocusedSurface) return null;
+	if (shouldHideRightRail(pathname)) return null;
 
 	return (
 		<aside
@@ -60,35 +61,6 @@ export default function ARightRail() {
 				fontFamily: "var(--a-font-sans)",
 			}}
 		>
-			<Link
-				href="/search"
-				className="mb-3 block rounded-lg border border-[color:var(--a-border)] bg-[color:var(--a-bg)] px-3 py-2.5 transition-colors hover:border-[color:var(--a-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-			>
-				<div
-					className="flex items-center gap-2 uppercase text-[color:var(--a-text-subtle)]"
-					style={{
-						fontFamily: "var(--a-font-mono)",
-						fontSize: 11,
-						letterSpacing: 0.4,
-					}}
-				>
-					<Search className="size-3.5" />
-					search
-					<kbd
-						className="ml-auto rounded border border-[color:var(--a-border)] px-1.5 py-0.5"
-						style={{ fontSize: 10.5 }}
-					>
-						⌘K
-					</kbd>
-				</div>
-				<div
-					className="mt-1.5 text-[color:var(--a-text-subtle)]"
-					style={{ fontSize: 13 }}
-				>
-					技術・人・記事 を検索…
-				</div>
-			</Link>
-
 			<APanel title="Trending tags · 24h">
 				<TrendingTags bare />
 			</APanel>
@@ -96,16 +68,6 @@ export default function ARightRail() {
 			<APanel title="Who to follow">
 				<WhoToFollow isAuthenticated={isAuthenticated} bare />
 			</APanel>
-
-			<div
-				className="mt-3 px-0.5 leading-relaxed text-[color:var(--a-text-subtle)]"
-				style={{ fontFamily: "var(--a-font-mono)", fontSize: 10.5 }}
-			>
-				about · pricing · changelog
-				<br />
-				privacy · terms · status
-				<br />© devstream 2026
-			</div>
 		</aside>
 	);
 }

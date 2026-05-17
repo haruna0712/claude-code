@@ -1,38 +1,35 @@
 /**
- * Public /explore page (P2-19 / Issue #191).
+ * /explore — discovery surface for both anonymous AND authenticated visitors.
  *
- * SPEC §16.2: discovery / acquisition surface for unauthenticated visitors.
- * Authenticated visitors are redirected to / so the home timeline owns
- * post-login UX (P2-13).
+ * Spec: docs/specs/explore-search-rightrail-spec.md
  *
- * MVP scope:
- *   - Hero CTA + read-only feed of trending public tweets.
- *   - RightSidebar (auth=false) reuses P2-17 trending/popular panels.
- *   - Sticky login banner with CLS=0 (mounted client-side after 30 s).
- *   - JSON-LD WebSite schema; richer SearchAction ships in a follow-up.
- *   - Action buttons on each card stay as P2-13's `aria-disabled` placeholder
- *     until P2-14/P2-15 wire reactions / repost.
+ * Twitter / X 準拠 IA (#741):
+ *   - 全 persona でアクセス可能 (logged-in も redirect しない)
+ *   - 最上部に SearchBox 常置 (submit → /search?q=...)
+ *   - 本文は trending tweets feed
+ *   - logged-out 時のみ HeroBanner + StickyLoginBanner を出す
+ *
+ * 関連 SPEC: §16.2 (discovery / acquisition)。
  */
 
 import type { Metadata } from "next";
-import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import HeroBanner from "@/components/explore/HeroBanner";
 import StickyLoginBanner from "@/components/explore/StickyLoginBanner";
+import SearchBox from "@/components/search/SearchBox";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import { fetchExploreTimeline } from "@/lib/api/explore";
 import { stringifyJsonLd } from "@/lib/json-ld";
 
 export const metadata: Metadata = {
-	title: "エンジニア SNS — エンジニアによる、エンジニアのための SNS",
+	title: "探索 — エンジニア SNS",
 	description:
-		"技術タグで興味の近い人を見つけ、Markdown でコードを共有し、OGP プレビューで議論を深められるエンジニア向け SNS。",
+		"トレンドのツイートを見つけ、 技術タグや人を検索する discovery surface。",
 	openGraph: {
-		title: "エンジニア SNS — エンジニアによる、エンジニアのための SNS",
+		title: "探索 — エンジニア SNS",
 		description:
-			"技術タグで興味の近い人を見つけ、Markdown でコードを共有し、OGP プレビューで議論を深められるエンジニア向け SNS。",
+			"トレンドのツイートを見つけ、 技術タグや人を検索する discovery surface。",
 		type: "website",
 	},
 };
@@ -48,7 +45,6 @@ async function isAuthenticated(): Promise<boolean> {
 		return true;
 	} catch (err) {
 		if (err instanceof ApiServerError && err.status === 401) return false;
-		// Network / 5xx — treat as anonymous so the explore page still serves.
 		return false;
 	}
 }
@@ -63,9 +59,7 @@ const websiteJsonLd = {
 };
 
 export default async function ExplorePage() {
-	if (await isAuthenticated()) {
-		redirect("/");
-	}
+	const authed = await isAuthenticated();
 
 	const page = await fetchExploreTimeline(20).catch(() => ({
 		results: [],
@@ -81,32 +75,50 @@ export default async function ExplorePage() {
 				dangerouslySetInnerHTML={{ __html: stringifyJsonLd(websiteJsonLd) }}
 			/>
 
-			{/* #584: page h1 は HeroBanner 側 (「エンジニアによる、エンジニアのための SNS」)
-			    なので、sticky bar は heading 抜きの context bar として置く。 */}
+			{/*
+			 * Sticky context bar with search box.
+			 * Twitter analog: /explore 最上部の search field。
+			 */}
 			<div
-				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
+				className="sticky top-0 z-10 px-5 py-3"
 				style={{
 					borderBottom: "1px solid var(--a-border)",
 					background: "rgba(255,255,255,0.85)",
 					backdropFilter: "blur(8px)",
 				}}
 			>
-				<div
-					className="min-w-0 flex-1 truncate font-semibold tracking-tight text-[color:var(--a-text)]"
-					style={{ fontSize: 15, letterSpacing: -0.2 }}
-				>
-					Explore
+				<div className="mb-2 flex items-center gap-3">
+					<div
+						className="min-w-0 flex-1 truncate font-semibold tracking-tight text-[color:var(--a-text)]"
+						style={{ fontSize: 15, letterSpacing: -0.2 }}
+					>
+						Explore
+					</div>
+					<span
+						className="text-[color:var(--a-text-subtle)]"
+						style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
+					>
+						discover
+					</span>
 				</div>
-				<span
-					className="text-[color:var(--a-text-subtle)]"
-					style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
-				>
-					discover
-				</span>
+				{/*
+				 * #741 a11y M-1: /search route (default "ツイート検索") よりも広い
+				 * 検索対象 (tweet/tag/user) を表現する label を渡す。 同じ component
+				 * が異なる文脈で使われるとき screen reader が「ここで何ができるか」 を
+				 * 正しく伝えるための差分。
+				 */}
+				<SearchBox formAriaLabel="サイト内検索 (ツイート・タグ・ユーザー)" />
 			</div>
 
-			<article className="min-w-0">
-				<HeroBanner />
+			{/*
+			 * #741 a11y H-2 (WCAG 2.4.11 Focus Not Obscured Minimum):
+			 * 上の sticky 80-100px bar が tab focus した focusable を覆わないよう、
+			 * descendant の focusable 要素に scroll-margin-top を当てる。
+			 * Tailwind arbitrary descendant `[&_a]:scroll-mt-24` 等で focusable
+			 * (link / button / input) のみ対象 (text 全体に当てると意図しない動作)。
+			 */}
+			<article className="min-w-0 [&_a]:scroll-mt-28 [&_button]:scroll-mt-28 [&_input]:scroll-mt-28">
+				{!authed && <HeroBanner />}
 
 				<section aria-labelledby="explore-feed-heading" className="mt-8 px-5">
 					<h2
@@ -116,10 +128,6 @@ export default async function ExplorePage() {
 						トレンドツイート
 					</h2>
 
-					{/* #301: explore も TweetCardList で render。
-					    リアクション / RT は未ログインユーザでも表示はされ、click 時
-					    に 401 → 各 button 内の placeholder 挙動 (ReactionBar
-					    / RepostButton 既存実装) でログイン誘導。 */}
 					<TweetCardList
 						tweets={page.results}
 						ariaLabel="トレンドツイート"
@@ -128,7 +136,7 @@ export default async function ExplorePage() {
 				</section>
 			</article>
 
-			<StickyLoginBanner />
+			{!authed && <StickyLoginBanner />}
 		</>
 	);
 }
