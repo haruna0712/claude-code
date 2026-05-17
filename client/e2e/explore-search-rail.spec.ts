@@ -113,11 +113,15 @@ test.describe("#741 /explore + search + right rail IA refactor", () => {
 		// trending feed の現在の状態を判定 (stg は通常 empty だが populated でも
 		// 正しく動くよう conditional assertion):
 		//   - empty: 「今は表示できるツイートがありません。」 が見える
-		//             → 「代わりに、 おすすめユーザー」 fallback h2 が見える
-		//   - populated: tweet card が複数 → fallback h2 は **見えない** (regression 防止)
+		//             → 中央 column 内に WhoToFollow の「おすすめユーザー」 h2 が
+		//               (右 rail の同名 h2 とは独立に、 main 内で) 見える
+		//   - populated: tweet card が複数 → 中央 column 内に WhoToFollow なし
+		//     (右 rail には依然出るので 1 個は存在しうる、 main scope に限定して判定)
 		const emptyMessage = page.getByText("今は表示できるツイートがありません。");
-		const fallbackHeading = page.getByRole("heading", {
-			name: /代わりに、 おすすめユーザー/,
+		const mainColumn = page.getByRole("main", { name: /メインコンテンツ/ });
+		const fallbackHeading = mainColumn.getByRole("heading", {
+			name: /^おすすめユーザー$/,
+			level: 2,
 		});
 
 		await page
@@ -141,8 +145,10 @@ test.describe("#741 /explore + search + right rail IA refactor", () => {
 		await page.goto(`${BASE}/explore`);
 
 		const emptyMessage = page.getByText("今は表示できるツイートがありません。");
-		const fallbackHeading = page.getByRole("heading", {
-			name: /代わりに、 おすすめユーザー/,
+		const mainColumn = page.getByRole("main", { name: /メインコンテンツ/ });
+		const fallbackHeading = mainColumn.getByRole("heading", {
+			name: /^おすすめユーザー$/,
+			level: 2,
 		});
 
 		await page

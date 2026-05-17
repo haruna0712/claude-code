@@ -278,25 +278,30 @@ PLAYWRIGHT_USER1_HANDLE=test4 \
 
 ### 8.2 やる
 
-`client/src/app/(template)/explore/page.tsx` で trending が空 (`page.results.length === 0`) のとき、 既存 `WhoToFollow` component を **inline で fallback** として render する:
+`client/src/app/(template)/explore/page.tsx` で trending が空 (`page.results.length === 0`) のとき、 既存 `WhoToFollow` component を **inline で fallback** として render する。 既存の `TweetCardList` の `emptyMessage` はそのまま残し、 **その下に additive で** WhoToFollow セクションを足す pattern:
 
 ```tsx
-{page.results.length === 0 ? (
-  <>
-    <p className="...">今は表示できるツイートがありません。</p>
-    <div className="mt-6">
-      <h3 className="...">代わりに、 おすすめユーザー</h3>
-      <WhoToFollow isAuthenticated={authed} />
-    </div>
-  </>
-) : (
-  <TweetCardList tweets={page.results} ... />
+<section aria-labelledby="explore-feed-heading" ...>
+  <h2 id="explore-feed-heading">トレンドツイート</h2>
+  <TweetCardList
+    tweets={page.results}
+    ariaLabel="トレンドツイート"
+    emptyMessage="今は表示できるツイートがありません。"
+  />
+</section>
+
+{/* #746 fallback */}
+{page.results.length === 0 && (
+  <div className="mt-6 px-5">
+    <WhoToFollow isAuthenticated={authed} />
+  </div>
 )}
 ```
 
 - `WhoToFollow` は既存の sidebar component を流用 (`client/src/components/sidebar/WhoToFollow.tsx`)
 - logged-in なら personalised recommendations、 anon なら popular users (component が auth state で endpoint 分岐済)
-- card style を維持するため `bare` prop は **付けない** (sidebar 内では bare、 inline では fully styled `<section>`)
+- `bare` prop は **付けない** (default false) → WhoToFollow 内蔵の「おすすめユーザー」 h2 + card style がそのまま生きる
+- 外側にさらに「代わりに…」 のような h2 を足すと nested heading 重複 + 「primary content が壊れた」 と読ませる framing になるので避ける
 - desktop で右 rail がある場合は WhoToFollow が左右に重複表示されるが、 right rail 自体が trending tags + who-to-follow を出すので「両方候補が見える」 = discovery 強化として許容
 
 ### 8.3 やらない
