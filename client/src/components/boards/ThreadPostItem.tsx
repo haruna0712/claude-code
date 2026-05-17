@@ -15,6 +15,7 @@ import { type ReactNode, useState } from "react";
 
 import type { ThreadPost } from "@/lib/api/boards";
 import { deleteThreadPost } from "@/lib/api/boards";
+import { formatJstDateTime } from "@/lib/datetime";
 
 interface ThreadPostItemProps {
 	post: ThreadPost;
@@ -52,19 +53,10 @@ function renderBody(body: string): ReactNode[] {
 	return parts;
 }
 
-function formatDateTime(iso: string): string {
-	try {
-		return new Date(iso).toLocaleString("ja-JP", {
-			year: "numeric",
-			month: "2-digit",
-			day: "2-digit",
-			hour: "2-digit",
-			minute: "2-digit",
-		});
-	} catch {
-		return iso;
-	}
-}
+// #742: timezone を JST 固定にして SSR/CSR hydration mismatch (#425/#418/#423) を防ぐ。
+// 旧 inline toLocaleString は server (UTC) / client (browser TZ) で異なる
+// 文字列を出していたため React #425 が 1 post につき 1 件 fire していた。
+const formatDateTime = formatJstDateTime;
 
 export default function ThreadPostItem({
 	post,

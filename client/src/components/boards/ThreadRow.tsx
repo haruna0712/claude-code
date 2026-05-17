@@ -7,25 +7,15 @@
 import Link from "next/link";
 
 import type { ThreadSummary } from "@/lib/api/boards";
+import { formatJstDateTime } from "@/lib/datetime";
 
 interface ThreadRowProps {
 	thread: ThreadSummary;
 }
 
-function formatDateTime(iso: string): string {
-	try {
-		const d = new Date(iso);
-		return d.toLocaleString("ja-JP", {
-			year: "numeric",
-			month: "2-digit",
-			day: "2-digit",
-			hour: "2-digit",
-			minute: "2-digit",
-		});
-	} catch {
-		return iso;
-	}
-}
+// #742: timezone を JST 固定にして SSR/CSR hydration mismatch を防ぐ。
+// 詳細は ThreadPostItem.tsx の同 const コメント / lib/datetime.ts 参照。
+const formatDateTime = formatJstDateTime;
 
 export default function ThreadRow({ thread }: ThreadRowProps) {
 	const authorLabel =
