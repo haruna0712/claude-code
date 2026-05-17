@@ -15,7 +15,15 @@
 
 const JST_TIMEZONE = "Asia/Tokyo";
 
-const DEFAULT_OPTIONS: Intl.DateTimeFormatOptions = {
+/**
+ * `Intl.DateTimeFormatOptions` から `timeZone` を除いた型。
+ * #742: caller が timeZone を渡しても helper 内で必ず "Asia/Tokyo" に
+ * 上書きされるため、 type-level で「 timeZone は渡しても無意味」 と
+ * 明示する。 JSDoc だけだと caller が「 LA 指定で出せる」 と誤読する余地。
+ */
+type JstFormatOptions = Omit<Intl.DateTimeFormatOptions, "timeZone">;
+
+const DEFAULT_OPTIONS: JstFormatOptions = {
 	year: "numeric",
 	month: "2-digit",
 	day: "2-digit",
@@ -35,7 +43,7 @@ const DEFAULT_OPTIONS: Intl.DateTimeFormatOptions = {
  */
 export function formatJstDateTime(
 	iso: string,
-	options: Intl.DateTimeFormatOptions = DEFAULT_OPTIONS,
+	options: JstFormatOptions = DEFAULT_OPTIONS,
 ): string {
 	try {
 		const date = new Date(iso);

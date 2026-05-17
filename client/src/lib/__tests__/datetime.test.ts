@@ -35,16 +35,23 @@ describe("formatJstDateTime", () => {
 		expect(result).toContain("5月");
 	});
 
-	it("ignores attempted timeZone override (hydration safety)", () => {
-		// timeZone を override しようとしても "Asia/Tokyo" が必ず勝つ
-		const result = formatJstDateTime("2026-05-17T06:00:00Z", {
-			year: "numeric",
-			month: "2-digit",
-			day: "2-digit",
-			hour: "2-digit",
-			minute: "2-digit",
-			timeZone: "America/Los_Angeles", // 無視される
-		});
+	it("ignores attempted timeZone override (hydration safety, runtime guard)", () => {
+		// timeZone を override しようとしても "Asia/Tokyo" が必ず勝つ。
+		// type 上は Omit<..., "timeZone"> で弾いているが、 caller が any 経由で
+		// 渡してきても runtime で上書きされることを保証する (defensive)。
+		const overrideAttempt = {
+			year: "numeric" as const,
+			month: "2-digit" as const,
+			day: "2-digit" as const,
+			hour: "2-digit" as const,
+			minute: "2-digit" as const,
+			timeZone: "America/Los_Angeles",
+		};
+		// type 強制を回避して runtime 動作を verify
+		const result = formatJstDateTime(
+			"2026-05-17T06:00:00Z",
+			overrideAttempt as unknown as Parameters<typeof formatJstDateTime>[1],
+		);
 		// JST で 15:00 と出る (LA なら 前日 23:00 になるはず)
 		expect(result).toBe("2026/05/17 15:00");
 	});

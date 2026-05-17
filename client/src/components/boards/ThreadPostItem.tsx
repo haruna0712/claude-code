@@ -15,6 +15,9 @@ import { type ReactNode, useState } from "react";
 
 import type { ThreadPost } from "@/lib/api/boards";
 import { deleteThreadPost } from "@/lib/api/boards";
+// #742: timezone を JST 固定にして SSR/CSR hydration mismatch (#425/#418/#423) を防ぐ。
+// 旧 inline toLocaleString は server (UTC) / client (browser TZ) で異なる
+// 文字列を出していたため React #425 が 1 post につき 1 件 fire していた。
 import { formatJstDateTime } from "@/lib/datetime";
 
 interface ThreadPostItemProps {
@@ -52,11 +55,6 @@ function renderBody(body: string): ReactNode[] {
 	}
 	return parts;
 }
-
-// #742: timezone を JST 固定にして SSR/CSR hydration mismatch (#425/#418/#423) を防ぐ。
-// 旧 inline toLocaleString は server (UTC) / client (browser TZ) で異なる
-// 文字列を出していたため React #425 が 1 post につき 1 件 fire していた。
-const formatDateTime = formatJstDateTime;
 
 export default function ThreadPostItem({
 	post,
@@ -119,7 +117,7 @@ export default function ThreadPostItem({
 						dateTime={post.created_at}
 						className="shrink-0 text-xs text-gray-500 dark:text-gray-400"
 					>
-						{formatDateTime(post.created_at)}
+						{formatJstDateTime(post.created_at)}
 					</time>
 				</div>
 				{canDelete && (

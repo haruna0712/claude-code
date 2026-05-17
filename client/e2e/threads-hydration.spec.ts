@@ -45,14 +45,22 @@ test.describe("#742 /threads/<id> hydration fix", () => {
 			}
 		});
 
-		await page.goto(`${BASE}/threads/1`);
-		// ThreadView の post 描画 + hydration 完了を待つ
+		// fixture thread (id=1)。 stg で削除されたら status check で fast-fail
+		// するので「 404 で hydration error 0 件 → vacuously green」 を防ぐ
+		// (code-reviewer MEDIUM 対応)。
+		const response = await page.goto(`${BASE}/threads/1`);
+		expect(
+			response?.status(),
+			"fixture thread /threads/1 が消えている可能性。 stg で id 再確認",
+		).toBeLessThan(400);
+		// ThreadView 描画 + hydration 完了を待つ。
+		// 固定 waitForTimeout だと slow stg cold start で race するので、
+		// network idle と heading 表示の AND で hydration step を確実に拾う。
 		await page
 			.getByRole("heading", { level: 1 })
 			.first()
 			.waitFor({ timeout: 15000 });
-		// hydration error は client-side 描画途中に fire するので少し待つ
-		await page.waitForTimeout(2000);
+		await page.waitForLoadState("networkidle", { timeout: 15000 });
 
 		expect(
 			hydrationErrors,
@@ -75,12 +83,17 @@ test.describe("#742 /threads/<id> hydration fix", () => {
 			}
 		});
 
-		await page.goto(`${BASE}/boards/django`);
+		// fixture board "django"。 同様に status check で fast-fail。
+		const response = await page.goto(`${BASE}/boards/django`);
+		expect(
+			response?.status(),
+			"fixture board /boards/django が消えている可能性。 stg で slug 再確認",
+		).toBeLessThan(400);
 		await page
 			.getByRole("heading", { level: 1 })
 			.first()
 			.waitFor({ timeout: 15000 });
-		await page.waitForTimeout(2000);
+		await page.waitForLoadState("networkidle", { timeout: 15000 });
 
 		expect(
 			hydrationErrors,

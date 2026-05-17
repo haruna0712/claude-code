@@ -14,8 +14,7 @@ interface ThreadRowProps {
 }
 
 // #742: timezone を JST 固定にして SSR/CSR hydration mismatch を防ぐ。
-// 詳細は ThreadPostItem.tsx の同 const コメント / lib/datetime.ts 参照。
-const formatDateTime = formatJstDateTime;
+// 詳細は lib/datetime.ts 参照。
 
 export default function ThreadRow({ thread }: ThreadRowProps) {
 	const authorLabel =
@@ -48,7 +47,7 @@ export default function ThreadRow({ thread }: ThreadRowProps) {
 				<div className="mt-1 flex items-center justify-between text-xs text-[color:var(--a-text-muted)]">
 					<span>{authorLabel}</span>
 					<time dateTime={thread.last_post_at}>
-						{formatDateTime(thread.last_post_at)}
+						{formatJstDateTime(thread.last_post_at)}
 					</time>
 				</div>
 			</Link>
