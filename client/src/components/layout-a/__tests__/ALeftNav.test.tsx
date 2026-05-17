@@ -114,6 +114,12 @@ describe("ALeftNav (#557 Phase B-0-6)", () => {
 		);
 	});
 
+	it("ユーザー検索を独立した nav item として表示しない", () => {
+		setupAuthed(0);
+		render(<ALeftNav />);
+		expect(screen.queryByRole("link", { name: "ユーザー検索" })).toBeNull();
+	});
+
 	it("未ログイン時は 通知 / メッセージ / プロフィール が非表示", () => {
 		mockUseUserProfile.mockReturnValue({
 			profile: undefined,
