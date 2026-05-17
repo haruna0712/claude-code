@@ -52,7 +52,14 @@ vi.mock("@/lib/api/articles", async () => {
 
 const { enqueueMock, uploadRowsMock } = vi.hoisted(() => ({
 	enqueueMock: vi.fn(),
-	uploadRowsMock: vi.fn(() => []),
+	uploadRowsMock: vi.fn<
+		() => Array<{
+			id: string;
+			filename: string;
+			state: "queued" | "uploading" | "done" | "failed";
+			error?: string;
+		}>
+	>(() => []),
 }));
 
 vi.mock("@/hooks/useArticleImageUpload", () => ({
@@ -206,8 +213,8 @@ describe("ArticleEditor", () => {
 
 	it("shows active upload rows while images are queued or uploading", () => {
 		uploadRowsMock.mockReturnValue([
-			{ id: "1", filename: "queued.png", state: "queued", error: null },
-			{ id: "2", filename: "uploading.png", state: "uploading", error: null },
+			{ id: "1", filename: "queued.png", state: "queued" },
+			{ id: "2", filename: "uploading.png", state: "uploading" },
 		]);
 
 		render(<ArticleEditor mode="create" />);
