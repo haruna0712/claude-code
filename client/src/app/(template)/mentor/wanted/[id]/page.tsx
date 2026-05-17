@@ -106,7 +106,7 @@ export default async function MentorRequestDetailPage({ params }: PageProps) {
 					className="rounded text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 					style={{ fontSize: 12.5 }}
 				>
-					← 募集一覧
+					← 相談を募集中
 				</Link>
 				<div className="ml-2 min-w-0 flex-1">
 					<h1
