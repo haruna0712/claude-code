@@ -8,6 +8,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+// #750: JST 固定 helper (Server Component で UTC 表示になっていた機能バグ修正)。
+import { formatJstDate } from "@/lib/datetime";
 import { type MentorProfileDetail, type MentorReview } from "@/lib/api/mentor";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 
@@ -253,7 +255,7 @@ export default async function MentorDetailPage({ params }: PageProps) {
 										</span>
 										<span aria-hidden="true">·</span>
 										<time dateTime={r.created_at}>
-											{new Date(r.created_at).toLocaleDateString("ja-JP")}
+											{formatJstDate(r.created_at)}
 										</time>
 									</div>
 									<p className="mt-1 whitespace-pre-wrap text-sm text-[color:var(--a-text)]">

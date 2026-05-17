@@ -33,6 +33,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { formatJstDateTime } from "@/lib/datetime";
 import { formatRelativeTime } from "@/lib/timeline/formatTime";
 
 interface TweetCardProps {
@@ -310,9 +311,10 @@ export default function TweetCard({
 
 	// Absolute timestamp for screen readers; the visible "2h" alone reads
 	// poorly (e.g. JP SR speaks "ニエイチ"). Always pair via aria-label.
+	// #750: JST 固定 helper を使う (SSR/CSR hydration mismatch 防止)。
 	const absoluteTime = useMemo(
 		() =>
-			new Date(displayTweet.created_at).toLocaleString("ja-JP", {
+			formatJstDateTime(displayTweet.created_at, {
 				year: "numeric",
 				month: "long",
 				day: "numeric",

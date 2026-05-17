@@ -18,6 +18,8 @@ import {
 	type MentorshipContractDetail,
 } from "@/lib/api/mentor";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
+// #750: JST 固定 helper (Server Component で UTC 表示になっていた機能バグ修正)。
+import { formatJstDateTime } from "@/lib/datetime";
 import type { CurrentUser } from "@/lib/api/users";
 
 interface PageProps {
@@ -134,8 +136,7 @@ export default async function ContractDetailPage({ params }: PageProps) {
 						className="truncate text-[color:var(--a-text-subtle)]"
 						style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
 					>
-						{statusLabel} ·{" "}
-						{new Date(contract.started_at).toLocaleString("ja-JP")}
+						{statusLabel} · {formatJstDateTime(contract.started_at)}
 					</p>
 				</div>
 			</header>
@@ -193,7 +194,7 @@ export default async function ContractDetailPage({ params }: PageProps) {
 							</strong>{" "}
 							です
 							{contract.completed_at
-								? ` (${new Date(contract.completed_at).toLocaleString("ja-JP")} 完了)`
+								? ` (${formatJstDateTime(contract.completed_at)} 完了)`
 								: ""}
 							。
 						</p>

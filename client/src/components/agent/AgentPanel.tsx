@@ -37,6 +37,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { runAgent, type AgentRunResult } from "@/lib/api/agent";
 import { createTweet } from "@/lib/api/tweets";
+// #750: SSR/CSR hydration mismatch を防ぐため JST 固定 helper を使う。
+// 旧 inline は `toLocaleString("ja-JP")` で偶然 seconds 含む `HH:mm:ss` を出して
+// いたが、 統一 default `HH:mm` に regression するのは意図的 (spec §3.1)。
+// 秒精度が必要なら `formatJstDateTime(iso, { ..., second: "2-digit" })`。
+import { formatJstDateTime } from "@/lib/datetime";
 
 const PROMPT_MAX = 2000;
 const DRAFT_MAX = 140;
@@ -299,7 +304,7 @@ export default function AgentPanel({ initialHistory = [] }: AgentPanelProps) {
 									className="text-[color:var(--a-text-subtle)]"
 									style={{ fontSize: 11 }}
 								>
-									{new Date(r.created_at).toLocaleString("ja-JP")}
+									{formatJstDateTime(r.created_at)}
 								</div>
 								<div className="font-medium">{r.prompt}</div>
 								{r.draft_text ? (

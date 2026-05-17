@@ -13,6 +13,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Edit3, Feather } from "lucide-react";
 
+import { formatJstDateTime } from "@/lib/datetime";
 import { serverFetch } from "@/lib/api/server";
 import type { ArticleSummary } from "@/lib/api/articles";
 
@@ -40,24 +41,19 @@ async function fetchDraftsSSR(): Promise<ArticleSummary[]> {
 	}
 }
 
-function formatDateTime(iso: string): string {
-	// code-reviewer MEDIUM #2 反映: Invalid Date を guard し、 toLocaleString(ja-JP)
-	// で OS locale / DST に強い書式に切替。
-	try {
-		const d = new Date(iso);
-		if (Number.isNaN(d.getTime())) return "";
-		return d.toLocaleString("ja-JP", {
-			year: "numeric",
-			month: "2-digit",
-			day: "2-digit",
-			hour: "2-digit",
-			minute: "2-digit",
-			hour12: false,
-		});
-	} catch {
-		return "";
-	}
-}
+// #750: 旧 inline wrapper は double Date construction (validation + helper 内で
+// 2 度 `new Date` を呼んでいた、 typescript-reviewer MEDIUM) を避けるため削除。
+// `formatJstDateTime` は invalid ISO で raw を返す。 backend (Django ISO 8601)
+// から invalid が来ることは実運用上ない、 万が一来ても raw `2026-...` 文字列が
+// 表示されるだけで crash しないので acceptable。
+const DRAFTS_DATE_OPTIONS: Parameters<typeof formatJstDateTime>[1] = {
+	year: "numeric",
+	month: "2-digit",
+	day: "2-digit",
+	hour: "2-digit",
+	minute: "2-digit",
+	hour12: false,
+};
 
 export default async function DraftsPage() {
 	// SSR auth guard: notifications / settings 系と同流儀。 cookie 経由で軽量チェック。
@@ -153,7 +149,8 @@ export default async function DraftsPage() {
 													fontSize: 11,
 												}}
 											>
-												{formatDateTime(d.updated_at)} 更新
+												{formatJstDateTime(d.updated_at, DRAFTS_DATE_OPTIONS)}{" "}
+												更新
 											</p>
 											{d.tags.length > 0 && (
 												<ul

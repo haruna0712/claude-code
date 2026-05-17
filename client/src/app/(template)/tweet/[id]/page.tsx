@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import ConversationReplies from "@/components/timeline/ConversationReplies";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
+// #750: JST 固定 helper (Server Component で UTC 表示になっていた機能バグ修正)。
+import { formatJstDateTime } from "@/lib/datetime";
 import type { TweetSummary } from "@/lib/api/tweets";
 import type { CurrentUser } from "@/lib/api/users";
 import { stringifyJsonLd } from "@/lib/json-ld";
@@ -150,7 +152,7 @@ function Tombstoned({ deletedAt }: { deletedAt: string }) {
 			<div className="mx-auto max-w-xl px-6 py-16 text-center">
 				<p className="mb-4 text-2xl font-bold">このツイートは削除されました</p>
 				<p className="text-sm text-[color:var(--a-text-muted)]">
-					削除日時: {new Date(deletedAt).toLocaleString("ja-JP")}
+					削除日時: {formatJstDateTime(deletedAt)}
 				</p>
 			</div>
 		</>

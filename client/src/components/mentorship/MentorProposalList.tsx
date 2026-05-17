@@ -18,6 +18,8 @@ import {
 	type MentorProposal,
 	type MentorRequestStatus,
 } from "@/lib/api/mentor";
+// #750: SSR/CSR hydration mismatch を防ぐため JST 固定 helper を使う。
+import { formatJstDateTime } from "@/lib/datetime";
 
 function describeApiError(err: unknown, fallback: string): string {
 	if (err && typeof err === "object") {
@@ -78,7 +80,7 @@ export default function MentorProposalList({
 								<span>@{p.mentor.handle}</span>
 								<span aria-hidden="true">·</span>
 								<time dateTime={p.created_at}>
-									{new Date(p.created_at).toLocaleString("ja-JP")}
+									{formatJstDateTime(p.created_at)}
 								</time>
 								<span aria-hidden="true">·</span>
 								<span>

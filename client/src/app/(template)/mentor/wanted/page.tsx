@@ -14,6 +14,8 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Feather, Handshake } from "lucide-react";
 
+// #750: JST 固定 helper を使う (Server Component で UTC 表示になっていた機能バグ修正)。
+import { formatJstDate } from "@/lib/datetime";
 import {
 	listMentorRequests,
 	type MentorRequestSummary,
@@ -151,7 +153,7 @@ function MentorRequestCard({ request }: { request: MentorRequestSummary }) {
 				<span>@{request.mentee.handle}</span>
 				<span aria-hidden="true">·</span>
 				<time dateTime={request.created_at}>
-					{new Date(request.created_at).toLocaleDateString("ja-JP")}
+					{formatJstDate(request.created_at)}
 				</time>
 				<span aria-hidden="true">·</span>
 				<span>提案 {request.proposal_count} 件</span>
