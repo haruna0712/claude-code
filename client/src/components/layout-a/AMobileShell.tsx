@@ -194,7 +194,10 @@ export default function AMobileAppBar({ children }: { children?: ReactNode }) {
 								key={tab.href}
 								href={tab.href}
 								aria-current={isActive ? "page" : undefined}
-								className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 transition-colors focus-visible:outline-none"
+								// #741 a11y H-1: focus-visible outline を ALeftNav と同じ pattern に揃える
+								// (WCAG 2.4.7 Focus Visible)。 「検索」 削除で 5→4 entry に減って 1 個が大きく
+								// なる分、 focus indicator の存在感が UX 上重要になった。
+								className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 								style={{
 									color: isActive ? "var(--a-accent)" : "var(--a-text-muted)",
 									fontSize: 10.5,

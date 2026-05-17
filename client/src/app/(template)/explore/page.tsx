@@ -101,10 +101,23 @@ export default async function ExplorePage() {
 						discover
 					</span>
 				</div>
-				<SearchBox />
+				{/*
+				 * #741 a11y M-1: /search route (default "ツイート検索") よりも広い
+				 * 検索対象 (tweet/tag/user) を表現する label を渡す。 同じ component
+				 * が異なる文脈で使われるとき screen reader が「ここで何ができるか」 を
+				 * 正しく伝えるための差分。
+				 */}
+				<SearchBox formAriaLabel="サイト内検索 (ツイート・タグ・ユーザー)" />
 			</div>
 
-			<article className="min-w-0">
+			{/*
+			 * #741 a11y H-2 (WCAG 2.4.11 Focus Not Obscured Minimum):
+			 * 上の sticky 80-100px bar が tab focus した focusable を覆わないよう、
+			 * descendant の focusable 要素に scroll-margin-top を当てる。
+			 * Tailwind arbitrary descendant `[&_a]:scroll-mt-24` 等で focusable
+			 * (link / button / input) のみ対象 (text 全体に当てると意図しない動作)。
+			 */}
+			<article className="min-w-0 [&_a]:scroll-mt-28 [&_button]:scroll-mt-28 [&_input]:scroll-mt-28">
 				{!authed && <HeroBanner />}
 
 				<section aria-labelledby="explore-feed-heading" className="mt-8 px-5">

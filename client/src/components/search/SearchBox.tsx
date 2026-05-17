@@ -14,6 +14,12 @@ import { useState, type FormEvent } from "react";
 
 interface SearchBoxProps {
 	initialValue?: string;
+	/**
+	 * #741 a11y M-1: form 配置 page の文脈に合わせて aria-label を上書きする。
+	 * default "ツイート検索" は /search page 文脈、 /explore ではより広い
+	 * "サイト内検索" を渡すなど。
+	 */
+	formAriaLabel?: string;
 }
 
 const OPERATOR_HELP: ReadonlyArray<{ key: string; example: string }> = [
@@ -25,7 +31,10 @@ const OPERATOR_HELP: ReadonlyArray<{ key: string; example: string }> = [
 	{ key: "has:", example: "has:image" },
 ];
 
-export default function SearchBox({ initialValue = "" }: SearchBoxProps) {
+export default function SearchBox({
+	initialValue = "",
+	formAriaLabel = "ツイート検索",
+}: SearchBoxProps) {
 	const router = useRouter();
 	const [value, setValue] = useState(initialValue);
 
@@ -39,7 +48,7 @@ export default function SearchBox({ initialValue = "" }: SearchBoxProps) {
 	return (
 		<form
 			role="search"
-			aria-label="ツイート検索"
+			aria-label={formAriaLabel}
 			onSubmit={onSubmit}
 			className="flex flex-col gap-2"
 		>

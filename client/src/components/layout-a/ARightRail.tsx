@@ -25,7 +25,7 @@ import { usePathname } from "next/navigation";
 import TrendingTags from "@/components/sidebar/TrendingTags";
 import WhoToFollow from "@/components/sidebar/WhoToFollow";
 import { useAuthNavigation } from "@/hooks";
-import { isFocusedSurface } from "@/lib/layout/focused-surfaces";
+import { shouldHideRightRail } from "@/lib/layout/focused-surfaces";
 
 function APanel({ title, children }: { title: string; children: ReactNode }) {
 	return (
@@ -49,7 +49,7 @@ export default function ARightRail() {
 	const pathname = usePathname();
 	const { isAuthenticated } = useAuthNavigation();
 
-	if (isFocusedSurface(pathname)) return null;
+	if (shouldHideRightRail(pathname)) return null;
 
 	return (
 		<aside

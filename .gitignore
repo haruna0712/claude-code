@@ -252,3 +252,6 @@ terraform/environments/*/phase*.tfplan
 client/playwright-report/
 client/test-results/
 test-results/
+
+# vitest cache (worktree-local)
+.vite/

@@ -1,14 +1,14 @@
 /**
- * Tests for focused-surfaces helper (#741).
+ * Tests for shouldHideRightRail helper (#741).
  *
  * Spec: docs/specs/explore-search-rightrail-spec.md §3.4 / §5.2
  */
 
 import { describe, expect, it } from "vitest";
 
-import { isFocusedSurface } from "@/lib/layout/focused-surfaces";
+import { shouldHideRightRail } from "@/lib/layout/focused-surfaces";
 
-describe("isFocusedSurface", () => {
+describe("shouldHideRightRail", () => {
 	describe("composer / edit form (#741 以前から抑制対象)", () => {
 		it.each([
 			["/settings"],
@@ -22,7 +22,7 @@ describe("isFocusedSurface", () => {
 			["/mentor/wanted/new"],
 			["/mentors/me/edit"],
 		])("returns true for %s", (pathname) => {
-			expect(isFocusedSurface(pathname)).toBe(true);
+			expect(shouldHideRightRail(pathname)).toBe(true);
 		});
 	});
 
@@ -30,57 +30,55 @@ describe("isFocusedSurface", () => {
 		it.each([["/search"], ["/search/users"], ["/search/anything"]])(
 			"returns true for %s",
 			(pathname) => {
-				expect(isFocusedSurface(pathname)).toBe(true);
+				expect(shouldHideRightRail(pathname)).toBe(true);
 			},
 		);
 	});
 
 	describe("focused single-task (#741): /agent", () => {
 		it.each([["/agent"], ["/agent/foo"]])("returns true for %s", (pathname) => {
-			expect(isFocusedSurface(pathname)).toBe(true);
+			expect(shouldHideRightRail(pathname)).toBe(true);
 		});
 	});
 
 	describe("private read/write (#741): /messages/<id>", () => {
 		it("returns true for individual thread /messages/abc123", () => {
-			expect(isFocusedSurface("/messages/abc123")).toBe(true);
+			expect(shouldHideRightRail("/messages/abc123")).toBe(true);
 		});
 
 		it("returns true for /messages/uuid-style-id", () => {
 			expect(
-				isFocusedSurface("/messages/550e8400-e29b-41d4-a716-446655440000"),
+				shouldHideRightRail("/messages/550e8400-e29b-41d4-a716-446655440000"),
 			).toBe(true);
 		});
 
 		it("returns false for /messages list view (browse)", () => {
-			expect(isFocusedSurface("/messages")).toBe(false);
+			expect(shouldHideRightRail("/messages")).toBe(false);
 		});
 
 		it("returns false for /messages/invitations sub-page", () => {
-			expect(isFocusedSurface("/messages/invitations")).toBe(false);
+			expect(shouldHideRightRail("/messages/invitations")).toBe(false);
 		});
 	});
 
 	describe("長文 read (#741): /articles/<slug>", () => {
 		it("returns true for /articles/my-post", () => {
-			expect(isFocusedSurface("/articles/my-post")).toBe(true);
+			expect(shouldHideRightRail("/articles/my-post")).toBe(true);
 		});
 
 		it("returns true for /articles/phase6-stg-check", () => {
-			expect(isFocusedSurface("/articles/phase6-stg-check")).toBe(true);
+			expect(shouldHideRightRail("/articles/phase6-stg-check")).toBe(true);
 		});
 
 		it("returns false for /articles list view", () => {
-			expect(isFocusedSurface("/articles")).toBe(false);
+			expect(shouldHideRightRail("/articles")).toBe(false);
 		});
 
-		it("returns false for /articles/me (own articles dashboard)", () => {
-			// /articles/me は本人 dashboard 的な位置づけ。 厳密には 1 path segment
-			// なので detail 判定に match するが、 me は editor 系 surface に
-			// 近いので意図的に rail を残す (本人の記事一覧の発見動線として)。
-			// → 現実装では isFocusedSurface=true になる (path 1 segment 判定の副作用)。
-			// この behavior は spec として明示的に許容する (M-1 は detail page が主眼)。
-			expect(isFocusedSurface("/articles/me")).toBe(true);
+		it("returns true for /articles/me (path 1 segment 判定の副作用)", () => {
+			// /articles/me は本人 dashboard 的な位置づけだが、 path 1 segment 判定で
+			// detail と区別できないため hide 対象になる。 spec として明示的に許容
+			// (M-1 は detail page が主眼、 me は editor 系 surface に近い)。
+			expect(shouldHideRightRail("/articles/me")).toBe(true);
 		});
 	});
 
@@ -104,24 +102,23 @@ describe("isFocusedSurface", () => {
 			["/mentors"],
 			["/mentors/some-handle"],
 		])("returns false for %s", (pathname) => {
-			expect(isFocusedSurface(pathname)).toBe(false);
+			expect(shouldHideRightRail(pathname)).toBe(false);
 		});
 	});
 
 	describe("edge cases", () => {
 		it("returns false for empty string (defensive)", () => {
-			expect(isFocusedSurface("")).toBe(false);
+			expect(shouldHideRightRail("")).toBe(false);
 		});
 
 		it("returns false for / (root)", () => {
-			expect(isFocusedSurface("/")).toBe(false);
+			expect(shouldHideRightRail("/")).toBe(false);
 		});
 
-		it("returns false for /settings-not-real (prefix match safety)", () => {
-			// /settings はあくまで `/settings` か `/settings/...`。
-			// startsWith は前方一致なので `/settings` で始まる別 path も拾うが、
-			// 実 routing 上は存在しないので問題なし。 念のため confirm。
-			expect(isFocusedSurface("/settings-not-real")).toBe(true); // startsWith なので true
+		it("returns false for /settings-not-real (strict segment match)", () => {
+			// `/^\/settings(\/|$)/` で segment 境界判定するため、
+			// /settings で始まる別 path は誤って rail を隠さない。
+			expect(shouldHideRightRail("/settings-not-real")).toBe(false);
 		});
 	});
 });

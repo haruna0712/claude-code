@@ -38,6 +38,8 @@
 
 ### 2.1 関連ファイル
 
+> 行番号は改修前の状態を指す pre-PR snapshot。 改修後の構成は §4.1 を参照。
+
 | ファイル                                        | 役割                           | 現状の問題                                                                                                                                                                                                             |
 | ----------------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `client/src/app/(template)/explore/page.tsx`    | `/explore` server component    | L66-68 `if (await isAuthenticated()) redirect("/")` で logged-in を強制 home へ                                                                                                                                        |
@@ -183,7 +185,7 @@ pathname === "/search" ||
 
 1. **RED**: E2E spec `client/e2e/explore-search-rail.spec.ts` 新規 (§5 シナリオ)。 全 fail を確認
 2. **GREEN**: 各ファイル順に修正 (上記 4.1)
-3. **REFACTOR**: 抑制リスト判定を function 抽出 (e.g. `isFocusedSurface(pathname)` を `lib/layout/focused-surfaces.ts` に切り出し)
+3. **REFACTOR**: 抑制リスト判定を function 抽出 (e.g. `shouldHideRightRail(pathname)` を `lib/layout/focused-surfaces.ts` に切り出し)
 4. **VERIFY**: stg 反映後に `ui-ux-tester` agent を再度呼んで page-by-page score が §3.5 の期待値に一致することを確認
 5. **A11Y**: `a11y-architect` agent で keyboard navigation / focus order / screen reader announcement の崩れがないか確認
 6. **GAN**: `gan-evaluator` agent で「 PR ship 可否」 採点

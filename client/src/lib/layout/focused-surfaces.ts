@@ -1,10 +1,10 @@
 /**
- * Right rail 抑制対象 surface 判定 (#741).
+ * Right rail 抑制対象 pathname 判定 (#741).
  *
  * Spec: docs/specs/explore-search-rightrail-spec.md §3.4
  *
  * 右 rail (`ARightRail`) は「 trending + who-to-follow」 を出す chrome だが、
- * 以下の 4 カテゴリでは集中阻害 / surface 重複になるため抑制する:
+ * 以下の 5 カテゴリでは集中阻害 / surface 重複になるため抑制する:
  *
  *   1. **Composer / Edit form** — 元から抑制対象
  *      - `/settings/*`
@@ -31,9 +31,14 @@
  *   - `/articles/<slug>` rail score: -1 (長文読みに干渉)
  */
 
-export function isFocusedSurface(pathname: string): boolean {
+/**
+ * @returns `true` のとき呼び元 (`ARightRail`) は右 rail を render しない。
+ *          意味的には「集中阻害 / 重複回避のため rail を隠す surface か」。
+ */
+export function shouldHideRightRail(pathname: string): boolean {
 	// 1. Composer / Edit form (#741 以前から抑制対象)
-	if (pathname.startsWith("/settings")) return true;
+	// `/settings(\/|$)` で厳密 segment match (over-match 防止)。
+	if (/^\/settings(\/|$)/.test(pathname)) return true;
 	if (pathname === "/articles/new") return true;
 	if (pathname.startsWith("/articles/") && pathname.endsWith("/edit")) {
 		return true;
@@ -50,10 +55,8 @@ export function isFocusedSurface(pathname: string): boolean {
 	// 4. Private read/write surface (#741)
 	// /messages list (browse) と /messages/invitations は除外して rail を残す。
 	// 個別 thread `/messages/<id>` のみ抑制。
-	if (
-		/^\/messages\/(?!invitations$)[^/]+$/.test(pathname) &&
-		!pathname.endsWith("/invitations")
-	) {
+	// 負の lookahead `(?!invitations$)` で /messages/invitations を弾く。
+	if (/^\/messages\/(?!invitations$)[^/]+$/.test(pathname)) {
 		return true;
 	}
 
