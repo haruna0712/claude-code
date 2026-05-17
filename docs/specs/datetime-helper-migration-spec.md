@@ -92,6 +92,20 @@ call site では `formatJstDateTime(iso)` を直接 call (alias 経由しない�
 - 表示文字列の format 変更 (default options は #742 で確定、 caller は同じ「2026/05/17 15:00」 形式を期待)
 - backend / API / DB 変更なし
 
+### 3.1 意図的な precision regression (seconds 削除)
+
+`AgentPanel.tsx` / `DraftsPanel.tsx` / `FollowRequestsPanel.tsx` の旧 inline 関数は `new Date(iso).toLocaleString("ja-JP")` を **options なし** で call しており、 結果として `2026/05/17 15:00:00` (秒含む) を出していた。
+
+`formatJstDateTime` の `DEFAULT_OPTIONS` は `year/month/day/hour/minute` のみで `second` を含まない (#742 で `ThreadPostItem` / `ThreadRow` と同じ確定値)。 結果、 上記 3 component の表示も「秒なし」 に統一される。
+
+**この precision regression は意図的**:
+
+- pre-migration は no-option default で偶然 seconds が出ていたが、 統一された helper を使う以上 helper default に従う
+- app 全体で時刻表示が「`HH:mm`」 で統一される (ThreadPostItem / TweetCard / boards 系と一致)
+- 秒精度が必要な debugging surface (agent run history など) は将来 `formatJstDateTime(iso, { ..., second: "2-digit" })` を明示的に渡せば復活可能
+
+code-reviewer の指摘を受けて design decision を spec として明示。
+
 ---
 
 ## 4. テスト

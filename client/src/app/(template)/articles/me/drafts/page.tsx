@@ -41,22 +41,19 @@ async function fetchDraftsSSR(): Promise<ArticleSummary[]> {
 	}
 }
 
-function formatDateTime(iso: string): string {
-	// #750: JST 固定 helper に統合 (Server Component なので hydration mismatch は
-	// 起きないが、 Docker container TZ=UTC で render されると UTC 時刻が表示される
-	// 機能バグだった)。 Invalid Date は "" を返す本 page 固有の挙動を残すため、
-	// helper の raw fallback ではなく明示的に "" を返す薄い wrapper。
-	const d = new Date(iso);
-	if (Number.isNaN(d.getTime())) return "";
-	return formatJstDateTime(iso, {
-		year: "numeric",
-		month: "2-digit",
-		day: "2-digit",
-		hour: "2-digit",
-		minute: "2-digit",
-		hour12: false,
-	});
-}
+// #750: 旧 inline wrapper は double Date construction (validation + helper 内で
+// 2 度 `new Date` を呼んでいた、 typescript-reviewer MEDIUM) を避けるため削除。
+// `formatJstDateTime` は invalid ISO で raw を返す。 backend (Django ISO 8601)
+// から invalid が来ることは実運用上ない、 万が一来ても raw `2026-...` 文字列が
+// 表示されるだけで crash しないので acceptable。
+const DRAFTS_DATE_OPTIONS: Parameters<typeof formatJstDateTime>[1] = {
+	year: "numeric",
+	month: "2-digit",
+	day: "2-digit",
+	hour: "2-digit",
+	minute: "2-digit",
+	hour12: false,
+};
 
 export default async function DraftsPage() {
 	// SSR auth guard: notifications / settings 系と同流儀。 cookie 経由で軽量チェック。
@@ -152,7 +149,8 @@ export default async function DraftsPage() {
 													fontSize: 11,
 												}}
 											>
-												{formatDateTime(d.updated_at)} 更新
+												{formatJstDateTime(d.updated_at, DRAFTS_DATE_OPTIONS)}{" "}
+												更新
 											</p>
 											{d.tags.length > 0 && (
 												<ul

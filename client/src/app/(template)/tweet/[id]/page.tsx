@@ -3,9 +3,9 @@ import { notFound } from "next/navigation";
 
 import ConversationReplies from "@/components/timeline/ConversationReplies";
 import TweetCardList from "@/components/timeline/TweetCardList";
+import { ApiServerError, serverFetch } from "@/lib/api/server";
 // #750: JST 固定 helper (Server Component で UTC 表示になっていた機能バグ修正)。
 import { formatJstDateTime } from "@/lib/datetime";
-import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { TweetSummary } from "@/lib/api/tweets";
 import type { CurrentUser } from "@/lib/api/users";
 import { stringifyJsonLd } from "@/lib/json-ld";
