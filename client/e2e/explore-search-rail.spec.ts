@@ -100,6 +100,64 @@ test.describe("#741 /explore + search + right rail IA refactor", () => {
 		await ctx.close();
 	});
 
+	// ───────────────────────────────────────────────── /explore empty fallback (#746)
+
+	test("EMPTY-1: trending 空のとき WhoToFollow が inline fallback として出る", async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		await loginViaApi(ctx.request, USER1);
+		await page.goto(`${BASE}/explore`);
+
+		// trending feed の現在の状態を判定 (stg は通常 empty だが populated でも
+		// 正しく動くよう conditional assertion):
+		//   - empty: 「今は表示できるツイートがありません。」 が見える
+		//             → 「代わりに、 おすすめユーザー」 fallback h2 が見える
+		//   - populated: tweet card が複数 → fallback h2 は **見えない** (regression 防止)
+		const emptyMessage = page.getByText("今は表示できるツイートがありません。");
+		const fallbackHeading = page.getByRole("heading", {
+			name: /代わりに、 おすすめユーザー/,
+		});
+
+		await page
+			.getByRole("heading", { name: /トレンドツイート/, level: 2 })
+			.waitFor({ timeout: 15000 });
+
+		if (await emptyMessage.isVisible()) {
+			await expect(fallbackHeading).toBeVisible();
+		} else {
+			await expect(fallbackHeading).toHaveCount(0);
+		}
+
+		await ctx.close();
+	});
+
+	test("EMPTY-2: anon `/explore` でも空のときに WhoToFollow inline 出る", async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		await page.goto(`${BASE}/explore`);
+
+		const emptyMessage = page.getByText("今は表示できるツイートがありません。");
+		const fallbackHeading = page.getByRole("heading", {
+			name: /代わりに、 おすすめユーザー/,
+		});
+
+		await page
+			.getByRole("heading", { name: /トレンドツイート/, level: 2 })
+			.waitFor({ timeout: 15000 });
+
+		if (await emptyMessage.isVisible()) {
+			await expect(fallbackHeading).toBeVisible();
+		} else {
+			await expect(fallbackHeading).toHaveCount(0);
+		}
+
+		await ctx.close();
+	});
+
 	// ───────────────────────────────────────────────── /explore (anon)
 
 	test("EXP-3: /explore を logged-out で開く → Hero + Sticky + SearchBox", async ({

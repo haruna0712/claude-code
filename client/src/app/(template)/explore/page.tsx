@@ -17,6 +17,7 @@ import type { Metadata } from "next";
 import HeroBanner from "@/components/explore/HeroBanner";
 import StickyLoginBanner from "@/components/explore/StickyLoginBanner";
 import SearchBox from "@/components/search/SearchBox";
+import WhoToFollow from "@/components/sidebar/WhoToFollow";
 import TweetCardList from "@/components/timeline/TweetCardList";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import { fetchExploreTimeline } from "@/lib/api/explore";
@@ -134,6 +135,33 @@ export default async function ExplorePage() {
 						emptyMessage="今は表示できるツイートがありません。"
 					/>
 				</section>
+
+				{/*
+				 * #746: trending tweets が空のとき (まだ集計されていない、
+				 * 一時的に backend がデータを返せない、 等)、 ページが「壊れて見える」
+				 * ほどスパースになるのを防ぐため、 既存 `WhoToFollow` を inline で
+				 * fallback render する。 logged-in なら personalised recommendations、
+				 * anon なら popular users (component 内で auth state 判定済)。
+				 *
+				 * 右 rail にも WhoToFollow があるが、 (a) 右 rail は lg+ のみ表示
+				 * (mobile/tablet で消える)、 (b) 中央 column の inline 表示は
+				 * desktop でも「次の action はこれ」 として導線強化になる、 ので
+				 * 重複を許容。
+				 */}
+				{page.results.length === 0 && (
+					<section
+						aria-labelledby="explore-fallback-heading"
+						className="mt-6 px-5"
+					>
+						<h2
+							id="explore-fallback-heading"
+							className="mb-4 px-2 text-lg font-semibold text-foreground"
+						>
+							代わりに、 おすすめユーザー
+						</h2>
+						<WhoToFollow isAuthenticated={authed} />
+					</section>
+				)}
 			</article>
 
 			{!authed && <StickyLoginBanner />}

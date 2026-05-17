@@ -265,3 +265,56 @@ PLAYWRIGHT_USER1_HANDLE=test4 \
 - **(別 Issue)** 左 nav「メンター募集」 + 「メンターを探す」 重複 (L-2) — Phase 11 review 対象
 
 これら 3 件は priority:low / type:bug or type:feature で個別起票し、 後続の Phase で処理する。
+
+---
+
+## 8. follow-up: `/explore` empty trending state fallback (#746)
+
+### 8.1 背景
+
+#741 を merge して stg verify した際の `gan-evaluator` 採点で hierarchy/typography 6/10 (full SHIP-WITH-FOLLOWUP)。 主因は **logged-in `/explore` で trending tweets が空のときページが「壊れて見える」 ほどスパース** な状態。
+
+具体的: sticky bar (Explore + SearchBox + 検索 button) → "トレンドツイート" h2 → 「今は表示できるツイートがありません。」 だけが見えて、 ページ全体が機能していないように読める。
+
+### 8.2 やる
+
+`client/src/app/(template)/explore/page.tsx` で trending が空 (`page.results.length === 0`) のとき、 既存 `WhoToFollow` component を **inline で fallback** として render する:
+
+```tsx
+{page.results.length === 0 ? (
+  <>
+    <p className="...">今は表示できるツイートがありません。</p>
+    <div className="mt-6">
+      <h3 className="...">代わりに、 おすすめユーザー</h3>
+      <WhoToFollow isAuthenticated={authed} />
+    </div>
+  </>
+) : (
+  <TweetCardList tweets={page.results} ... />
+)}
+```
+
+- `WhoToFollow` は既存の sidebar component を流用 (`client/src/components/sidebar/WhoToFollow.tsx`)
+- logged-in なら personalised recommendations、 anon なら popular users (component が auth state で endpoint 分岐済)
+- card style を維持するため `bare` prop は **付けない** (sidebar 内では bare、 inline では fully styled `<section>`)
+- desktop で右 rail がある場合は WhoToFollow が左右に重複表示されるが、 right rail 自体が trending tags + who-to-follow を出すので「両方候補が見える」 = discovery 強化として許容
+
+### 8.3 やらない
+
+- trending tweets feed が空でないときの動作変更 (現状維持)
+- 右 rail 側の WhoToFollow の挙動変更
+- gan-evaluator finding #1 / #2 (`discover` eyebrow / 「TRENDING TAGS · 24H」 「WHO TO FOLLOW」 uppercase 英語) — A direction signature の design language として確定済 (ARightRail.tsx:34 既存、 #550)。 typography 議論は別 Phase で。
+- gan-evaluator finding #4 (mobile 375px SearchBox button 折り返し) — 私が直接 Playwright MCP で確認、 非該当 (button は wrap せず適切な touch target を保つ)。
+
+### 8.4 受け入れ基準
+
+- [ ] Playwright spec `client/e2e/explore-search-rail.spec.ts` に `EMPTY-1: logged-in 空 trending → WhoToFollow inline 表示` を追加
+- [ ] stg で `/explore` を logged-in で開き、 trending が空のときは中央 column 内に「おすすめユーザー」 section が visible
+- [ ] trending tweets がある場合は WhoToFollow inline 非表示 (現状の TweetCardList のみ)
+- [ ] anon `/explore` でも同じ挙動 (空のとき WhoToFollow inline) — anon は popular users が出る (既存 `fetchPopularUsers`)
+- [ ] `ui-ux-tester` 再 audit で hierarchy/typography 7+/10 に改善 (改修前 6/10)
+
+### 8.5 ロールバック
+
+- 単一 file の差分 (`client/src/app/(template)/explore/page.tsx`) を revert すれば原状回復
+- DB / API 触らず、 既存 component 流用のみ
