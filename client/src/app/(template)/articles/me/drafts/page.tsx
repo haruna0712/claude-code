@@ -13,6 +13,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Edit3, Feather } from "lucide-react";
 
+import { formatJstDateTime } from "@/lib/datetime";
 import { serverFetch } from "@/lib/api/server";
 import type { ArticleSummary } from "@/lib/api/articles";
 
@@ -41,22 +42,20 @@ async function fetchDraftsSSR(): Promise<ArticleSummary[]> {
 }
 
 function formatDateTime(iso: string): string {
-	// code-reviewer MEDIUM #2 反映: Invalid Date を guard し、 toLocaleString(ja-JP)
-	// で OS locale / DST に強い書式に切替。
-	try {
-		const d = new Date(iso);
-		if (Number.isNaN(d.getTime())) return "";
-		return d.toLocaleString("ja-JP", {
-			year: "numeric",
-			month: "2-digit",
-			day: "2-digit",
-			hour: "2-digit",
-			minute: "2-digit",
-			hour12: false,
-		});
-	} catch {
-		return "";
-	}
+	// #750: JST 固定 helper に統合 (Server Component なので hydration mismatch は
+	// 起きないが、 Docker container TZ=UTC で render されると UTC 時刻が表示される
+	// 機能バグだった)。 Invalid Date は "" を返す本 page 固有の挙動を残すため、
+	// helper の raw fallback ではなく明示的に "" を返す薄い wrapper。
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return "";
+	return formatJstDateTime(iso, {
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+		hour12: false,
+	});
 }
 
 export default async function DraftsPage() {

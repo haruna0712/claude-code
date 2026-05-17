@@ -21,18 +21,13 @@ import { FileText, Loader2, Send, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { Button } from "@/components/ui/button";
+// #750: 旧 inline formatDate は timezone なしで SSR/CSR mismatch の予備軍。
+// JST 固定 helper に集約。
+import { formatJstDateTime } from "@/lib/datetime";
 import { deleteTweet, publishDraft, type TweetSummary } from "@/lib/api/tweets";
 
 interface DraftsPanelProps {
 	initial: TweetSummary[];
-}
-
-function formatDate(iso: string): string {
-	try {
-		return new Date(iso).toLocaleString("ja-JP");
-	} catch {
-		return iso;
-	}
 }
 
 export default function DraftsPanel({ initial }: DraftsPanelProps) {
@@ -112,7 +107,7 @@ export default function DraftsPanel({ initial }: DraftsPanelProps) {
 								className="text-[color:var(--a-text-subtle)]"
 								style={{ fontSize: 11 }}
 							>
-								作成日時: {formatDate(d.created_at)}
+								作成日時: {formatJstDateTime(d.created_at)}
 							</div>
 							<div className="whitespace-pre-wrap" style={{ fontSize: 14 }}>
 								{d.body}

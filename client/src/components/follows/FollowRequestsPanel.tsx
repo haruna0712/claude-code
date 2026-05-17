@@ -24,17 +24,12 @@ import {
 	rejectFollowRequest,
 	type FollowRequestRow,
 } from "@/lib/api/follow-requests";
+// #750: 旧 inline formatDate は timezone なしで SSR/CSR mismatch の予備軍。
+// JST 固定 helper に集約。
+import { formatJstDateTime } from "@/lib/datetime";
 
 interface FollowRequestsPanelProps {
 	initial: FollowRequestRow[];
-}
-
-function formatDate(iso: string): string {
-	try {
-		return new Date(iso).toLocaleString("ja-JP");
-	} catch {
-		return iso;
-	}
 }
 
 export default function FollowRequestsPanel({
@@ -126,7 +121,7 @@ export default function FollowRequestsPanel({
 									className="text-[color:var(--a-text-subtle)]"
 									style={{ fontSize: 10.5 }}
 								>
-									{formatDate(r.created_at)}
+									{formatJstDateTime(r.created_at)}
 								</div>
 							</div>
 							<div className="flex items-center gap-2">

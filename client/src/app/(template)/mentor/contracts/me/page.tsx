@@ -11,6 +11,8 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+// #750: JST 固定 helper (Server Component で UTC 表示になっていた機能バグ修正)。
+import { formatJstDate } from "@/lib/datetime";
 import { type MentorshipContractDetail } from "@/lib/api/mentor";
 import { serverFetch, ApiServerError } from "@/lib/api/server";
 
@@ -162,7 +164,7 @@ function ContractCard({ contract }: { contract: MentorshipContractDetail }) {
 				<span>{statusLabel}</span>
 				<span aria-hidden="true">·</span>
 				<time dateTime={contract.started_at}>
-					{new Date(contract.started_at).toLocaleDateString("ja-JP")}
+					{formatJstDate(contract.started_at)}
 				</time>
 			</div>
 			<p className="mt-1 text-sm">
