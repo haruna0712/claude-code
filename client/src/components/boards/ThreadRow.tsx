@@ -7,25 +7,14 @@
 import Link from "next/link";
 
 import type { ThreadSummary } from "@/lib/api/boards";
+import { formatJstDateTime } from "@/lib/datetime";
 
 interface ThreadRowProps {
 	thread: ThreadSummary;
 }
 
-function formatDateTime(iso: string): string {
-	try {
-		const d = new Date(iso);
-		return d.toLocaleString("ja-JP", {
-			year: "numeric",
-			month: "2-digit",
-			day: "2-digit",
-			hour: "2-digit",
-			minute: "2-digit",
-		});
-	} catch {
-		return iso;
-	}
-}
+// #742: timezone を JST 固定にして SSR/CSR hydration mismatch を防ぐ。
+// 詳細は lib/datetime.ts 参照。
 
 export default function ThreadRow({ thread }: ThreadRowProps) {
 	const authorLabel =
@@ -58,7 +47,7 @@ export default function ThreadRow({ thread }: ThreadRowProps) {
 				<div className="mt-1 flex items-center justify-between text-xs text-[color:var(--a-text-muted)]">
 					<span>{authorLabel}</span>
 					<time dateTime={thread.last_post_at}>
-						{formatDateTime(thread.last_post_at)}
+						{formatJstDateTime(thread.last_post_at)}
 					</time>
 				</div>
 			</Link>
