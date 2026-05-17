@@ -94,7 +94,7 @@ describe("RoomList", () => {
 		expect(screen.getByText(/まだメッセージはありません/)).toBeInTheDocument();
 		expect(
 			screen.getByRole("link", { name: /ユーザーを探す/ }),
-		).toBeInTheDocument();
+		).toHaveAttribute("href", "/search/users");
 	});
 
 	it("room の peer username を direct room の display name として表示する", () => {

@@ -40,10 +40,9 @@ export default function TemplateLayout({ children }: LayoutProps) {
 		>
 			<ALeftNav />
 			<main
-				// #608: mobile (< sm) では fixed bottom-nav (≈ 52px) が content に被って
-				// editor textarea / form button が操作不能になっていた。 pb-20 (80px) で
-				// 余白を確保し、 sm+ では bottom-nav が消えるので pb 不要。
-				className="mx-auto flex w-full min-w-0 flex-col pb-20 sm:border-r sm:border-[color:var(--a-border)] sm:pb-0"
+				// mobile (< sm) では fixed bottom-nav が content に被らないよう、
+				// safe-area を含む余白と scroll padding を main 側に確保する。
+				className="mx-auto flex w-full min-w-0 scroll-pb-28 flex-col pb-28 sm:scroll-pb-0 sm:border-r sm:border-[color:var(--a-border)] sm:pb-0"
 				style={{ maxWidth: 800 }}
 				aria-label="メインコンテンツ"
 			>

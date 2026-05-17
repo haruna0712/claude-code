@@ -60,7 +60,7 @@ interface NavItemDef {
 
 const NAV_ITEMS: NavItemDef[] = [
 	{ href: "/", label: "ホーム", Icon: Home },
-	{ href: "/explore", label: "Explore", Icon: Hash },
+	{ href: "/explore", label: "探索", Icon: Hash },
 	{ href: "/search", label: "検索", Icon: Search },
 	{
 		href: "/notifications",

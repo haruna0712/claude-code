@@ -13,6 +13,7 @@
 import type { ReactNode } from "react";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Search } from "lucide-react";
 
 import TrendingTags from "@/components/sidebar/TrendingTags";
@@ -38,7 +39,17 @@ function APanel({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export default function ARightRail() {
+	const pathname = usePathname();
 	const { isAuthenticated } = useAuthNavigation();
+	const hideOnFocusedSurface =
+		pathname.startsWith("/settings") ||
+		pathname === "/articles/new" ||
+		(pathname.startsWith("/articles/") && pathname.endsWith("/edit")) ||
+		pathname === "/mentor/wanted/new" ||
+		pathname === "/mentors/me/edit";
+
+	if (hideOnFocusedSurface) return null;
+
 	return (
 		<aside
 			aria-label="右サイドバー"

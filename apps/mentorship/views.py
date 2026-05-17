@@ -293,8 +293,8 @@ class MentorProfileMeView(APIView):
             profile = MentorProfile.objects.prefetch_related("skill_tags", "plans").get(
                 user=request.user
             )
-        except MentorProfile.DoesNotExist as exc:
-            raise NotFound("MentorProfile not found") from exc
+        except MentorProfile.DoesNotExist:
+            return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(MentorProfileSerializer(profile).data)
 
     def patch(self, request: Request) -> Response:
@@ -336,7 +336,9 @@ class MentorPlanListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request: Request) -> Response:
-        profile = _get_my_profile_or_404(request.user)
+        profile = MentorProfile.objects.filter(user=request.user).first()
+        if profile is None:
+            return Response([])
         plans = profile.plans.filter(is_active=True).order_by("created_at")
         return Response(MentorPlanSerializer(plans, many=True).data)
 

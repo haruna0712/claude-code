@@ -66,9 +66,24 @@ export default function ResidenceSettingsForm({
 	const [lat, setLat] = useState<number>(initLat);
 	const [lng, setLng] = useState<number>(initLng);
 	const [radiusM, setRadiusM] = useState<number>(initRadius);
+	const [hasSelection, setHasSelection] = useState<boolean>(
+		initialResidence !== null,
+	);
 	const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
 
+	const hasChanges =
+		initialResidence === null
+			? hasSelection
+			: lat.toFixed(6) !== initLat.toFixed(6) ||
+				lng.toFixed(6) !== initLng.toFixed(6) ||
+				radiusM !== initRadius;
+
+	function handleCancel() {
+		router.push(`/u/${encodeURIComponent(profileHandle)}`);
+	}
+
 	async function handleSave() {
+		if (!hasSelection) return;
 		setStatus({ kind: "saving" });
 		try {
 			await saveMyResidence({
@@ -93,6 +108,7 @@ export default function ResidenceSettingsForm({
 			await deleteMyResidence();
 			setStatus({ kind: "deleted" });
 			router.refresh();
+			router.push(`/u/${encodeURIComponent(profileHandle)}`);
 		} catch (error: unknown) {
 			setStatus({
 				kind: "error",
@@ -120,8 +136,22 @@ export default function ResidenceSettingsForm({
 					onChange={(p) => {
 						setLat(p.lat);
 						setLng(p.lng);
+						setHasSelection(true);
 					}}
 				/>
+				{!hasSelection && (
+					<p
+						className="mt-2 rounded-md border px-3 py-2 text-[color:var(--a-text-muted)]"
+						style={{
+							borderColor: "var(--a-border)",
+							background: "var(--a-bg-muted)",
+							fontSize: 12.5,
+						}}
+					>
+						まだ居住地は未設定です。
+						地図をクリックして円の中心を選んでください。
+					</p>
+				)}
 			</section>
 
 			<section aria-label="半径の調整">
@@ -162,30 +192,43 @@ export default function ResidenceSettingsForm({
 			</section>
 
 			<section aria-label="座標 (参考)">
-				<dl
-					className="grid grid-cols-2 gap-2 text-[color:var(--a-text-muted)]"
-					style={{ fontSize: 12 }}
-				>
-					<div>
-						<dt>緯度</dt>
-						<dd style={{ fontFamily: "var(--a-font-mono)" }}>
-							{lat.toFixed(6)}
-						</dd>
-					</div>
-					<div>
-						<dt>経度</dt>
-						<dd style={{ fontFamily: "var(--a-font-mono)" }}>
-							{lng.toFixed(6)}
-						</dd>
-					</div>
-				</dl>
+				{hasSelection ? (
+					<dl
+						className="grid grid-cols-2 gap-2 text-[color:var(--a-text-muted)]"
+						style={{ fontSize: 12 }}
+					>
+						<div>
+							<dt>中心の目安</dt>
+							<dd style={{ fontFamily: "var(--a-font-mono)" }}>
+								約 {lat.toFixed(2)}
+							</dd>
+						</div>
+						<div>
+							<dt>経度の目安</dt>
+							<dd style={{ fontFamily: "var(--a-font-mono)" }}>
+								約 {lng.toFixed(2)}
+							</dd>
+						</div>
+					</dl>
+				) : (
+					<p className="text-sm text-[color:var(--a-text-muted)]">未設定</p>
+				)}
 			</section>
 
 			<div className="flex flex-wrap items-center gap-3">
 				<button
 					type="button"
-					onClick={handleSave}
+					onClick={handleCancel}
 					disabled={status.kind === "saving"}
+					className="rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-60"
+					style={{ borderColor: "var(--a-border)" }}
+				>
+					キャンセル
+				</button>
+				<button
+					type="button"
+					onClick={handleSave}
+					disabled={status.kind === "saving" || !hasSelection || !hasChanges}
 					className="rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
 					style={{ background: "var(--a-accent)" }}
 				>

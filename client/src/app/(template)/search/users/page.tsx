@@ -187,6 +187,9 @@ export default async function UserSearchPage({
 
 			<div className="p-5">
 				<SearchModeTabs mode="users" query={query.q} />
+				<p className="mb-3 text-xs text-[color:var(--a-text-muted)]">
+					ユーザー名、表示名、自己紹介で検索します。投稿を探す場合は「投稿」タブに切り替えてください。
+				</p>
 				<div className="mb-3">
 					<UserSearchBox initialValue={query.q} />
 				</div>

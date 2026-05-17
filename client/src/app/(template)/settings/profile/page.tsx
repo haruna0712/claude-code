@@ -6,7 +6,7 @@ import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { CurrentUser } from "@/lib/api/users";
 
 export const metadata: Metadata = {
-	title: "プロフィール編集",
+	title: "プロフィール編集 — エンジニア SNS",
 	robots: { index: false },
 };
 

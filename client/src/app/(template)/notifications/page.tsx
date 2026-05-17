@@ -6,8 +6,14 @@
 
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import type { Metadata } from "next";
 
 import NotificationsList from "@/components/notifications/NotificationsList";
+
+export const metadata: Metadata = {
+	title: "通知 — エンジニア SNS",
+	robots: { index: false },
+};
 
 export default function NotificationsPage() {
 	// 未認証時は /login に流す。`logged_in` cookie で SSR で判定。

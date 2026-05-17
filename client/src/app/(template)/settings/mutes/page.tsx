@@ -6,8 +6,14 @@
 
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import type { Metadata } from "next";
 
 import ModerationListClient from "@/components/moderation/ModerationListClient";
+
+export const metadata: Metadata = {
+	title: "ミュート中のユーザー — エンジニア SNS",
+	robots: { index: false },
+};
 
 export default function MutedSettingsPage() {
 	const isAuthenticated = cookies().get("logged_in")?.value === "true";

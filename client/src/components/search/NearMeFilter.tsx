@@ -13,6 +13,7 @@
  * - radius は client 側でも 1〜100 km に clamp (backend は 200 km max だが UX は 100 で十分)。
  */
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -57,7 +58,11 @@ export default function NearMeFilter({
 			style={{ background: "var(--a-bg-muted)" }}
 		>
 			<div className="flex flex-wrap items-center gap-3">
-				<label className="flex cursor-pointer items-center gap-2 text-sm">
+				<label
+					className={`flex items-center gap-2 text-sm ${
+						loggedIn ? "cursor-pointer" : "cursor-not-allowed opacity-70"
+					}`}
+				>
 					<input
 						type="checkbox"
 						checked={nearMe}
@@ -75,12 +80,15 @@ export default function NearMeFilter({
 				</label>
 
 				{!loggedIn && (
-					<span
-						className="text-[color:var(--a-text-muted)]"
+					<Link
+						href={`/login?next=${encodeURIComponent(
+							query ? `/search/users?q=${query}` : "/search/users",
+						)}`}
+						className="rounded-md border border-[color:var(--a-border)] px-2 py-1 text-[color:var(--a-text-muted)] underline-offset-2 hover:underline"
 						style={{ fontSize: 11.5 }}
 					>
-						ログインすると自分の居住地から近い順に並べ替えできます
-					</span>
+						ログインして近い順に探す
+					</Link>
 				)}
 
 				{nearMe && loggedIn && (

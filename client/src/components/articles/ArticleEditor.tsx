@@ -177,6 +177,30 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 		.map((s) => s.trim())
 		.filter(Boolean);
 
+	const initialTitle = initial?.title ?? "";
+	const initialSlug = initial?.slug ?? "";
+	const initialBody = initial?.body_markdown ?? "";
+	const initialStatus = initial?.status ?? "draft";
+	const initialTagsInput = (initial?.tags ?? []).map((t) => t.slug).join(", ");
+	const isDirty =
+		title !== initialTitle ||
+		slug !== initialSlug ||
+		body !== initialBody ||
+		status !== initialStatus ||
+		tagsInput !== initialTagsInput;
+
+	const handleCancel = () => {
+		if (isDirty) {
+			const ok = window.confirm("未保存の変更を破棄して戻りますか？");
+			if (!ok) return;
+		}
+		if (mode === "edit" && initial?.slug) {
+			router.push(`/articles/${initial.slug}`);
+		} else {
+			router.push("/articles");
+		}
+	};
+
 	const handleUploadedImage = useCallback(
 		(image: UploadedImage, filename: string) => {
 			// caret 位置は textarea から live で読む (typescript-reviewer H-2)。
@@ -523,21 +547,31 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 				</label>
 			</fieldset>
 
-			<button
-				type="submit"
-				disabled={submitting}
-				className="rounded-full bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-			>
-				{submitting
-					? "保存中…"
-					: mode === "create"
-						? status === "published"
-							? "公開する"
-							: "下書き保存"
-						: status === "published"
-							? "更新して公開"
-							: "更新"}
-			</button>
+			<div className="flex flex-wrap items-center gap-3">
+				<button
+					type="button"
+					onClick={handleCancel}
+					disabled={submitting}
+					className="rounded-full border border-border px-6 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+				>
+					キャンセル
+				</button>
+				<button
+					type="submit"
+					disabled={submitting}
+					className="rounded-full bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+				>
+					{submitting
+						? "保存中…"
+						: mode === "create"
+							? status === "published"
+								? "公開する"
+								: "下書き保存"
+							: status === "published"
+								? "更新して公開"
+								: "更新"}
+				</button>
+			</div>
 		</form>
 	);
 }

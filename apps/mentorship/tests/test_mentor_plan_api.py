@@ -50,9 +50,9 @@ def _auth(user) -> APIClient:
 
 
 @pytest.mark.django_db
-def test_get_me_404_when_no_profile(alice):
+def test_get_me_empty_when_no_profile(alice):
     res = _auth(alice).get(reverse("mentor-profile-me"))
-    assert res.status_code == 404
+    assert res.status_code == 204
 
 
 @pytest.mark.django_db
@@ -117,9 +117,10 @@ def _profile(user) -> MentorProfile:
 
 
 @pytest.mark.django_db
-def test_plan_list_404_without_profile(alice):
+def test_plan_list_empty_without_profile(alice):
     res = _auth(alice).get(reverse("mentor-plan-list"))
-    assert res.status_code == 404
+    assert res.status_code == 200
+    assert res.data == []
 
 
 @pytest.mark.django_db

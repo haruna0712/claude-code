@@ -101,13 +101,6 @@ export default function ModerationListClient({ mode }: Props) {
 
 	return (
 		<section aria-label={labels.title}>
-			{/* #577: page wrapper の sticky <h1> が page heading なので、
-			    ModerationListClient 内部は <h2> + section に降格 (1 page 1 h1)。
-			    また外側 <main> は (template)/layout の <main> と二重ネストするため
-			    <section> に変更。 */}
-			<h2 className="mb-4 text-xl font-bold text-[color:var(--a-text)]">
-				{labels.title}
-			</h2>
 			{loading ? (
 				<p className="text-sm text-muted-foreground">読み込み中…</p>
 			) : !rows || rows.length === 0 ? (

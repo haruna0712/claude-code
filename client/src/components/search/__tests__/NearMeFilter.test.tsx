@@ -41,9 +41,10 @@ describe("NearMeFilter", () => {
 				loggedIn={false}
 			/>,
 		);
-		expect(
-			screen.getByText(/ログインすると自分の居住地から/),
-		).toBeInTheDocument();
+		const loginLink = screen.getByRole("link", {
+			name: "ログインして近い順に探す",
+		});
+		expect(loginLink).toHaveAttribute("href", "/login?next=%2Fsearch%2Fusers");
 		const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
 		expect(checkbox).toBeDisabled();
 	});

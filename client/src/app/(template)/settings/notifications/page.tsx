@@ -6,8 +6,14 @@
 
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import type { Metadata } from "next";
 
 import NotificationSettingsForm from "@/components/notifications/NotificationSettingsForm";
+
+export const metadata: Metadata = {
+	title: "通知の設定 — エンジニア SNS",
+	robots: { index: false },
+};
 
 export default function NotificationSettingsPage() {
 	const isAuthenticated = cookies().get("logged_in")?.value === "true";

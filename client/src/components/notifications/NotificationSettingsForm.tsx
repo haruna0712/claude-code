@@ -36,22 +36,22 @@ const KIND_LABELS: Record<
 	follow: { label: "新しいフォロワー", active: true },
 	dm_message: {
 		label: "DM",
-		description: "Phase 3 完了後に有効化",
+		description: "現在準備中",
 		active: false,
 	},
 	dm_invite: {
 		label: "グループ招待",
-		description: "Phase 3 完了後に有効化",
+		description: "現在準備中",
 		active: false,
 	},
 	article_comment: {
 		label: "記事コメント",
-		description: "Phase 5 完了後に有効化",
+		description: "現在準備中",
 		active: false,
 	},
 	article_like: {
 		label: "記事へのいいね",
-		description: "Phase 5 完了後に有効化",
+		description: "現在準備中",
 		active: false,
 	},
 };
@@ -134,18 +134,10 @@ export default function NotificationSettingsForm() {
 
 	return (
 		<section
-			aria-labelledby="notif-settings-heading"
+			aria-label="通知の設定"
 			className="rounded-lg border border-border bg-card"
 		>
 			<header className="border-b border-border p-4">
-				{/* #577: page wrapper の sticky <h1>「通知の設定」 が page heading なので、
-				    NotificationSettingsForm 内部は <h2> に降格 (1 page 1 h1)。 */}
-				<h2
-					id="notif-settings-heading"
-					className="text-lg font-bold text-foreground"
-				>
-					通知の設定
-				</h2>
 				<p className="mt-1 text-xs text-muted-foreground">
 					種別ごとに通知の受け取りを ON/OFF できます。OFF
 					にすると、その種別の通知は作成されません。

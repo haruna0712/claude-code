@@ -66,7 +66,7 @@ export default function RoomList({ currentUserId }: RoomListProps) {
 				<div className="py-12 text-center">
 					<p className="text-baby_grey">まだメッセージはありません。</p>
 					<Link
-						href="/explore"
+						href="/search/users"
 						className="text-baby_blue focus-visible:ring-baby_blue focus-visible:ring-offset-baby_veryBlack mt-4 inline-block underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
 					>
 						ユーザーを探す

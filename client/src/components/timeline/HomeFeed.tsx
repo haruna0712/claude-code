@@ -168,17 +168,19 @@ export default function HomeFeed({
 				)}
 
 				{/* Load more */}
-				<div className="flex justify-center py-4">
-					<button
-						type="button"
-						aria-label="もっと見る"
-						onClick={handleLoadMore}
-						disabled={isLoading}
-						className="rounded-full border border-border px-6 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-					>
-						{isLoading ? "読み込み中..." : "もっと見る"}
-					</button>
-				</div>
+				{tweets.length > 0 && (
+					<div className="flex justify-center py-4">
+						<button
+							type="button"
+							aria-label="もっと見る"
+							onClick={handleLoadMore}
+							disabled={isLoading}
+							className="rounded-full border border-border px-6 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+						>
+							{isLoading ? "読み込み中..." : "もっと見る"}
+						</button>
+					</div>
+				)}
 			</section>
 		</div>
 	);

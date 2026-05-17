@@ -208,14 +208,9 @@ export interface UpdateMentorProfileInput {
 export async function getMyMentorProfile(
 	client: AxiosInstance = api,
 ): Promise<MentorProfileDetail | null> {
-	try {
-		const res = await client.get<MentorProfileDetail>("/mentors/me/");
-		return res.data;
-	} catch (err) {
-		const e = err as { response?: { status?: number } };
-		if (e.response?.status === 404) return null;
-		throw err;
-	}
+	const res = await client.get<MentorProfileDetail | "">("/mentors/me/");
+	if (res.status === 204 || !res.data) return null;
+	return res.data;
 }
 
 export async function updateMyMentorProfile(

@@ -39,7 +39,7 @@ export default function LoginForm() {
 		try {
 			await loginUser(values).unwrap();
 			dispatch(setAuth());
-			toast.success("Login Successful");
+			toast.success("ログインしました");
 			// #339: needs_onboarding=true (初回) のみ /onboarding に誘導する。
 			// 設定済みユーザーで /onboarding を flash させる UX を回避。?next= があれば
 			// そちらを優先 (private route から飛ばされてきた場合)。
@@ -74,22 +74,25 @@ export default function LoginForm() {
 				className="flex w-full max-w-md flex-col gap-4"
 			>
 				<FormFieldComponent
-					label="Email Address"
+					label="メールアドレス"
 					name="email"
 					register={register}
 					errors={errors}
-					placeholder="Email Address"
+					placeholder="you@example.com"
 					startIcon={<MailIcon className="dark:text-babyPowder size-8" />}
 				/>
 
 				<FormFieldComponent
-					label="Password"
+					label="パスワード"
 					name="password"
 					register={register}
 					errors={errors}
-					placeholder="Password"
+					placeholder="パスワード"
 					isPassword={true}
-					link={{ linkText: "Forgot Password?", linkUrl: "/forgot-password" }}
+					link={{
+						linkText: "パスワードをお忘れですか？",
+						linkUrl: "/forgot-password",
+					}}
 				/>
 				{/* #609: 以前は `h4-semibold bg-eerieBlack dark:bg-pumpkin text-white`
 				    という未定義 class を使っており、 text-white だけが効いて白文字 / 透明背景

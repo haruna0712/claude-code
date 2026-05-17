@@ -7,7 +7,7 @@
  *  - 100+ は "99+" にクリップ
  *  - 各 NavItem が focus-visible 用の outline class を持つ (WCAG 2.4.7)
  *  - 非 active NavItem は `hover:bg-[color:var(--a-bg-muted)]` を持つ
- *  - Explore icon は Hash (reference home-a.jsx の icon vocabulary に揃える)
+ *  - 探索 icon は Hash (reference home-a.jsx の icon vocabulary に揃える)
  */
 
 import { render, screen } from "@testing-library/react";
@@ -97,8 +97,8 @@ describe("ALeftNav (#557 Phase B-0-6)", () => {
 	it("非 active NavItem に hover:bg-[var(--a-bg-muted)] が付く", () => {
 		setupAuthed(0);
 		render(<ALeftNav />);
-		// "/" が active なので 「Explore」 (非 active) を確認
-		const exploreLink = screen.getByRole("link", { name: /Explore/ });
+		// "/" が active なので 「探索」 (非 active) を確認
+		const exploreLink = screen.getByRole("link", { name: /探索/ });
 		expect(exploreLink.className).toContain(
 			"hover:bg-[color:var(--a-bg-muted)]",
 		);

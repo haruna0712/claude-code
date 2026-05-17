@@ -7,7 +7,7 @@ import type { AgentRunListPage, AgentRunResult } from "@/lib/api/agent";
 import type { CurrentUser } from "@/lib/api/users";
 
 export const metadata: Metadata = {
-	title: "Agent",
+	title: "Agent — エンジニア SNS",
 	robots: { index: false },
 };
 

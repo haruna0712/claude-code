@@ -14,7 +14,7 @@ import type { CurrentUser } from "@/lib/api/users";
 import type { UserResidence } from "@/lib/api/residence";
 
 export const metadata: Metadata = {
-	title: "居住地マップ",
+	title: "居住地マップ — エンジニア SNS",
 	robots: { index: false },
 };
 

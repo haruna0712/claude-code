@@ -7,7 +7,7 @@ import type { TweetListPage, TweetSummary } from "@/lib/api/tweets";
 import type { CurrentUser } from "@/lib/api/users";
 
 export const metadata: Metadata = {
-	title: "下書き",
+	title: "下書き — エンジニア SNS",
 	robots: { index: false },
 };
 

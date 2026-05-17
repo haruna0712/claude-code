@@ -82,6 +82,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
 			<div className="p-5">
 				<SearchModeTabs mode="tweets" query={query} />
+				<p className="mb-3 text-xs text-[color:var(--a-text-muted)]">
+					投稿本文、タグ、投稿者で検索します。ユーザーを探す場合は「ユーザー」タブに切り替えてください。
+				</p>
 				<div className="mb-6">
 					<SearchBox initialValue={query} />
 				</div>

@@ -8,7 +8,7 @@
  *
  * - 上部 app bar: BrandMark + 「devstream」 + ハンバーガー
  * - ハンバーガー click で Sheet (左 drawer) が開き、ALeftNav と同 nav 内容
- * - 下部 bottom-tab bar: ホーム / Explore / 通知 / メッセージ / プロフィール
+ * - 下部 bottom-tab bar: ホーム / 探索 / 通知 / メッセージ / プロフィール
  *   (auth に応じて表示)
  *
  * 表示条件: `< sm` (640px 未満)。`sm` 以上では ALayout のサイドカラムを使う。
@@ -48,10 +48,15 @@ interface BottomTabItem {
 
 const BOTTOM_TABS: BottomTabItem[] = [
 	{ href: "/", label: "ホーム", Icon: Home },
-	{ href: "/explore", label: "Explore", Icon: Compass },
+	{ href: "/explore", label: "探索", Icon: Compass },
 	{ href: "/search", label: "検索", Icon: Search },
 	{ href: "/notifications", label: "通知", Icon: Bell, requiresAuth: true },
-	{ href: "/messages", label: "DM", Icon: MessageSquare, requiresAuth: true },
+	{
+		href: "/messages",
+		label: "メッセージ",
+		Icon: MessageSquare,
+		requiresAuth: true,
+	},
 ];
 
 function BrandMark({ size = 22 }: { size?: number }) {
@@ -229,9 +234,6 @@ export default function AMobileAppBar({ children }: { children?: ReactNode }) {
 					</Link>
 				)}
 			</nav>
-
-			{/* Bottom-tab 分の余白 (固定の 56px) を main 末尾に確保するための pad */}
-			<div className="pb-14 sm:hidden" aria-hidden />
 		</>
 	);
 }
@@ -250,7 +252,7 @@ function DrawerNav({ onItemClick }: { onItemClick: () => void }) {
 	// (#686 mobile 動線漏れ防止)。
 	const items: BottomTabItem[] = [
 		{ href: "/", label: "ホーム", Icon: Home },
-		{ href: "/explore", label: "Explore", Icon: Compass },
+		{ href: "/explore", label: "探索", Icon: Compass },
 		{ href: "/search", label: "検索", Icon: Search },
 		{ href: "/notifications", label: "通知", Icon: Bell, requiresAuth: true },
 		{
