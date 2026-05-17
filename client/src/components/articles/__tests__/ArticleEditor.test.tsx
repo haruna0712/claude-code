@@ -16,8 +16,12 @@ import ArticleEditor, {
 	insertImageMarkdown,
 } from "@/components/articles/ArticleEditor";
 
+const { routerPushMock } = vi.hoisted(() => ({
+	routerPushMock: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
-	useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+	useRouter: () => ({ push: routerPushMock, refresh: vi.fn() }),
 }));
 
 const { toastSuccessMock, toastErrorMock } = vi.hoisted(() => ({
@@ -46,13 +50,14 @@ vi.mock("@/lib/api/articles", async () => {
 	};
 });
 
-const { enqueueMock } = vi.hoisted(() => ({
+const { enqueueMock, uploadRowsMock } = vi.hoisted(() => ({
 	enqueueMock: vi.fn(),
+	uploadRowsMock: vi.fn(() => []),
 }));
 
 vi.mock("@/hooks/useArticleImageUpload", () => ({
 	useArticleImageUpload: () => ({
-		rows: [],
+		rows: uploadRowsMock(),
 		enqueue: enqueueMock,
 		clearFinished: vi.fn(),
 	}),
@@ -149,6 +154,9 @@ describe("detectBodyH1MatchesTitle (#616)", () => {
 describe("ArticleEditor", () => {
 	beforeEach(() => {
 		enqueueMock.mockReset();
+		uploadRowsMock.mockReset();
+		uploadRowsMock.mockReturnValue([]);
+		routerPushMock.mockReset();
 		toastSuccessMock.mockReset();
 		toastErrorMock.mockReset();
 		createArticleMock.mockReset();
@@ -194,6 +202,42 @@ describe("ArticleEditor", () => {
 		fireEvent.change(fileInput!, { target: { files: [file] } });
 		expect(enqueueMock).toHaveBeenCalledTimes(1);
 		expect(enqueueMock).toHaveBeenCalledWith([file]);
+	});
+
+	it("shows active upload rows while images are queued or uploading", () => {
+		uploadRowsMock.mockReturnValue([
+			{ id: "1", filename: "queued.png", state: "queued", error: null },
+			{ id: "2", filename: "uploading.png", state: "uploading", error: null },
+		]);
+
+		render(<ArticleEditor mode="create" />);
+
+		expect(screen.getByText(/待機中: queued\.png/)).toBeInTheDocument();
+		expect(
+			screen.getByText(/アップロード中: uploading\.png/),
+		).toBeInTheDocument();
+		expect(screen.getByText("2 件の画像をアップロード中")).toBeInTheDocument();
+	});
+
+	it("cancel returns to article list when create form is unchanged", () => {
+		render(<ArticleEditor mode="create" />);
+
+		fireEvent.click(screen.getByRole("button", { name: "キャンセル" }));
+
+		expect(routerPushMock).toHaveBeenCalledWith("/articles");
+	});
+
+	it("cancel can keep editing when dirty form confirmation is rejected", () => {
+		vi.spyOn(window, "confirm").mockReturnValue(false);
+		render(<ArticleEditor mode="edit" initial={buildInitial("draft")} />);
+		const titleInput = screen.getByLabelText(/タイトル/, {
+			selector: "input",
+		}) as HTMLInputElement;
+		fireEvent.change(titleInput, { target: { value: "Changed" } });
+
+		fireEvent.click(screen.getByRole("button", { name: "キャンセル" }));
+
+		expect(routerPushMock).not.toHaveBeenCalled();
 	});
 
 	it("T-EDIT-4 paste with image file → enqueue + preventDefault (code-reviewer M-3)", () => {
