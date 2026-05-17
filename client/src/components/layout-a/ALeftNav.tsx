@@ -10,7 +10,9 @@
  *  - 通知 badge を `useUnreadCount` で wire (cyan pill, 99+ で打ち切り)
  *  - 全 NavItem / pod に `focus-visible:outline-2 outline-[var(--a-accent)]` (WCAG 2.4.7)
  *  - 非 active 時の `hover:bg-[var(--a-bg-muted)]` (現在 transparent で hover 無反応)
- *  - Explore icon を Compass → Hash (reference home-a.jsx の `ic:'hash'` に揃える)
+ *
+ * #741 で「探索」 icon を Search (虫眼鏡) に変更、 「検索」 entry を削除。
+ * Twitter 準拠 IA: search は /explore の component で、 nav 上は 1 entry のみ。
  *
  * 既存 `LeftNavbar` とは別実装で並存 (POC、Phase B で統一予定)。
  */
@@ -24,7 +26,6 @@ import {
 	FileText,
 	Flame,
 	Handshake,
-	Hash,
 	Home,
 	LogOut,
 	MessageSquare,
@@ -60,8 +61,9 @@ interface NavItemDef {
 
 const NAV_ITEMS: NavItemDef[] = [
 	{ href: "/", label: "ホーム", Icon: Home },
-	{ href: "/explore", label: "探索", Icon: Hash },
-	{ href: "/search", label: "検索", Icon: Search },
+	// #741: Twitter 準拠 IA — explore icon を Search (虫眼鏡) に統一、
+	// 「検索」 専用 entry は削除 (search box は /explore 最上部)。
+	{ href: "/explore", label: "探索", Icon: Search },
 	{
 		href: "/notifications",
 		label: "通知",
