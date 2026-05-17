@@ -94,7 +94,7 @@ export default async function MentorDetailPage({ params }: PageProps) {
 							className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-white"
 							style={{ background: "var(--a-accent)", fontSize: 12.5 }}
 						>
-							メンターを探す
+							メンター一覧へ
 						</Link>
 					</div>
 				</div>

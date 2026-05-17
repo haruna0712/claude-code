@@ -66,7 +66,8 @@ export async function generateMetadata({
 	const req = await fetchRequest(pk);
 	if (!req) return { title: "募集が見つかりません" };
 	return {
-		title: `${req.title} — メンター募集`,
+		// #744: nav label と揃える ( メンター募集 → 相談を募集中 )。
+		title: `${req.title} — 相談を募集中`,
 		description: req.body.slice(0, 160),
 		robots: req.status === "open" ? undefined : { index: false },
 	};

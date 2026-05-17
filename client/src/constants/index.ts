@@ -53,8 +53,9 @@ export const leftNavLinks: LeftNavLink[] = [
 	{
 		// Phase 11 (#625 / P11-06): mentor 募集 board。 匿名閲覧可。
 		// CLAUDE.md §9 「ホームから 3 click 以内で到達」 反省で LeftNav に追加。
+		// #744: label を「メンター募集」 → 「相談を募集中」 (synonym collision 解消)。
 		path: "/mentor/wanted",
-		label: "メンター募集",
+		label: "相談を募集中",
 		iconName: "Handshake",
 	},
 	{

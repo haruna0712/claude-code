@@ -15,7 +15,8 @@ import { redirect } from "next/navigation";
 import MentorRequestForm from "@/components/mentorship/MentorRequestForm";
 
 export const metadata: Metadata = {
-	title: "メンター募集を出す — エンジニア SNS",
+	// #744: nav label と揃えて「相談を投稿する」 に統一。
+	title: "相談を投稿する — エンジニア SNS",
 	robots: { index: false },
 };
 
@@ -40,14 +41,14 @@ export default function NewMentorRequestPage() {
 					className="rounded text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 					style={{ fontSize: 12.5 }}
 				>
-					← 募集一覧
+					← 相談を募集中
 				</Link>
 				<div className="ml-2 min-w-0 flex-1">
 					<h1
 						className="truncate font-semibold tracking-tight"
 						style={{ fontSize: 15, letterSpacing: -0.2 }}
 					>
-						メンター募集を出す
+						相談を投稿する
 					</h1>
 					<p
 						className="truncate text-[color:var(--a-text-subtle)]"

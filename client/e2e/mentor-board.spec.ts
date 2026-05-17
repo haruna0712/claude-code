@@ -76,7 +76,8 @@ test.describe("Phase 11 11-A mentor board (#624)", () => {
 
 		// LeftNav から /mentor/wanted へ (3 click 以内)
 		await mentee.goto(`${BASE}/`);
-		const navLink = mentee.getByRole("link", { name: "メンター募集" }).first();
+		// #744: nav label を「メンター募集」 → 「相談を募集中」 に変更。
+		const navLink = mentee.getByRole("link", { name: "相談を募集中" }).first();
 		await expect(navLink).toBeVisible({ timeout: 15000 });
 		await navLink.click();
 		await mentee.waitForURL(`${BASE}/mentor/wanted`);
