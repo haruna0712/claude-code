@@ -12,8 +12,8 @@ Phase 11 11-A の golden path + 周辺 edge case を自然言語で記述。 CLA
 
 | step | 誰が           | 何をする                                                                                | 何が起きる / 何が見える                                                                                         |
 | ---- | -------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| 1    | test2 (mentee) | ホーム `/` を開く                                                                       | 左 nav に「メンター募集」 link (Handshake icon) が見える                                                        |
-| 2    | test2          | 左 nav の「メンター募集」 を click                                                      | `/mentor/wanted` 一覧に遷移、 sticky header に「募集を出す」 CTA                                                |
+| 1    | test2 (mentee) | ホーム `/` を開く                                                                       | 左 nav に「相談を募集中」 link (Handshake icon) が見える (#744 で rename)                                       |
+| 2    | test2          | 左 nav の「相談を募集中」 を click                                                      | `/mentor/wanted` 一覧に遷移、 sticky header に「募集を出す」 CTA                                                |
 | 3    | test2          | 「募集を出す」 click                                                                    | `/mentor/wanted/new` で投稿 form                                                                                |
 | 4    | test2          | title「Django で質問」 + body「DRF の認証で詰まっています」 を入力 → 「募集を投稿する」 | toast「募集を投稿しました」 + `/mentor/wanted/<id>` 詳細ページに遷移                                            |
 | 5    | test3 (mentor) | 別 context で `/mentor/wanted/<id>` を開く                                              | mentor 候補として提案 form が出る (owner ではないので proposal list は見えない)                                 |

@@ -10,7 +10,7 @@ Phase 11 11-A の **UI 詳細**。 backend API は phase-11 spec §6 / frontend 
 
 ### `/mentor/wanted` 一覧
 
-- sticky header: 🤝 icon + 「メンター募集」 + filterDescription (`#tag で募集中` or `募集中の相談`) + CTA
+- sticky header: 🤝 icon + 「相談を募集中」 (旧「メンター募集」、 #744 で rename) + filterDescription (`#tag で募集中` or `募集中の相談`) + CTA
   - auth: 「募集を出す」 (青背景) → `/mentor/wanted/new`
   - anon: 「ログインして募集する」 → `/login?next=/mentor/wanted/new`
 - body: cursor pagination で公開中 (status=open) のみ列挙、 各 row は
