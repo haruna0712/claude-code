@@ -88,20 +88,27 @@ gh issue list --milestone "<現 Phase のマイルストーン名>" --state open
 
 ### 4.2 レビューエージェント選択マトリクス
 
-| 触ったもの                       | 必ず呼ぶ                                                                  |
-| -------------------------------- | ------------------------------------------------------------------------- |
-| Python / Django (apps/, config/) | `python-reviewer` + `code-reviewer`                                       |
-| TypeScript / Next.js (client/)   | `typescript-reviewer` + `code-reviewer`                                   |
-| **UI / frontend ルート追加**     | + `a11y-architect` + **`gan-evaluator`** (実画面 UX 採点、§4.5 step 6 で) |
-| 認証 / 認可 / 入力 / 課金        | + `security-reviewer`                                                     |
-| DB マイグレ / クエリ / モデル    | + `database-reviewer`                                                     |
-| 大きな機能 / リファクタ          | + `code-architect` で設計レビュー                                         |
-| サイレント失敗が混入しそう       | + `silent-failure-hunter`                                                 |
+| 触ったもの                       | 必ず呼ぶ                                                                                                                                   |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Python / Django (apps/, config/) | `python-reviewer` + `code-reviewer`                                                                                                        |
+| TypeScript / Next.js (client/)   | `typescript-reviewer` + `code-reviewer`                                                                                                    |
+| **UI / frontend ルート追加**     | + `a11y-architect` + **`gan-evaluator`** (実画面 UX 採点、§4.5 step 6 で) + **`ui-ux-tester`** (IA / 余白 / dead end 監査、§4.5 step 6 で) |
+| **IA / layout 構造判断**         | `ui-ux-tester` (右 rail いる？ ナビ重複してない？ 入口導線通ってる？ を Playwright MCP で実画面検証して構造化レポート)                     |
+| 認証 / 認可 / 入力 / 課金        | + `security-reviewer`                                                                                                                      |
+| DB マイグレ / クエリ / モデル    | + `database-reviewer`                                                                                                                      |
+| 大きな機能 / リファクタ          | + `code-architect` で設計レビュー                                                                                                          |
+| サイレント失敗が混入しそう       | + `silent-failure-hunter`                                                                                                                  |
 
 → レビューエージェントは **1 つずつ直列に呼ぶ** (§4.5 の並列禁止ルールに従う、PC スペック制約)。
 
 **`gan-evaluator` の必須化** (#499 / #545 / #547 で 3 回踏んだ轍への対応):
 新ページ / 新ルート / 大きな UI 変更を frontend で行ったら、stg 反映後に **必ず** `gan-evaluator` agent を呼んで「ホームから入口を辿れるか」「未ログインで壊れないか」「『これで完了』のシグナルが画面上にあるか」 を採点させる。Claude 単独だと実装者バイアスで「URL 直叩きで動いた = OK」 と判定しがちなので、第三者の目で UX 視点を確保する保険。
+
+**`ui-ux-tester` の役割** (gan-evaluator と棲み分け):
+
+- `gan-evaluator` → 「 rubric に対する合否採点」 (この PR は ship してよいか)
+- `ui-ux-tester` → 「 IA / layout / 導線の構造監査」 (右 rail いる？ ナビ重複してない？ surface 重複してない？ entry-point 3 click 以内？ spacing 過不足は？)
+  両方とも実画面を Playwright MCP で踏むが focus が違う。 frontend ルート追加時は両方呼ぶ。 IA / layout 判断だけが目的なら `ui-ux-tester` 単独で OK。
 
 ### 4.3 Phase 開始時の Issue 起票完備（planner エージェント）
 
