@@ -24,6 +24,7 @@ from typing import Any
 
 from django.core.validators import URLValidator
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.tags.models import Tag
@@ -569,13 +570,11 @@ class TweetUpdateSerializer(serializers.Serializer):
     def _save_draft_body(instance: Tweet, new_body: str) -> None:
         """draft の body を plain update。 edit_count / last_edited_at は触らない。
 
-        #769: ``.update()`` は ``auto_now`` (updated_at) を bypass しないように
+        #769: ``.update()`` は ``auto_now`` (updated_at) を bypass するため
         明示的に ``updated_at=now()`` を渡す (silent-failure-hunter MEDIUM #5)。
         body 長検証は serializer の ``validate_body`` で既に通過しているが、
         record_edit と同じ guard を defense-in-depth で再評価しない (= 重複検証回避)。
         """
-        from django.utils import timezone
-
         now = timezone.now()
         Tweet.all_objects.filter(pk=instance.pk).update(
             body=new_body,

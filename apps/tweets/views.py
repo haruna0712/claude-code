@@ -38,14 +38,32 @@ from rest_framework.response import Response
 
 from apps.common.cookie_auth import CookieAuthentication
 from apps.common.throttling import PostTweetThrottle
+from apps.tweets.language_detection import detect_language
 from apps.tweets.managers import TweetQuerySet
-from apps.tweets.models import Tweet
+from apps.tweets.models import TWEET_BODY_MAX_LENGTH, Tweet
 from apps.tweets.serializers import (
     TweetCreateSerializer,
     TweetDetailSerializer,
     TweetListSerializer,
     TweetUpdateSerializer,
 )
+
+# #769: publish action での body length validation 用 (P1-10 char_count の lazy import
+# pattern を踏襲、 module 未配備時は len() のみで足切り)
+try:
+    from apps.tweets.char_count import (  # type: ignore[attr-defined]
+        TWEET_MAX_CHARS,
+        count_tweet_chars,
+    )
+
+    _HAS_CHAR_COUNT = True
+except ImportError:  # pragma: no cover - P1-10 が merge されたら到達しない
+    _HAS_CHAR_COUNT = False
+    TWEET_MAX_CHARS = TWEET_BODY_MAX_LENGTH
+
+    def count_tweet_chars(_body: str) -> int:  # type: ignore[no-redef]
+        return 0  # fallback never used (gated by _HAS_CHAR_COUNT)
+
 
 # Action 定数 (マジックストリング排除)
 ACTION_LIST = "list"
@@ -425,28 +443,18 @@ class TweetViewSet(viewsets.ModelViewSet):
             )
 
         # #769: optional body の length validation
-        body = request.data.get("body") if hasattr(request, "data") else None
+        body = request.data.get("body")
         if body is not None:
-            from apps.tweets.models import TWEET_BODY_MAX_LENGTH
-
             if len(body) > TWEET_BODY_MAX_LENGTH:
                 raise ValidationError(
                     {"body": f"本文は {TWEET_BODY_MAX_LENGTH} 字以内で入力してください。"}
                 )
-            try:
-                from apps.tweets.char_count import (
-                    TWEET_MAX_CHARS,
-                    count_tweet_chars,
+            if _HAS_CHAR_COUNT and count_tweet_chars(body) > TWEET_MAX_CHARS:
+                raise ValidationError(
+                    {
+                        "body": f"本文は URL / Markdown 換算で {TWEET_MAX_CHARS} 字以内にしてください。"
+                    }
                 )
-
-                if count_tweet_chars(body) > TWEET_MAX_CHARS:
-                    raise ValidationError(
-                        {
-                            "body": f"本文は URL / Markdown 換算で {TWEET_MAX_CHARS} 字以内にしてください。"
-                        }
-                    )
-            except ImportError:
-                pass  # char_count module 未配備時は len() のみで足切り済
 
         now = timezone.now()
         # spec §2.1: 公開時に created_at == published_at に揃え、 .update() は
@@ -460,11 +468,21 @@ class TweetViewSet(viewsets.ModelViewSet):
             update_fields["body"] = body
             # silent-failure LOW #7: .update() は pre_save signal を bypass するため
             # auto_detect_language が走らない → 明示的に language を再検出する。
-            from apps.tweets.language_detection import detect_language
-
             update_fields["language"] = detect_language(body)
 
-        Tweet.all_objects.filter(pk=instance.pk).update(**update_fields)
+        # #769 python-reviewer HIGH (TOCTOU): `instance.published_at IS NULL` の
+        # check と .update() の間に他リクエストが publish してしまうと double-publish
+        # する。 `.filter(published_at__isnull=True).update()` の行数で勝者判定する
+        # ことで race を排除する (= 後勝ちの 1 行のみが更新成功、 他は 0 行返却)。
+        updated = Tweet.all_objects.filter(
+            pk=instance.pk,
+            published_at__isnull=True,
+        ).update(**update_fields)
+        if updated == 0:
+            return Response(
+                {"detail": "already_published"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         instance.refresh_from_db()
         out = TweetDetailSerializer(
             instance,

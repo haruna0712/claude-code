@@ -22,7 +22,7 @@ from __future__ import annotations
 import pytest
 from rest_framework.test import APIClient
 
-from apps.tweets.models import Tweet
+from apps.tweets.models import Tweet, TweetEdit
 from apps.tweets.tests._factories import make_user
 
 # ---------------------------------------------------------------------------
@@ -324,7 +324,6 @@ class TestDraftPatchDoesNotRecordEdit:
         assert d.edit_count == 0
         assert d.last_edited_at is None
         # TweetEdit 履歴が作られていない
-        from apps.tweets.models import TweetEdit
 
         assert TweetEdit.objects.filter(tweet=d).count() == 0
 
@@ -362,18 +361,21 @@ class TestDraftPatchBoundary:
         d.refresh_from_db()
         assert d.body == "v6"
         assert d.edit_count == 0  # 一度も加算されていない
-        from apps.tweets.models import TweetEdit
 
         assert TweetEdit.objects.filter(tweet=d).count() == 0
 
     def test_bd2_draft_can_be_patched_after_30_min_window(self, authed_client):
-        """draft 作成から 31 分後でも PATCH 可能 (= 公開済みの 30 分 window 制約は適用されない)。"""
+        """draft 作成から 31 分後でも PATCH 可能 (= 公開済みの 30 分 window 制約は適用されない)。
+
+        python-reviewer MEDIUM: ``authed_client`` も draft 作成と同じ freeze_time scope
+        に入れて、 token TTL 等の時刻依存処理が一貫した時刻で動くようにする。
+        """
         from freezegun import freeze_time
 
         u = make_user()
         with freeze_time("2026-05-18 00:00:00"):
             d = Tweet.objects.create(author=u, body="v0", published_at=None)
-        c = authed_client(u)
+            c = authed_client(u)
         with freeze_time("2026-05-18 00:31:00"):  # 31 分後
             resp = c.patch(
                 f"/api/v1/tweets/{d.id}/",
@@ -473,7 +475,6 @@ class TestPublishWithBody:
         assert d.body == "y"
         assert d.edit_count == 0  # 「編集済」 にならない
         assert d.last_edited_at is None
-        from apps.tweets.models import TweetEdit
 
         assert TweetEdit.objects.filter(tweet=d).count() == 0
 
@@ -549,7 +550,6 @@ class TestPostPublishEditDegradation:
         assert d.body == "post-publish edit"
         assert d.edit_count == 1
         assert d.last_edited_at is not None
-        from apps.tweets.models import TweetEdit
 
         assert TweetEdit.objects.filter(tweet=d).count() == 1
 
