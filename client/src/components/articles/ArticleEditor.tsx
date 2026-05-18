@@ -27,6 +27,7 @@ import {
 	type ClipboardEvent,
 	type DragEvent,
 	type FormEvent,
+	type KeyboardEvent,
 } from "react";
 import { toast } from "react-toastify";
 
@@ -150,6 +151,8 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [isDragging, setIsDragging] = useState(false);
+	// #780 fix: Write / Preview のタブ切替 (Zenn 流)。 同時並列ではなく排他切替。
+	const [viewMode, setViewMode] = useState<"write" | "preview">("write");
 
 	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -161,16 +164,54 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 
 	// code-reviewer H-2 反映: body 更新ごとに pendingCaretRef を flush。 dep array
 	// なしの useEffect は毎レンダー走ってオーバーヘッドになるので body を観測する形に。
+	// typescript-reviewer HIGH (#780): viewMode が "preview" のとき textarea は
+	// hidden なので、 focus / setSelectionRange を skip する (= 不可視要素への
+	// focus 奪取を防ぐ)。 viewMode は ref 経由ではなく毎レンダー closure 経由で読む
+	// (= 再 schedule 不要、 「現在の状態」 として参照するだけ)。
 	useEffect(() => {
 		if (pendingCaretRef.current === null) return;
 		const target = pendingCaretRef.current;
 		pendingCaretRef.current = null;
 		const ta = textareaRef.current;
-		if (ta) {
+		if (ta && viewMode === "write") {
 			ta.focus();
 			ta.setSelectionRange(target, target);
 		}
-	}, [body]);
+	}, [body, viewMode]);
+
+	// #780: Write タブに戻ったら textarea にフォーカスを戻す (UX 改善)。
+	// typescript-reviewer HIGH (#780): mount 時の発火を抑制。 default viewMode が
+	// "write" のため、 初回 mount で page 全体の focus を奪うのを防ぐ。 切替時のみ
+	// focus を返す。
+	const firstViewModeRender = useRef(true);
+	useEffect(() => {
+		if (firstViewModeRender.current) {
+			firstViewModeRender.current = false;
+			return;
+		}
+		if (viewMode === "write") {
+			textareaRef.current?.focus({ preventScroll: true });
+		}
+	}, [viewMode]);
+
+	// #780: tablist keyboard nav。 ArrowLeft/Right で前/次の tab に自動 activate、
+	// Home/End は 2 tab しかないため Write/Preview を直接指す。
+	const handleTabKey = useCallback((e: KeyboardEvent<HTMLButtonElement>) => {
+		if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+			e.preventDefault();
+			setViewMode((m) => (m === "write" ? "preview" : "write"));
+			return;
+		}
+		if (e.key === "Home") {
+			e.preventDefault();
+			setViewMode("write");
+			return;
+		}
+		if (e.key === "End") {
+			e.preventDefault();
+			setViewMode("preview");
+		}
+	}, []);
 
 	const tags = tagsInput
 		.split(/[,\s]+/)
@@ -348,8 +389,19 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 	// #616: title と body 1 行目の h1 が一致しているか。 null なら警告なし。
 	const titleH1Duplicate = detectBodyH1MatchesTitle(title, body);
 
+	// #780: 保存 button の label (= mode + status の組み合わせで決まる)
+	const submitLabel = submitting
+		? "保存中…"
+		: mode === "create"
+			? status === "published"
+				? "公開する"
+				: "下書き保存"
+			: status === "published"
+				? "更新して公開"
+				: "更新";
+
 	return (
-		<form onSubmit={handleSubmit} className="space-y-4">
+		<form onSubmit={handleSubmit} className="space-y-3">
 			{error && (
 				<p
 					role="alert"
@@ -359,218 +411,264 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 				</p>
 			)}
 
-			<label className="block">
-				<span className="block text-sm font-medium">タイトル</span>
-				<input
-					type="text"
-					value={title}
-					onChange={(e) => setTitle(e.target.value)}
-					maxLength={120}
-					placeholder="記事のタイトル (1〜120 字)"
-					required
-					className="mt-1 w-full rounded border border-border bg-background px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-				/>
-			</label>
-
-			<label className="block">
-				<span className="block text-sm font-medium">
-					slug (任意、未指定なら title から自動生成)
-				</span>
-				<input
-					type="text"
-					value={slug}
-					onChange={(e) => setSlug(e.target.value)}
-					maxLength={120}
-					placeholder="my-first-post"
-					pattern="[\w\-]+"
-					className="mt-1 w-full rounded border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-				/>
-			</label>
-
-			<label className="block">
-				<span className="block text-sm font-medium">
-					タグ (カンマ区切り、最大 5 個)
-				</span>
-				<input
-					type="text"
-					value={tagsInput}
-					onChange={(e) => setTagsInput(e.target.value)}
-					placeholder="django, nextjs, aws"
-					className="mt-1 w-full rounded border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-				/>
-				{tags.length > 0 && (
-					<ul aria-label="入力中のタグ" className="mt-1 flex flex-wrap gap-1">
-						{tags.map((t) => (
-							<li
-								key={t}
-								className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+			{/* #780 Zenn 流 2-col layout: main (editor/preview) + 右 sidebar (metadata)。
+			    desktop ≥ lg で 2 col、 mobile では metadata が main 下に積み下がる。 */}
+			<div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+				{/* main col: tablist + editor / preview panel */}
+				<div className="flex min-w-0 flex-col">
+					{/* tablist (Write / Preview) + 右端に「画像を追加」 + Cancel + 保存 */}
+					<div className="flex flex-wrap items-center gap-2 border-b border-border pb-2">
+						<div
+							role="tablist"
+							aria-label="エディタ表示モード"
+							aria-orientation="horizontal"
+							className="flex items-center gap-1"
+						>
+							<button
+								type="button"
+								role="tab"
+								id="editor-tab-write"
+								aria-selected={viewMode === "write"}
+								aria-controls="editor-panel-write"
+								tabIndex={viewMode === "write" ? 0 : -1}
+								onClick={() => setViewMode("write")}
+								onKeyDown={handleTabKey}
+								className={`min-h-[32px] rounded-t border-b-2 px-3 py-1 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)] ${
+									viewMode === "write"
+										? "border-[color:var(--a-accent)] text-foreground"
+										: "border-transparent text-muted-foreground hover:text-foreground"
+								}`}
 							>
-								#{t}
-							</li>
-						))}
-					</ul>
-				)}
-			</label>
-
-			<div className="grid gap-3 lg:grid-cols-2">
-				<div className="block">
-					<div className="flex items-center justify-between gap-2">
-						<label
-							htmlFor="article-body-textarea"
-							className="block text-sm font-medium"
-						>
-							本文 (Markdown)
-						</label>
-						<button
-							type="button"
-							onClick={() => fileInputRef.current?.click()}
-							// a11y-architect H-1: WCAG 2.2 SC 2.5.8 Target Size Minimum
-							// (24×24 CSS px) を満たすため min-h-[24px] + py-1。
-							// a11y-architect M-3: aria-haspopup="dialog" で OS file picker
-							// が開くことを SR に通知。
-							className="inline-flex min-h-[24px] items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
-							aria-label="画像を追加"
-							aria-haspopup="dialog"
-						>
-							<ImagePlus className="size-3.5" aria-hidden="true" />
-							画像を追加
-						</button>
-						<input
-							ref={fileInputRef}
-							type="file"
-							// a11y-architect M-2: hidden input でも programmatic click 経由で
-							// 操作するため、 偶発的に SR に拾われた時のために label を補強。
-							aria-label="画像ファイルを選択"
-							accept="image/jpeg,image/png,image/webp,image/gif"
-							multiple
-							hidden
-							onChange={handleFilesFromInput}
-						/>
+								Write
+							</button>
+							<button
+								type="button"
+								role="tab"
+								id="editor-tab-preview"
+								aria-selected={viewMode === "preview"}
+								aria-controls="editor-panel-preview"
+								tabIndex={viewMode === "preview" ? 0 : -1}
+								onClick={() => setViewMode("preview")}
+								onKeyDown={handleTabKey}
+								className={`min-h-[32px] rounded-t border-b-2 px-3 py-1 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)] ${
+									viewMode === "preview"
+										? "border-[color:var(--a-accent)] text-foreground"
+										: "border-transparent text-muted-foreground hover:text-foreground"
+								}`}
+							>
+								Preview
+							</button>
+						</div>
+						{/* tablist の右側 (= form 行動 button 群) */}
+						<div className="ml-auto flex flex-wrap items-center gap-2">
+							{viewMode === "write" && (
+								<>
+									<button
+										type="button"
+										onClick={() => fileInputRef.current?.click()}
+										// a11y-architect H-1 / M-3 既存維持
+										className="inline-flex min-h-[32px] items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
+										aria-label="画像を追加"
+										aria-haspopup="dialog"
+									>
+										<ImagePlus className="size-3.5" aria-hidden="true" />
+										画像を追加
+									</button>
+									<input
+										ref={fileInputRef}
+										type="file"
+										aria-label="画像ファイルを選択"
+										accept="image/jpeg,image/png,image/webp,image/gif"
+										multiple
+										hidden
+										onChange={handleFilesFromInput}
+									/>
+								</>
+							)}
+							<button
+								type="button"
+								onClick={handleCancel}
+								disabled={submitting}
+								className="min-h-[32px] rounded-full border border-border px-4 py-1 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+							>
+								キャンセル
+							</button>
+							<button
+								type="submit"
+								disabled={submitting}
+								className="min-h-[32px] rounded-full bg-primary px-4 py-1 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+							>
+								{submitLabel}
+							</button>
+						</div>
 					</div>
-					<textarea
-						ref={textareaRef}
-						id="article-body-textarea"
-						value={body}
-						onChange={(e) => setBody(e.target.value)}
-						onPaste={handlePaste}
-						onDrop={handleDrop}
-						onDragOver={handleDragOver}
-						onDragLeave={handleDragLeave}
-						rows={20}
-						maxLength={100_000}
-						placeholder={
-							"# Heading\n\n本文を Markdown で...\n画像はドラッグ&ドロップ or ペーストでも追加できます"
-						}
-						required
-						aria-describedby="body-help"
-						className={`mt-1 h-[28rem] w-full rounded p-3 font-mono text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-							isDragging
-								? // a11y-architect H-2: WCAG 1.4.1 / 1.4.11 を満たすため色だけ
-									// でなく border-dashed + ring で形状変化も付与する。
-									"ring-[color:var(--a-accent)]/40 border-2 border-dashed border-[color:var(--a-accent)] bg-[color:var(--a-bg-subtle)] ring-2"
-								: "border border-border bg-background"
-						}`}
-					/>
-					<p id="body-help" className="mt-1 text-xs text-muted-foreground">
-						画像はドラッグ&ドロップ / ペースト / 「画像を追加」 button
-						で挿入できます (jpeg / png / webp / gif、 5 MiB まで)。
-					</p>
-					{titleH1Duplicate !== null && (
-						// #616: title と body 先頭 h1 が一致するなら、 詳細ページで H1 が
-						// 重複表示されるので作者に警告。 inline で非モーダル、 author の
-						// 意図的な選択は妨げない (block しない、 publish も通す)。
-						<p
-							role="status"
-							aria-live="polite"
-							className="mt-1 rounded border border-yellow-400/60 bg-yellow-50/80 px-2 py-1 text-xs text-yellow-900 dark:border-yellow-500/30 dark:bg-yellow-900/20 dark:text-yellow-100"
-						>
-							タイトルと本文 1 行目「# {titleH1Duplicate}」 が同じです。
-							詳細ページで見出しが二重に表示される可能性があります。
-						</p>
-					)}
-				</div>
-				<div className="block">
-					<span className="block text-sm font-medium">プレビュー</span>
-					{/* a11y-architect M-1: 集約 SR 通知。 画像 1 件ごとに polite が
-					    連発するのを防ぐ。 視覚 list は live region から外す。 */}
-					<p role="status" aria-live="polite" className="sr-only">
-						{activeUploadRows.length > 0
-							? `${activeUploadRows.length} 件の画像をアップロード中`
-							: ""}
-					</p>
-					{activeUploadRows.length > 0 && (
-						<ul
-							aria-label="アップロード中の画像"
-							className="mt-1 space-y-1 rounded border border-dashed border-border bg-muted/20 p-2 text-xs"
-						>
-							{activeUploadRows.map((r) => (
-								<li key={r.id} className="text-muted-foreground">
-									{r.state === "queued" ? "⏳ 待機中: " : "⬆ アップロード中: "}
-									{r.filename}
-								</li>
-							))}
-						</ul>
-					)}
+
+					{/* Write tabpanel */}
 					<div
+						role="tabpanel"
+						id="editor-panel-write"
+						aria-labelledby="editor-tab-write"
+						hidden={viewMode !== "write"}
+						className="mt-2 flex min-h-0 flex-1 flex-col"
+					>
+						<textarea
+							ref={textareaRef}
+							id="article-body-textarea"
+							value={body}
+							onChange={(e) => setBody(e.target.value)}
+							onPaste={handlePaste}
+							onDrop={handleDrop}
+							onDragOver={handleDragOver}
+							onDragLeave={handleDragLeave}
+							maxLength={100_000}
+							placeholder={
+								"# Heading\n\n本文を Markdown で...\n画像はドラッグ&ドロップ or ペーストでも追加できます"
+							}
+							required
+							aria-label="本文 (Markdown)"
+							aria-describedby="body-help"
+							className={`h-[calc(100vh-220px)] min-h-[24rem] w-full rounded p-3 font-mono text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+								isDragging
+									? "ring-[color:var(--a-accent)]/40 border-2 border-dashed border-[color:var(--a-accent)] bg-[color:var(--a-bg-subtle)] ring-2"
+									: "border border-border bg-background"
+							}`}
+						/>
+						<p id="body-help" className="mt-1 text-xs text-muted-foreground">
+							画像はドラッグ&ドロップ / ペースト / 「画像を追加」 button
+							で挿入できます (jpeg / png / webp / gif、 5 MiB まで)。
+						</p>
+						{titleH1Duplicate !== null && (
+							<p
+								role="status"
+								aria-live="polite"
+								className="mt-1 rounded border border-yellow-400/60 bg-yellow-50/80 px-2 py-1 text-xs text-yellow-900 dark:border-yellow-500/30 dark:bg-yellow-900/20 dark:text-yellow-100"
+							>
+								タイトルと本文 1 行目「# {titleH1Duplicate}」 が同じです。
+								詳細ページで見出しが二重に表示される可能性があります。
+							</p>
+						)}
+						{/* a11y-architect M-1: 集約 SR 通知。 視覚 list は別途。 */}
+						<p role="status" aria-live="polite" className="sr-only">
+							{activeUploadRows.length > 0
+								? `${activeUploadRows.length} 件の画像をアップロード中`
+								: ""}
+						</p>
+						{activeUploadRows.length > 0 && (
+							<ul
+								aria-label="アップロード中の画像"
+								className="mt-1 space-y-1 rounded border border-dashed border-border bg-muted/20 p-2 text-xs"
+							>
+								{activeUploadRows.map((r) => (
+									<li key={r.id} className="text-muted-foreground">
+										{r.state === "queued"
+											? "⏳ 待機中: "
+											: "⬆ アップロード中: "}
+										{r.filename}
+									</li>
+								))}
+							</ul>
+						)}
+					</div>
+
+					{/* Preview tabpanel */}
+					<div
+						role="tabpanel"
+						id="editor-panel-preview"
+						aria-labelledby="editor-tab-preview"
+						hidden={viewMode !== "preview"}
+						tabIndex={0}
 						aria-label="本文プレビュー"
-						className="mt-1 h-[28rem] overflow-y-auto rounded border border-border bg-muted/20 p-4 text-sm"
+						className="mt-2 h-[calc(100vh-220px)] min-h-[24rem] overflow-y-auto rounded border border-border bg-muted/20 p-4 text-sm"
 					>
 						<MarkdownPreview body={body} />
+						<p className="mt-3 text-xs text-muted-foreground">
+							※ 投稿後はサーバー側のサニタイザを通した HTML が表示されます。
+						</p>
 					</div>
-					<p className="mt-1 text-xs text-muted-foreground">
-						※ 投稿後はサーバー側のサニタイザを通した HTML が表示されます。
-					</p>
 				</div>
-			</div>
 
-			<fieldset className="flex items-center gap-4">
-				<legend className="sr-only">公開ステータス</legend>
-				<label className="flex items-center gap-2 text-sm">
-					<input
-						type="radio"
-						name="status"
-						value="draft"
-						checked={status === "draft"}
-						onChange={() => setStatus("draft")}
-					/>
-					下書き
-				</label>
-				<label className="flex items-center gap-2 text-sm">
-					<input
-						type="radio"
-						name="status"
-						value="published"
-						checked={status === "published"}
-						onChange={() => setStatus("published")}
-					/>
-					公開
-				</label>
-			</fieldset>
+				{/* 右 sidebar: タイトル / slug / タグ / 公開ステータス */}
+				<aside aria-label="記事の設定" className="space-y-3 lg:pt-2">
+					<label className="block">
+						<span className="block text-sm font-medium">タイトル</span>
+						<input
+							type="text"
+							value={title}
+							onChange={(e) => setTitle(e.target.value)}
+							maxLength={120}
+							placeholder="記事のタイトル (1〜120 字)"
+							required
+							className="mt-1 w-full rounded border border-border bg-background px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						/>
+					</label>
 
-			<div className="flex flex-wrap items-center gap-3">
-				<button
-					type="button"
-					onClick={handleCancel}
-					disabled={submitting}
-					className="rounded-full border border-border px-6 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
-				>
-					キャンセル
-				</button>
-				<button
-					type="submit"
-					disabled={submitting}
-					className="rounded-full bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-				>
-					{submitting
-						? "保存中…"
-						: mode === "create"
-							? status === "published"
-								? "公開する"
-								: "下書き保存"
-							: status === "published"
-								? "更新して公開"
-								: "更新"}
-				</button>
+					<label className="block">
+						<span className="block text-sm font-medium">
+							slug (任意、未指定なら title から自動生成)
+						</span>
+						<input
+							type="text"
+							value={slug}
+							onChange={(e) => setSlug(e.target.value)}
+							maxLength={120}
+							placeholder="my-first-post"
+							pattern="[\w\-]+"
+							className="mt-1 w-full rounded border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						/>
+					</label>
+
+					<label className="block">
+						<span className="block text-sm font-medium">
+							タグ (カンマ区切り、最大 5 個)
+						</span>
+						<input
+							type="text"
+							value={tagsInput}
+							onChange={(e) => setTagsInput(e.target.value)}
+							placeholder="django, nextjs, aws"
+							className="mt-1 w-full rounded border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						/>
+						{tags.length > 0 && (
+							<ul
+								aria-label="入力中のタグ"
+								className="mt-1 flex flex-wrap gap-1"
+							>
+								{tags.map((t) => (
+									<li
+										key={t}
+										className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+									>
+										#{t}
+									</li>
+								))}
+							</ul>
+						)}
+					</label>
+
+					<fieldset className="space-y-2 rounded border border-border bg-muted/10 p-3">
+						<legend className="px-1 text-sm font-medium">公開ステータス</legend>
+						<label className="flex items-center gap-2 text-sm">
+							<input
+								type="radio"
+								name="status"
+								value="draft"
+								checked={status === "draft"}
+								onChange={() => setStatus("draft")}
+							/>
+							下書き
+						</label>
+						<label className="flex items-center gap-2 text-sm">
+							<input
+								type="radio"
+								name="status"
+								value="published"
+								checked={status === "published"}
+								onChange={() => setStatus("published")}
+							/>
+							公開
+						</label>
+					</fieldset>
+				</aside>
 			</div>
 		</form>
 	);

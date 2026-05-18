@@ -175,21 +175,132 @@ describe("ArticleEditor", () => {
 
 	it("T-EDIT-2 preview pane renders heading from body markdown", () => {
 		render(<ArticleEditor mode="create" />);
-		const textarea = screen
-			.getByLabelText("本文 (Markdown)", {
-				exact: false,
-			})
-			.matches?.("textarea")
-			? screen.getByLabelText("本文 (Markdown)", { exact: false })
-			: (screen
-					.getAllByRole("textbox")
-					.find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement);
-
+		const textarea = screen.getByLabelText("本文 (Markdown)", {
+			exact: false,
+		}) as HTMLTextAreaElement;
 		fireEvent.change(textarea, { target: { value: "# title\n\nhello" } });
-		// preview pane に <h1>title</h1> が render
+		// #780: Write tab default で preview pane は hidden = accessibility tree
+		// から除外されている。 Preview tab に切り替えてから rendered HTML を確認。
+		fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
 		expect(
 			screen.getByRole("heading", { name: "title", level: 1 }),
 		).toBeInTheDocument();
+	});
+
+	// #780 Zenn 流 refactor: Write / Preview タブ切替
+	describe("#780 Write/Preview タブ切替", () => {
+		it("HP-1: 初期表示で Write tab が aria-selected=true、 Preview pane は hidden", () => {
+			render(<ArticleEditor mode="create" />);
+			const writeTab = screen.getByRole("tab", { name: "Write" });
+			const previewTab = screen.getByRole("tab", { name: "Preview" });
+			expect(writeTab).toHaveAttribute("aria-selected", "true");
+			expect(previewTab).toHaveAttribute("aria-selected", "false");
+			// preview tabpanel は hidden だが DOM には存在
+			const previewPanel = document.getElementById("editor-panel-preview");
+			expect(previewPanel).not.toBeNull();
+			expect(previewPanel).toHaveAttribute("hidden");
+		});
+
+		it("HP-2: Preview tab click で aria-selected が切り替わり、 textarea は hidden、 preview pane が visible", () => {
+			render(<ArticleEditor mode="create" />);
+			fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
+			expect(screen.getByRole("tab", { name: "Preview" })).toHaveAttribute(
+				"aria-selected",
+				"true",
+			);
+			expect(screen.getByRole("tab", { name: "Write" })).toHaveAttribute(
+				"aria-selected",
+				"false",
+			);
+			const writePanel = document.getElementById("editor-panel-write");
+			expect(writePanel).toHaveAttribute("hidden");
+		});
+
+		it("BD-1: ArrowRight キーで Preview に切替、 ArrowLeft で Write に戻る", () => {
+			render(<ArticleEditor mode="create" />);
+			const writeTab = screen.getByRole("tab", { name: "Write" });
+			fireEvent.keyDown(writeTab, { key: "ArrowRight" });
+			expect(screen.getByRole("tab", { name: "Preview" })).toHaveAttribute(
+				"aria-selected",
+				"true",
+			);
+			const previewTab = screen.getByRole("tab", { name: "Preview" });
+			fireEvent.keyDown(previewTab, { key: "ArrowLeft" });
+			expect(screen.getByRole("tab", { name: "Write" })).toHaveAttribute(
+				"aria-selected",
+				"true",
+			);
+		});
+
+		it("BD-2: End キーで Preview tab、 Home キーで Write tab に jump", () => {
+			render(<ArticleEditor mode="create" />);
+			const writeTab = screen.getByRole("tab", { name: "Write" });
+			// End → Preview
+			fireEvent.keyDown(writeTab, { key: "End" });
+			expect(screen.getByRole("tab", { name: "Preview" })).toHaveAttribute(
+				"aria-selected",
+				"true",
+			);
+			// Home → Write
+			const previewTab = screen.getByRole("tab", { name: "Preview" });
+			fireEvent.keyDown(previewTab, { key: "Home" });
+			expect(screen.getByRole("tab", { name: "Write" })).toHaveAttribute(
+				"aria-selected",
+				"true",
+			);
+		});
+
+		it("HP-3: Preview → Write 切替で textarea に focus が戻る (= firstViewModeRender guard 後)", () => {
+			render(<ArticleEditor mode="create" />);
+			// 初期は Write tab。 mount 直後の useEffect は firstViewModeRender で skip されるため
+			// textarea にいきなり focus は飛ばない (= 検証は body 全体の activeElement を見ない)。
+			// Preview に切替 → Write に戻す → textarea が document.activeElement
+			fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
+			fireEvent.click(screen.getByRole("tab", { name: "Write" }));
+			const textarea = screen.getByLabelText("本文 (Markdown)", {
+				exact: false,
+			}) as HTMLTextAreaElement;
+			expect(document.activeElement).toBe(textarea);
+		});
+
+		it("SE-2: Preview に切り替えても title / slug / tags / status の input 値は維持される", () => {
+			render(<ArticleEditor mode="create" />);
+			const titleInput = screen.getByLabelText(/タイトル/, {
+				selector: "input",
+			}) as HTMLInputElement;
+			fireEvent.change(titleInput, { target: { value: "回帰検証用タイトル" } });
+			fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
+			expect(
+				(
+					screen.getByLabelText(/タイトル/, {
+						selector: "input",
+					}) as HTMLInputElement
+				).value,
+			).toBe("回帰検証用タイトル");
+		});
+
+		it("SE-3 (デグレ防止): Preview tab 中も form submit が走り createArticle が呼ばれる", async () => {
+			createArticleMock.mockResolvedValueOnce({ slug: "ok-slug" });
+			render(<ArticleEditor mode="create" />);
+			const titleInput = screen.getByLabelText(/タイトル/, {
+				selector: "input",
+			}) as HTMLInputElement;
+			fireEvent.change(titleInput, { target: { value: "preview submit" } });
+			const body = screen.getByLabelText("本文 (Markdown)", {
+				exact: false,
+			}) as HTMLTextAreaElement;
+			fireEvent.change(body, { target: { value: "## sub" } });
+			// Preview に切替
+			fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
+			// 保存 button は tablist の右端にあり、 default status=draft なので「下書き保存」
+			const submitBtn = screen.getByRole("button", {
+				name: "下書き保存",
+			}) as HTMLButtonElement;
+			await act(async () => {
+				submitBtn.click();
+			});
+			expect(createArticleMock).toHaveBeenCalledTimes(1);
+		});
 	});
 
 	it("T-EDIT-3 file picker via 「画像を追加」 button enqueues selected files", () => {
