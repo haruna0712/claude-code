@@ -156,6 +156,10 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 
 	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
+	// #782: WAI-ARIA tabs pattern の roving tabindex で、 ArrowKey 切替時に
+	// 次の tab に明示 focus を返すため、 各 tab button の ref を保持。
+	const writeTabRef = useRef<HTMLButtonElement | null>(null);
+	const previewTabRef = useRef<HTMLButtonElement | null>(null);
 	// upload 完了で caret を移動させたい位置を保持。 setBody の updater 内では
 	// 副作用 (DOM 操作) を起こさず、 commit 後に useEffect 経由で flush する
 	// (typescript-reviewer M-3 反映、 React Strict Mode の double-call で
@@ -196,20 +200,35 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 
 	// #780: tablist keyboard nav。 ArrowLeft/Right で前/次の tab に自動 activate、
 	// Home/End は 2 tab しかないため Write/Preview を直接指す。
+	// #782 gan-evaluator HIGH: WAI-ARIA tabs pattern の roving tabindex を完成
+	// させるため、 setViewMode 後に次の tab button へ明示 focus を渡す。
 	const handleTabKey = useCallback((e: KeyboardEvent<HTMLButtonElement>) => {
+		const focusTab = (next: "write" | "preview") => {
+			const ref = next === "write" ? writeTabRef : previewTabRef;
+			ref.current?.focus();
+		};
 		if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
 			e.preventDefault();
-			setViewMode((m) => (m === "write" ? "preview" : "write"));
+			let next: "write" | "preview" = "write";
+			setViewMode((m) => {
+				next = m === "write" ? "preview" : "write";
+				return next;
+			});
+			// state 更新後に focus を移すが、 React は同期 batch するので
+			// next を closure で持っておけば確実に該当 tab に focus 移動できる。
+			queueMicrotask(() => focusTab(next));
 			return;
 		}
 		if (e.key === "Home") {
 			e.preventDefault();
 			setViewMode("write");
+			queueMicrotask(() => focusTab("write"));
 			return;
 		}
 		if (e.key === "End") {
 			e.preventDefault();
 			setViewMode("preview");
+			queueMicrotask(() => focusTab("preview"));
 		}
 	}, []);
 
@@ -425,6 +444,7 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 							className="flex items-center gap-1"
 						>
 							<button
+								ref={writeTabRef}
 								type="button"
 								role="tab"
 								id="editor-tab-write"
@@ -442,6 +462,7 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 								Write
 							</button>
 							<button
+								ref={previewTabRef}
 								type="button"
 								role="tab"
 								id="editor-tab-preview"
@@ -503,12 +524,18 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 						</div>
 					</div>
 
-					{/* Write tabpanel */}
+					{/* Write tabpanel
+					    #782 gan-evaluator CRITICAL: HTML `hidden` attribute は `display: none`
+					    を適用するが、 className の `flex` (= `display: flex`) で上書き
+					    されるため両 panel が同時描画される regression が出ていた。
+					    `hidden` + `style.display: 'none'` を併用して確実に非表示にする
+					    (`hidden` は a11y tree からも除外するので残す)。 */}
 					<div
 						role="tabpanel"
 						id="editor-panel-write"
 						aria-labelledby="editor-tab-write"
 						hidden={viewMode !== "write"}
+						style={viewMode !== "write" ? { display: "none" } : undefined}
 						className="mt-2 flex min-h-0 flex-1 flex-col"
 					>
 						<textarea
@@ -570,12 +597,15 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 						)}
 					</div>
 
-					{/* Preview tabpanel */}
+					{/* Preview tabpanel
+					    #782 gan-evaluator CRITICAL: 上記 Write panel と同じ理由で
+					    `hidden` + `style.display: 'none'` を併用。 */}
 					<div
 						role="tabpanel"
 						id="editor-panel-preview"
 						aria-labelledby="editor-tab-preview"
 						hidden={viewMode !== "preview"}
+						style={viewMode !== "preview" ? { display: "none" } : undefined}
 						tabIndex={0}
 						aria-label="本文プレビュー"
 						className="mt-2 h-[calc(100vh-220px)] min-h-[24rem] overflow-y-auto rounded border border-border bg-muted/20 p-4 text-sm"
