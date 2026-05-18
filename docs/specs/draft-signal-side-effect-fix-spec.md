@@ -1,11 +1,15 @@
 # draft 作成時の signal 副作用漏洩 修正 仕様書 (#770)
 
-> Version: 0.1
+> Version: 0.2
 > 作成日: 2026-05-18
-> 関連 Issue: #770
-> 関連 PR: 本 PR (= fix)
-> 関連 spec: [tweet-drafts-spec.md](./tweet-drafts-spec.md) §3.1 (= draft は ORIGINAL only)、 [draft-edit-limit-fix-spec.md](./draft-edit-limit-fix-spec.md) (= #769 の編集制約 fix、 同じ「draft 経路の silent 副作用」 カテゴリ)
-> 関連 Issue (follow-up out of scope): なし
+> 改訂履歴:
+>
+> - 0.1 (2026-05-18): 初稿
+> - 0.2 (2026-05-18): python-reviewer 指摘で `_emit_create_side_effects` を `apps/tweets/side_effects.py` の public `emit_create_side_effects(tweet_pk)` に切り出し。 caller は pk を渡し helper 内で fresh fetch + `published_at IS NULL` で `ValueError` を raise する defense-in-depth を追加。
+>   関連 Issue: #770
+>   関連 PR: 本 PR (= fix)
+>   関連 spec: [tweet-drafts-spec.md](./tweet-drafts-spec.md) §3.1 (= draft は ORIGINAL only)、 [draft-edit-limit-fix-spec.md](./draft-edit-limit-fix-spec.md) (= #769 の編集制約 fix、 同じ「draft 経路の silent 副作用」 カテゴリ)
+>   関連 Issue (follow-up out of scope): なし
 
 ---
 
@@ -29,8 +33,8 @@
 ### やる
 
 - `apps/tweets/signals.py` の `on_tweet_created` 冒頭に `if instance.published_at is None: return` を追加 (= draft では副作用全 skip)
-- 副作用群を `_emit_create_side_effects(instance)` helper に切り出し (= signal handler と publish action の共有)
-- `apps/tweets/views.py` の `publish` action 内で `transaction.on_commit(lambda: _emit_create_side_effects(instance))` を call (= 公開時に 1 回だけ発火)
+- 副作用群を `emit_create_side_effects(instance)` helper に切り出し (= signal handler と publish action の共有)
+- `apps/tweets/views.py` の `publish` action 内で `transaction.on_commit(lambda: emit_create_side_effects(instance))` を call (= 公開時に 1 回だけ発火)
 - backend pytest 4 系統で 7+ ケース追加 (§3 参照)
 
 ### やらない (別 Issue で対応)
@@ -43,16 +47,16 @@
 
 ## 2. 実装方針
 
-### 2.1 `_emit_create_side_effects` helper
+### 2.1 `emit_create_side_effects` helper
 
-**file**: `apps/tweets/signals.py`
+**file**: `apps/tweets/side_effects.py` (= 新規モジュール、 signals.py と views.py 両方から top-level import)
 
 ```python
-def _emit_create_side_effects(instance: Tweet) -> None:
+def emit_create_side_effects(instance: Tweet) -> None:
     """tweet 公開時の副作用群を発火する (signal handler / publish action 共通)。
 
     signal handler は `created=True` + `published_at IS NOT NULL` でのみ呼ぶ。
-    publish action は `transaction.on_commit(lambda: _emit_create_side_effects(instance))`
+    publish action は `transaction.on_commit(lambda: emit_create_side_effects(instance))`
     で公開直後に 1 回だけ呼ぶ。
 
     副作用:
@@ -73,11 +77,11 @@ def on_tweet_created(sender, instance, created, **kwargs):
     if not created:
         return
     # #770 fix: draft (published_at IS NULL) では副作用を発火しない。
-    # publish action 側で _emit_create_side_effects を手動 call することで
+    # publish action 側で emit_create_side_effects を手動 call することで
     # 公開時に 1 回だけ発火させる。
     if instance.published_at is None:
         return
-    transaction.on_commit(lambda: _emit_create_side_effects(instance))
+    transaction.on_commit(lambda: emit_create_side_effects(instance))
 ```
 
 ### 2.3 `publish` action での手動発火
@@ -94,9 +98,9 @@ def publish(self, request, pk=None):
 
     # #770 fix: publish 完了時に signal 相当の副作用を発火 (= post_save が
     # draft で skip されているため、 publish action 側で明示的に call)
-    from apps.tweets.signals import _emit_create_side_effects
+    from apps.tweets.signals import emit_create_side_effects
 
-    transaction.on_commit(lambda: _emit_create_side_effects(instance))
+    transaction.on_commit(lambda: emit_create_side_effects(instance))
 
     out = TweetDetailSerializer(...).data
     return Response(out, status=200)
@@ -104,7 +108,7 @@ def publish(self, request, pk=None):
 
 ### 2.4 影響範囲
 
-- `apps/tweets/signals.py` (= `_emit_create_side_effects` 切り出し + `on_tweet_created` で draft skip)
+- `apps/tweets/signals.py` (= `emit_create_side_effects` 切り出し + `on_tweet_created` で draft skip)
 - `apps/tweets/views.py` (= publish action で手動発火)
 - `apps/tweets/tests/test_drafts.py` (= 7+ ケース追加)
 - `apps/tweets/tests/test_signals.py` (= 既存 test の更新が必要なら)
@@ -146,7 +150,7 @@ def publish(self, request, pk=None):
 ## 4. 受け入れ基準 (definition of done)
 
 - [ ] `on_tweet_created` が draft で skip するよう修正
-- [ ] `_emit_create_side_effects` helper に副作用群を切り出し
+- [ ] `emit_create_side_effects` helper に副作用群を切り出し
 - [ ] `publish` action が `transaction.on_commit` で手動 call
 - [ ] backend pytest 11 ケース全 pass
 - [ ] `pr-test-analyzer` agent で 4 系統揃ってる確認

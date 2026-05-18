@@ -9,167 +9,47 @@ partial UniqueConstraint で reject されるため、signal はそのまま +1 
 - reply  → reply_to.author に Notification(kind=REPLY)
 - repost → repost_of.author に Notification(kind=REPOST)
 - quote  → quote_of.author に Notification(kind=QUOTE)
+
+#770: create / publish 時の副作用群 (mention 通知 / counter bump / OGP / TL
+cache invalidate) は ``apps/tweets/side_effects.py`` の
+``emit_create_side_effects(tweet_pk)`` に集約し、 signal handler と publish
+action の両方から `transaction.on_commit` で 1 回だけ call する。
 """
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from django.db import transaction
-from django.db.models import F
-from django.db.models.functions import Greatest
 from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 
-from apps.common.blocking import safe_notify
 from apps.tweets.language_detection import detect_language
 from apps.tweets.models import Tweet, TweetType
-
-# #412: mention 抽出の正規表現と上限。spec §12 より handle 数 10 超過時は
-# Celery off-load を検討する想定だが、本 Issue では同期処理 + 上限で抑える。
-_MENTION_RE = re.compile(r"(?<![A-Za-z0-9_])@([A-Za-z0-9_]{3,30})")
-MAX_MENTION_NOTIFY = 10
-
-
-def _bump_field(tweet_pk: int | None, field: str, delta: int) -> None:
-    if tweet_pk is None:
-        return
-    if delta >= 0:
-        Tweet.all_objects.filter(pk=tweet_pk).update(**{field: F(field) + delta})
-    else:
-        Tweet.all_objects.filter(pk=tweet_pk).update(**{field: Greatest(F(field) + delta, 0)})
+from apps.tweets.side_effects import _bump_field, emit_create_side_effects
 
 
 @receiver(post_save, sender=Tweet)
 def on_tweet_created(sender: type[Tweet], instance: Tweet, created: bool, **kwargs: Any) -> None:
-    """Reply / Repost / Quote 作成時に元ツイートの count を +1.
+    """published tweet の作成時に副作用群を発火する。
 
     P2-07: 本文に URL があれば OGP 取得タスクを enqueue する.
 
     #770 fix: draft (published_at IS NULL) 作成時は副作用を発火させない。
     mention 通知 / counter bump / OGP fetch / home TL cache invalidate はすべて
-    公開時 (= publish action 内で `_emit_create_side_effects` を手動 call) に
-    1 回だけ発火する。 これにより:
-    - draft の @mention で公開前に通知が飛ぶ情報漏洩を防ぐ
-    - draft の URL に対する無駄な OGP fetch を防ぐ
-    - draft 作成時の cache evict を防ぐ
-    - reply/quote/repost (= ORIGINAL 以外) は spec §3.1 で draft 不許可だが
-      defense-in-depth として guard を効かせる
+    公開時 (= publish action 内で `emit_create_side_effects` を手動 call) に
+    1 回だけ発火する。
     """
     if not created:
         return
     # #770: draft で副作用 skip。 publish action 側で手動 call される。
     if instance.published_at is None:
         return
-    transaction.on_commit(lambda: _emit_create_side_effects(instance))
-
-
-def _emit_create_side_effects(instance: Tweet) -> None:
-    """tweet 公開時の副作用群を発火する (signal handler / publish action 共通)。
-
-    呼び出し元:
-    - `on_tweet_created` (post_save signal): published_at IS NOT NULL の create でのみ呼ぶ
-    - `TweetViewSet.publish` action: draft → publish の遷移直後に
-      `transaction.on_commit(lambda: _emit_create_side_effects(instance))` で 1 回呼ぶ
-
-    副作用:
-    - reply / quote / repost の counter bump (= ORIGINAL なら no-op)
-    - mention notification dispatch
-    - OGP fetch celery enqueue (URL があれば)
-    - home TL cache invalidate (author のみ)
-    """
-    actor = instance.author
-    target_type = instance.type
-    reply_to_pk = instance.reply_to_id
-    quote_of_pk = instance.quote_of_id
-    repost_of_pk = instance.repost_of_id
-    reply_to_obj = instance.reply_to
-    quote_of_obj = instance.quote_of
-    repost_of_obj = instance.repost_of
+    # python-reviewer HIGH (#770): lambda closure で mutable instance を握らず
+    # pk を渡して on_commit 内で fresh fetch する。 これにより refresh_from_db
+    # 後の他処理で instance が上書きされても影響を受けない。
     tweet_pk = instance.pk
-    body = instance.body
-
-    if target_type == TweetType.REPLY:
-        _bump_field(reply_to_pk, "reply_count", 1)
-        if reply_to_obj is not None:
-            # #412: target_type/target_id を追加 (Notification 解決用)
-            safe_notify(
-                kind="reply",
-                recipient=reply_to_obj.author,
-                actor=actor,
-                target_type="tweet",
-                target_id=tweet_pk,
-            )
-    elif target_type == TweetType.QUOTE:
-        _bump_field(quote_of_pk, "quote_count", 1)
-        if quote_of_obj is not None:
-            safe_notify(
-                kind="quote",
-                recipient=quote_of_obj.author,
-                actor=actor,
-                target_type="tweet",
-                target_id=tweet_pk,
-            )
-    elif target_type == TweetType.REPOST:
-        _bump_field(repost_of_pk, "repost_count", 1)
-        if repost_of_obj is not None:
-            safe_notify(
-                kind="repost",
-                recipient=repost_of_obj.author,
-                actor=actor,
-                target_type="tweet",
-                target_id=tweet_pk,
-            )
-
-    # P2-07: OGP fetch を enqueue (URL を含む original / quote / reply が対象)。
-    # repost は body=空なので skip。
-    if target_type != TweetType.REPOST and body:
-        from apps.tweets.ogp import extract_first_url
-
-        if extract_first_url(body):
-            from apps.tweets.tasks import fetch_ogp_for_tweet
-
-            fetch_ogp_for_tweet.delay(tweet_pk)
-
-    # #412: mention 抽出 → 各 user に kind=mention 通知。
-    # repost は body=空なのでスキップ。reply / quote / mention は重複しても
-    # 別 kind なので Notification 行は別。
-    if target_type != TweetType.REPOST and body:
-        _dispatch_mention_notifications(body=body, actor=actor, tweet_pk=tweet_pk)
-
-    # #311: 投稿者の home TL cache を invalidate。これがないと cache TTL
-    # (10 min) 経過まで自分の新規投稿が home に出ない。フォロワーの cache
-    # invalidate は fan-out コストが大きいので Phase 4 で fan-out-on-write
-    # を検討する際にまとめて対応 (本 PR では author 自身のみ)。
-    from apps.timeline.services import invalidate_home_tl
-
-    invalidate_home_tl(actor)
-
-
-def _dispatch_mention_notifications(*, body: str, actor: Any, tweet_pk: int | None) -> None:
-    """body 中の @handle を抽出し、実存する active user に mention 通知を発火.
-
-    自分自身 (`@<actor.handle>`) は self-notify guard で無視される。
-    重複 handle は set で排除済。
-    spec §12 + python-reviewer MED: handle 数の上限を MAX_MENTION_NOTIFY (=10) で
-    cap。それ以上は Celery off-load を別 Issue で対応する。
-    """
-    handles = {m.group(1) for m in _MENTION_RE.finditer(body)}
-    if not handles:
-        return
-    from django.contrib.auth import get_user_model
-
-    User = get_user_model()
-    users = User.objects.filter(username__in=handles, is_active=True)[:MAX_MENTION_NOTIFY]
-    for user in users:
-        safe_notify(
-            kind="mention",
-            recipient=user,
-            actor=actor,
-            target_type="tweet",
-            target_id=tweet_pk,
-        )
+    transaction.on_commit(lambda: emit_create_side_effects(tweet_pk))
 
 
 @receiver(post_delete, sender=Tweet)
