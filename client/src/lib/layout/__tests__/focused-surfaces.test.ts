@@ -118,5 +118,12 @@ describe("shouldHideRightRail", () => {
 			// /settings で始まる別 path は誤って rail を隠さない。
 			expect(shouldHideRightRail("/settings-not-real")).toBe(false);
 		});
+
+		it("returns false for /messages-archive (#756 prefix false-positive guard)", () => {
+			// `pathname === "/messages" || startsWith("/messages/")` は
+			// slash 区切りを要求するため /messages で始まる別 path (例: /messages-archive)
+			// を誤って rail 抑制しない。 typescript-reviewer LOW 提案の対称テスト。
+			expect(shouldHideRightRail("/messages-archive")).toBe(false);
+		});
 	});
 });
