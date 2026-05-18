@@ -250,9 +250,12 @@ function DrawerNav({ onItemClick }: { onItemClick: () => void }) {
 	const pathname = usePathname();
 	const { isAuthenticated } = useAuthNavigation();
 	// Drawer は全 nav を網羅 (bottom-tab で出ない記事 / 掲示板 / メンター も含む)。
-	// `leftNavLinks` (constants/index.ts) と等価な構成を mobile drawer でも保つよう
-	// 維持する責務がある — 新 route を leftNavLinks に追加したらここにも追加する
-	// (#686 mobile 動線漏れ防止)。
+	// 基本は `leftNavLinks` (constants/index.ts) と等価な構成を mobile drawer でも
+	// 保つ責務がある — 新 route を leftNavLinks に追加したらここにも追加 (#686 mobile
+	// 動線漏れ防止)。
+	// ただし auth-scoped task (下書き等) は drawer に残し desktop main nav は profile
+	// menu 経由に分離する場合がある (#762: drafts は X mobile drawer 準拠で keep、
+	// desktop main nav からは削除 → profile DropdownMenu に移動)。
 	// #741: 「検索」 entry は削除 (Twitter 準拠 IA、 search box は /explore 最上部)。
 	const items: BottomTabItem[] = [
 		{ href: "/", label: "ホーム", Icon: Home },
