@@ -20,6 +20,7 @@ import type { ReactNode } from "react";
 
 import AComposeDialogHost from "@/components/layout-a/AComposeDialogHost";
 import ALeftNav from "@/components/layout-a/ALeftNav";
+import AMainWidth from "@/components/layout-a/AMainWidth";
 import AMobileAppBar from "@/components/layout-a/AMobileShell";
 import ARightRail from "@/components/layout-a/ARightRail";
 
@@ -39,15 +40,17 @@ export default function TemplateLayout({ children }: LayoutProps) {
 			}}
 		>
 			<ALeftNav />
+			{/* #782: `maxWidth: 800` の固定制約を `AMainWidth` (client) に委譲。
+			    article editor route だけ max-width を 1280 に広げて本文を書きやすく
+			    する。 他 route は 800px の TL 用幅を維持 (= デグレ防止)。 */}
 			<main
 				// mobile (< sm) では fixed bottom-nav が content に被らないよう、
 				// safe-area を含む余白と scroll padding を main 側に確保する。
-				className="mx-auto flex w-full min-w-0 scroll-pb-28 flex-col pb-28 sm:scroll-pb-0 sm:border-r sm:border-[color:var(--a-border)] sm:pb-0"
-				style={{ maxWidth: 800 }}
+				className="flex w-full min-w-0 scroll-pb-28 flex-col pb-28 sm:scroll-pb-0 sm:border-r sm:border-[color:var(--a-border)] sm:pb-0"
 				aria-label="メインコンテンツ"
 			>
 				<AMobileAppBar />
-				{children}
+				<AMainWidth>{children}</AMainWidth>
 			</main>
 			<ARightRail />
 			{/*
