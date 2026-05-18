@@ -97,9 +97,9 @@ describe("ALeftNav (#557 Phase B-0-6)", () => {
 	it("非 active NavItem に hover:bg-[var(--a-bg-muted)] が付く", () => {
 		setupAuthed(0);
 		render(<ALeftNav />);
-		// "/" が active なので 「探索」 (非 active) を確認
-		const exploreLink = screen.getByRole("link", { name: /探索/ });
-		expect(exploreLink.className).toContain(
+		// "/" が active なので 「検索」 (#795 で 「探索」 から rename、 非 active) を確認
+		const searchLink = screen.getByRole("link", { name: /検索/ });
+		expect(searchLink.className).toContain(
 			"hover:bg-[color:var(--a-bg-muted)]",
 		);
 	});

@@ -327,3 +327,28 @@ PLAYWRIGHT_USER1_HANDLE=test4 \
 
 - 単一 file の差分 (`client/src/app/(template)/explore/page.tsx`) を revert すれば原状回復
 - DB / API 触らず、 既存 component 流用のみ
+
+## 9. follow-up: nav 「探索」 → 「検索」 + /search 抑制解除 (#795)
+
+ハルナさん指示 (2026-05-18) で #741 の決定を部分的に再調整。
+
+### 9.1 変更
+
+- 左 nav の label 「探索」 → 「検索」、 path `/explore` → `/search` (#795)
+- `shouldHideRightRail` 判定から `/search` 系を除外。 `/search` でも `ARightRail` (TrendingTags + WhoToFollow) を表示
+- 関連 spec doc: [search-nav-rename-rail-spec.md](./search-nav-rename-rail-spec.md)
+
+### 9.2 #741 との関係
+
+- §3.1 で「nav から検索 entry を削除して /explore に統一」 とした判断は #795 で逆転
+- §3.4.1 抑制リストの `/search` 行は #795 で削除 (現行コードは抑制対象から外れている)
+- §3.4.2 「search panel 削除」 は **継続**。 search panel は ARightRail に戻さない (`/search` 中央 SearchBox と rail search panel の重複懸念があったため)
+- `/explore` route は維持。 nav からは外れたが URL 直叩き / 既存 deep link は引き続き機能
+
+### 9.3 受け入れ基準
+
+- [ ] 左 nav 「検索」 entry が `/search` を指す
+- [ ] `/search` で `ARightRail` 表示、 中央 SearchBox との競合なし
+- [ ] `/explore` 直叩き 200、 同じ rail chrome
+- [ ] vitest: `shouldHideRightRail("/search")` / `("/search/users")` → false
+- [ ] Playwright: 上記すべて pass

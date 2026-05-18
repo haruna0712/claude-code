@@ -8,7 +8,7 @@
  *
  * - 上部 app bar: BrandMark + 「devstream」 + ハンバーガー
  * - ハンバーガー click で Sheet (左 drawer) が開き、ALeftNav と同 nav 内容
- * - 下部 bottom-tab bar: ホーム / 探索 / 通知 / メッセージ / プロフィール
+ * - 下部 bottom-tab bar: ホーム / 検索 / 通知 / メッセージ / プロフィール
  *   (auth に応じて表示)
  *
  * 表示条件: `< sm` (640px 未満)。`sm` 以上では ALayout のサイドカラムを使う。
@@ -45,11 +45,12 @@ interface BottomTabItem {
 	requiresAuth?: boolean;
 }
 
-// #741: Twitter 準拠 IA — explore icon を Search (虫眼鏡) に統一、
-// 「検索」 entry は削除 (search box は /explore 最上部に統合)。
+// #741: Twitter 準拠 IA — explore icon を Search (虫眼鏡) に統一。
+// #795: nav 入口を 「検索」 (/search) に変更。 `/explore` route は残るが
+// nav からは外す。 rail に search panel は無い前提で duplication 問題なし。
 const BOTTOM_TABS: BottomTabItem[] = [
 	{ href: "/", label: "ホーム", Icon: Home },
-	{ href: "/explore", label: "探索", Icon: Search },
+	{ href: "/search", label: "検索", Icon: Search },
 	{ href: "/notifications", label: "通知", Icon: Bell, requiresAuth: true },
 	{
 		href: "/messages",
@@ -256,10 +257,10 @@ function DrawerNav({ onItemClick }: { onItemClick: () => void }) {
 	// ただし auth-scoped task (下書き等) は drawer に残し desktop main nav は profile
 	// menu 経由に分離する場合がある (#762: drafts は X mobile drawer 準拠で keep、
 	// desktop main nav からは削除 → profile DropdownMenu に移動)。
-	// #741: 「検索」 entry は削除 (Twitter 準拠 IA、 search box は /explore 最上部)。
+	// #741 で 「探索」 1 entry に統一 → #795 で nav 入口を 「検索」 (/search) に変更。
 	const items: BottomTabItem[] = [
 		{ href: "/", label: "ホーム", Icon: Home },
-		{ href: "/explore", label: "探索", Icon: Search },
+		{ href: "/search", label: "検索", Icon: Search },
 		{ href: "/notifications", label: "通知", Icon: Bell, requiresAuth: true },
 		{
 			href: "/messages",
