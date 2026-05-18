@@ -46,9 +46,39 @@ def on_tweet_created(sender: type[Tweet], instance: Tweet, created: bool, **kwar
     """Reply / Repost / Quote 作成時に元ツイートの count を +1.
 
     P2-07: 本文に URL があれば OGP 取得タスクを enqueue する.
+
+    #770 fix: draft (published_at IS NULL) 作成時は副作用を発火させない。
+    mention 通知 / counter bump / OGP fetch / home TL cache invalidate はすべて
+    公開時 (= publish action 内で `_emit_create_side_effects` を手動 call) に
+    1 回だけ発火する。 これにより:
+    - draft の @mention で公開前に通知が飛ぶ情報漏洩を防ぐ
+    - draft の URL に対する無駄な OGP fetch を防ぐ
+    - draft 作成時の cache evict を防ぐ
+    - reply/quote/repost (= ORIGINAL 以外) は spec §3.1 で draft 不許可だが
+      defense-in-depth として guard を効かせる
     """
     if not created:
         return
+    # #770: draft で副作用 skip。 publish action 側で手動 call される。
+    if instance.published_at is None:
+        return
+    transaction.on_commit(lambda: _emit_create_side_effects(instance))
+
+
+def _emit_create_side_effects(instance: Tweet) -> None:
+    """tweet 公開時の副作用群を発火する (signal handler / publish action 共通)。
+
+    呼び出し元:
+    - `on_tweet_created` (post_save signal): published_at IS NOT NULL の create でのみ呼ぶ
+    - `TweetViewSet.publish` action: draft → publish の遷移直後に
+      `transaction.on_commit(lambda: _emit_create_side_effects(instance))` で 1 回呼ぶ
+
+    副作用:
+    - reply / quote / repost の counter bump (= ORIGINAL なら no-op)
+    - mention notification dispatch
+    - OGP fetch celery enqueue (URL があれば)
+    - home TL cache invalidate (author のみ)
+    """
     actor = instance.author
     target_type = instance.type
     reply_to_pk = instance.reply_to_id
@@ -60,64 +90,61 @@ def on_tweet_created(sender: type[Tweet], instance: Tweet, created: bool, **kwar
     tweet_pk = instance.pk
     body = instance.body
 
-    def _bump() -> None:
-        if target_type == TweetType.REPLY:
-            _bump_field(reply_to_pk, "reply_count", 1)
-            if reply_to_obj is not None:
-                # #412: target_type/target_id を追加 (Notification 解決用)
-                safe_notify(
-                    kind="reply",
-                    recipient=reply_to_obj.author,
-                    actor=actor,
-                    target_type="tweet",
-                    target_id=tweet_pk,
-                )
-        elif target_type == TweetType.QUOTE:
-            _bump_field(quote_of_pk, "quote_count", 1)
-            if quote_of_obj is not None:
-                safe_notify(
-                    kind="quote",
-                    recipient=quote_of_obj.author,
-                    actor=actor,
-                    target_type="tweet",
-                    target_id=tweet_pk,
-                )
-        elif target_type == TweetType.REPOST:
-            _bump_field(repost_of_pk, "repost_count", 1)
-            if repost_of_obj is not None:
-                safe_notify(
-                    kind="repost",
-                    recipient=repost_of_obj.author,
-                    actor=actor,
-                    target_type="tweet",
-                    target_id=tweet_pk,
-                )
+    if target_type == TweetType.REPLY:
+        _bump_field(reply_to_pk, "reply_count", 1)
+        if reply_to_obj is not None:
+            # #412: target_type/target_id を追加 (Notification 解決用)
+            safe_notify(
+                kind="reply",
+                recipient=reply_to_obj.author,
+                actor=actor,
+                target_type="tweet",
+                target_id=tweet_pk,
+            )
+    elif target_type == TweetType.QUOTE:
+        _bump_field(quote_of_pk, "quote_count", 1)
+        if quote_of_obj is not None:
+            safe_notify(
+                kind="quote",
+                recipient=quote_of_obj.author,
+                actor=actor,
+                target_type="tweet",
+                target_id=tweet_pk,
+            )
+    elif target_type == TweetType.REPOST:
+        _bump_field(repost_of_pk, "repost_count", 1)
+        if repost_of_obj is not None:
+            safe_notify(
+                kind="repost",
+                recipient=repost_of_obj.author,
+                actor=actor,
+                target_type="tweet",
+                target_id=tweet_pk,
+            )
 
-        # P2-07: OGP fetch を enqueue (URL を含む original / quote / reply が対象)。
-        # repost は body=空なので skip。
-        if target_type != TweetType.REPOST and body:
-            from apps.tweets.ogp import extract_first_url
+    # P2-07: OGP fetch を enqueue (URL を含む original / quote / reply が対象)。
+    # repost は body=空なので skip。
+    if target_type != TweetType.REPOST and body:
+        from apps.tweets.ogp import extract_first_url
 
-            if extract_first_url(body):
-                from apps.tweets.tasks import fetch_ogp_for_tweet
+        if extract_first_url(body):
+            from apps.tweets.tasks import fetch_ogp_for_tweet
 
-                fetch_ogp_for_tweet.delay(tweet_pk)
+            fetch_ogp_for_tweet.delay(tweet_pk)
 
-        # #412: mention 抽出 → 各 user に kind=mention 通知。
-        # repost は body=空なのでスキップ。reply / quote / mention は重複しても
-        # 別 kind なので Notification 行は別。
-        if target_type != TweetType.REPOST and body:
-            _dispatch_mention_notifications(body=body, actor=actor, tweet_pk=tweet_pk)
+    # #412: mention 抽出 → 各 user に kind=mention 通知。
+    # repost は body=空なのでスキップ。reply / quote / mention は重複しても
+    # 別 kind なので Notification 行は別。
+    if target_type != TweetType.REPOST and body:
+        _dispatch_mention_notifications(body=body, actor=actor, tweet_pk=tweet_pk)
 
-        # #311: 投稿者の home TL cache を invalidate。これがないと cache TTL
-        # (10 min) 経過まで自分の新規投稿が home に出ない。フォロワーの cache
-        # invalidate は fan-out コストが大きいので Phase 4 で fan-out-on-write
-        # を検討する際にまとめて対応 (本 PR では author 自身のみ)。
-        from apps.timeline.services import invalidate_home_tl
+    # #311: 投稿者の home TL cache を invalidate。これがないと cache TTL
+    # (10 min) 経過まで自分の新規投稿が home に出ない。フォロワーの cache
+    # invalidate は fan-out コストが大きいので Phase 4 で fan-out-on-write
+    # を検討する際にまとめて対応 (本 PR では author 自身のみ)。
+    from apps.timeline.services import invalidate_home_tl
 
-        invalidate_home_tl(actor)
-
-    transaction.on_commit(_bump)
+    invalidate_home_tl(actor)
 
 
 def _dispatch_mention_notifications(*, body: str, actor: Any, tweet_pk: int | None) -> None:

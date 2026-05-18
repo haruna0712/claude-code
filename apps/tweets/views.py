@@ -493,6 +493,16 @@ class TweetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         instance.refresh_from_db()
+
+        # #770 fix: signal handler が draft で skip するため、 公開時に副作用
+        # (= mention 通知 / counter bump / OGP fetch / home TL invalidate) を
+        # `transaction.on_commit` で 1 回だけ発火させる。 通常 tweet 作成経路
+        # (= POST /tweets/ で is_draft=false) と同じ helper を共有することで
+        # セマンティクスを揃える。
+        from apps.tweets.signals import _emit_create_side_effects
+
+        transaction.on_commit(lambda: _emit_create_side_effects(instance))
+
         out = TweetDetailSerializer(
             instance,
             context=self.get_serializer_context(),
