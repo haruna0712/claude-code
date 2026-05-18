@@ -4,10 +4,16 @@ import React, { useCallback, useId, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 
 import Spinner from "@/components/shared/Spinner";
+import DraftsLoadDialog from "@/components/tweets/DraftsLoadDialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoSaveDraft } from "@/hooks/useAutoSaveDraft";
-import { createTweet, type TweetSummary } from "@/lib/api/tweets";
+import {
+	createTweet,
+	publishDraft,
+	updateTweet,
+	type TweetSummary,
+} from "@/lib/api/tweets";
 import { parseDrfErrors } from "@/lib/api/errors";
 import { TWEET_MAX_CHARS, countTweetChars } from "@/lib/tweets/charCount";
 
@@ -60,6 +66,11 @@ export default function TweetComposer({
 	// 「下書き保存」 button だけ spinner にできるようにする。
 	const [isSavingDraft, setIsSavingDraft] = useState(false);
 	const [summaryError, setSummaryError] = useState<string | undefined>();
+	// #767: 下書き呼び出し dialog の open state、 + load 中の draft id 保持。
+	// `loadedDraftId !== null` の間は「既存 draft 編集モード」 で、
+	// saveDraft / submit が新規 create ではなく既存 draft を update / publish する。
+	const [isDraftsDialogOpen, setIsDraftsDialogOpen] = useState(false);
+	const [loadedDraftId, setLoadedDraftId] = useState<number | null>(null);
 
 	const charCount = useMemo(() => countTweetChars(body), [body]);
 	const remaining = TWEET_MAX_CHARS - charCount;
@@ -117,7 +128,19 @@ export default function TweetComposer({
 		setIsSubmitting(true);
 		setSummaryError(undefined);
 		try {
-			const tweet = await createTweet({ body, tags });
+			let tweet: TweetSummary;
+			if (loadedDraftId !== null) {
+				// #767: 既存 draft 編集モード → body update してから publish。
+				// tags 編集は V1 で skip (backend serializer の update が body のみ受付)。
+				await updateTweet(loadedDraftId, { body });
+				// updateTweet 成功時点で server 側 draft body が確定したので、
+				// publish 前に autosave key を clear (publish が落ちても data drift
+				// しないため、 typescript-reviewer H1)。
+				clearBodyAutosave();
+				tweet = await publishDraft(loadedDraftId);
+			} else {
+				tweet = await createTweet({ body, tags });
+			}
 			onPosted?.(tweet);
 			toast.success("投稿しました");
 			// #739: 送信成功で autosave key を確実に消す (setBody("") の debounce
@@ -125,12 +148,13 @@ export default function TweetComposer({
 			clearBodyAutosave();
 			setTags([]);
 			setTagInput("");
+			setLoadedDraftId(null);
 		} catch (error) {
 			setSummaryError(parseDrfErrors(error).summary);
 		} finally {
 			setIsSubmitting(false);
 		}
-	}, [body, tags, canSubmit, onPosted, clearBodyAutosave]);
+	}, [body, tags, canSubmit, loadedDraftId, onPosted, clearBodyAutosave]);
 
 	/**
 	 * #734: 下書き保存。 POST /tweets/ {is_draft: true} で published_at=NULL の
@@ -143,13 +167,19 @@ export default function TweetComposer({
 		setIsSavingDraft(true);
 		setSummaryError(undefined);
 		try {
-			await createTweet({ body, tags, is_draft: true });
+			if (loadedDraftId !== null) {
+				// #767: 既存 draft 編集モード → body のみ update (tags update は V1 skip)。
+				await updateTweet(loadedDraftId, { body });
+			} else {
+				await createTweet({ body, tags, is_draft: true });
+			}
 			toast.success("下書きに保存しました");
 			// #739: server 下書き保存後は autosave も clear (= 同じ内容を 2 重に
 			// 保持しない、 次に composer を開いたら空に戻る)。
 			clearBodyAutosave();
 			setTags([]);
 			setTagInput("");
+			setLoadedDraftId(null);
 			// onPosted は public TL refresh trigger のため、 draft では呼ばない
 			// (= home TL に出ない投稿なので refresh しても無意味)。
 		} catch (error) {
@@ -157,7 +187,31 @@ export default function TweetComposer({
 		} finally {
 			setIsSavingDraft(false);
 		}
-	}, [body, tags, canSaveDraft, clearBodyAutosave]);
+	}, [body, tags, canSaveDraft, loadedDraftId, clearBodyAutosave]);
+
+	/**
+	 * #767: DraftsLoadDialog で行 click した時の callback。 composer body を
+	 * draft.body で上書き、 loadedDraftId を保持して「既存 draft 編集モード」
+	 * に入る。 dialog は閉じる。
+	 *
+	 * tags は V1 で空にする (backend の update が body のみ受付なので、 tags を
+	 * 表示しても保存できない混乱を避ける)。
+	 */
+	const onPickDraft = useCallback(
+		(draft: TweetSummary) => {
+			setBody(draft.body);
+			// NOTE: draft.tags は意図的に load しない (spec §2 「やらない」)。
+			// 現状 backend serializer の update が body のみ受付なので、 tags を
+			// 復元しても update できず、 publish 時にだけ tag が消えるという
+			// 混乱を招く。 V2 で backend 側 tags 更新が入ったら draft.tags を
+			// setTags(draft.tags) で復元する。
+			setTags([]);
+			setTagInput("");
+			setLoadedDraftId(draft.id);
+			setIsDraftsDialogOpen(false);
+		},
+		[setBody],
+	);
 
 	const onBodyKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
 		if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -246,6 +300,15 @@ export default function TweetComposer({
 				<div className="flex items-center gap-2">
 					<Button
 						type="button"
+						variant="ghost"
+						onClick={() => setIsDraftsDialogOpen(true)}
+						disabled={isSubmitting || isSavingDraft}
+						aria-label="下書き一覧から呼び出す"
+					>
+						下書き
+					</Button>
+					<Button
+						type="button"
 						variant="outline"
 						onClick={saveDraft}
 						disabled={!canSaveDraft}
@@ -258,6 +321,22 @@ export default function TweetComposer({
 					</Button>
 				</div>
 			</div>
+
+			{loadedDraftId !== null && (
+				<p
+					className="text-xs text-muted-foreground"
+					role="status"
+					data-testid="composer-loaded-draft-indicator"
+				>
+					下書きを編集中 — 「投稿」 で公開、 「下書き保存」 で上書き
+				</p>
+			)}
+
+			<DraftsLoadDialog
+				open={isDraftsDialogOpen}
+				onOpenChange={setIsDraftsDialogOpen}
+				onPick={onPickDraft}
+			/>
 
 			{summaryError && (
 				<p
