@@ -431,8 +431,10 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 			)}
 
 			{/* #780 Zenn 流 2-col layout: main (editor/preview) + 右 sidebar (metadata)。
-			    desktop ≥ lg で 2 col、 mobile では metadata が main 下に積み下がる。 */}
-			<div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+			    #784: breakpoint を lg → xl に上げ、 sidebar 幅 320 → 280。 これで
+			    1024 viewport では sidebar が main 下に積み下がって本文 full width、
+			    1280+ で右 sidebar 表示 (gan-evaluator R1 目標 65%+ を達成)。 */}
+			<div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
 				{/* main col: tablist + editor / preview panel */}
 				<div className="flex min-w-0 flex-col">
 					{/* tablist (Write / Preview) + 右端に「画像を追加」 + Cancel + 保存 */}
@@ -618,7 +620,7 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 				</div>
 
 				{/* 右 sidebar: タイトル / slug / タグ / 公開ステータス */}
-				<aside aria-label="記事の設定" className="space-y-3 lg:pt-2">
+				<aside aria-label="記事の設定" className="space-y-3 xl:pt-2">
 					<label className="block">
 						<span className="block text-sm font-medium">タイトル</span>
 						<input
