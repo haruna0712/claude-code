@@ -74,13 +74,14 @@ test.describe("Phase 11 11-A mentor board (#624)", () => {
 		await loginViaApi(ctxMentee.request, USER1);
 		const mentee = await ctxMentee.newPage();
 
-		// LeftNav から /mentor/wanted へ (3 click 以内)
+		// LeftNav から /mentors?tab=requests へ (3 click 以内)
 		await mentee.goto(`${BASE}/`);
-		// #744: nav label を「メンター募集」 → 「相談を募集中」 に変更。
-		const navLink = mentee.getByRole("link", { name: "相談を募集中" }).first();
+		// #759: nav label を「相談を募集中」 + 「メンター一覧」 (2 entry) →
+		// 「メンター」 (1 entry、 /mentors?tab=requests がデフォルト) に統合。
+		const navLink = mentee.getByRole("link", { name: "メンター" }).first();
 		await expect(navLink).toBeVisible({ timeout: 15000 });
 		await navLink.click();
-		await mentee.waitForURL(`${BASE}/mentor/wanted`);
+		await mentee.waitForURL(/\/mentors(\?tab=requests)?$/);
 
 		// #754: CTA を「募集を出す」 → 「相談を投稿する」 に変更。
 		await mentee.getByRole("link", { name: "相談を投稿する" }).click();
@@ -130,18 +131,36 @@ test.describe("Phase 11 11-A mentor board (#624)", () => {
 		await ctxMentor.close();
 	});
 
-	test("MENTOR-2: anon でも /mentor/wanted 一覧 + 詳細を 200 で見られる", async ({
+	test("MENTOR-2: anon でも /mentors (= 統合後) 一覧を 200 で見られる + 旧 /mentor/wanted は redirect", async ({
 		browser,
 	}) => {
 		const ctx = await browser.newContext();
 		const page = await ctx.newPage();
-		const list = await ctx.request.get(`${BASE}/mentor/wanted`);
-		expect(list.status()).toBe(200);
+
+		// #759: /mentor/wanted 直 URL は /mentors?tab=requests に redirect (server-side)。
 		await page.goto(`${BASE}/mentor/wanted`);
-		// #754: anon CTA を「ログインして募集する」 → 「ログインして相談する」 に変更。
+		await page.waitForURL(/\/mentors\?tab=requests/, { timeout: 15000 });
+
+		// anon CTA は「ログインして相談する」 (requests tab default)
 		await expect(
 			page.getByRole("link", { name: "ログインして相談する" }),
 		).toBeVisible({ timeout: 15000 });
+		await ctx.close();
+	});
+
+	test("MENTOR-2b (#759): /mentors?tab=directory で tab 切替 + CTA も切替", async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		await page.goto(`${BASE}/mentors?tab=directory`);
+		// directory tab の CTA は「ログインしてメンター登録」 (anon)
+		await expect(
+			page.getByRole("link", { name: "ログインしてメンター登録" }),
+		).toBeVisible({ timeout: 15000 });
+		// tab navigation で requests に切り替えても URL が反映
+		await page.getByRole("link", { name: "募集中の相談" }).click();
+		await page.waitForURL(/\/mentors\?tab=requests/);
 		await ctx.close();
 	});
 

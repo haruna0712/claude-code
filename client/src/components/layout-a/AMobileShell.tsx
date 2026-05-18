@@ -266,8 +266,8 @@ function DrawerNav({ onItemClick }: { onItemClick: () => void }) {
 		},
 		{ href: "/articles", label: "記事", Icon: FileText },
 		{ href: "/boards", label: "掲示板", Icon: Flame },
-		// #744: label を「メンター募集」 → 「相談を募集中」 に変更。
-		{ href: "/mentor/wanted", label: "相談を募集中", Icon: Handshake },
+		// #759: /mentor/wanted + /mentors → /mentors?tab=... に統合、 nav 1 entry。
+		{ href: "/mentors", label: "メンター", Icon: Handshake },
 		// Phase 14 (P14-05): Claude Agent。 leftNavLinks と同 entry を
 		// mobile drawer にも明示する。
 		{
