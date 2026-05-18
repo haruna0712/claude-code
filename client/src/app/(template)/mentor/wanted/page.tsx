@@ -59,7 +59,7 @@ export default async function MentorWantedListPage({
 	const isAuthenticated = cookies().get("logged_in")?.value === "true";
 
 	const filterDescription = searchParams?.tag
-		? `#${searchParams.tag} で募集中`
+		? `#${searchParams.tag} の相談`
 		: "募集中の相談";
 
 	return (
@@ -126,8 +126,8 @@ export default async function MentorWantedListPage({
 				{items.length === 0 ? (
 					<p className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-10 text-center text-sm text-[color:var(--a-text-muted)]">
 						{searchParams?.tag
-							? `#${searchParams.tag} の募集はまだありません。`
-							: "まだ募集がありません。 最初の募集を投稿してみませんか?"}
+							? `#${searchParams.tag} の相談はまだありません。`
+							: "まだ相談がありません。 最初の相談を投稿してみませんか?"}
 					</p>
 				) : (
 					<ul role="list" className="grid gap-3">
@@ -147,7 +147,7 @@ function MentorRequestCard({ request }: { request: MentorRequestSummary }) {
 	return (
 		<Link
 			href={`/mentor/wanted/${request.id}`}
-			aria-label={`募集 ${request.title} を開く`}
+			aria-label={`相談「${request.title}」 を開く`}
 			className="block rounded-lg border border-[color:var(--a-border)] p-4 transition-colors hover:bg-[color:var(--a-bg-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)]"
 		>
 			<div className="flex items-center gap-2 text-xs text-[color:var(--a-text-muted)]">

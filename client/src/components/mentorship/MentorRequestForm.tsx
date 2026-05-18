@@ -69,7 +69,7 @@ export default function MentorRequestForm() {
 				body: trimmedBody,
 				target_skill_tag_names: tags,
 			});
-			toast.success("募集を投稿しました");
+			toast.success("相談を投稿しました");
 			router.push(`/mentor/wanted/${created.id}`);
 		} catch (err) {
 			setError(describeApiError(err, "投稿に失敗しました"));
@@ -81,7 +81,7 @@ export default function MentorRequestForm() {
 		<form
 			onSubmit={handleSubmit}
 			className="space-y-4"
-			aria-label="相談募集フォーム"
+			aria-label="相談投稿フォーム"
 		>
 			{error && (
 				<p

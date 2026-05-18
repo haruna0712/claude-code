@@ -66,7 +66,7 @@ describe("MentorRequestForm (P11-06)", () => {
 		render(<MentorRequestForm />);
 		fillForm("", "body has content");
 		await act(async () => {
-			fireEvent.submit(screen.getByLabelText("相談募集フォーム"));
+			fireEvent.submit(screen.getByLabelText("相談投稿フォーム"));
 		});
 		expect(screen.getByRole("alert").textContent).toMatch(/タイトル/);
 		expect(createMentorRequestMock).not.toHaveBeenCalled();
@@ -76,7 +76,7 @@ describe("MentorRequestForm (P11-06)", () => {
 		render(<MentorRequestForm />);
 		fillForm("title", "");
 		await act(async () => {
-			fireEvent.submit(screen.getByLabelText("相談募集フォーム"));
+			fireEvent.submit(screen.getByLabelText("相談投稿フォーム"));
 		});
 		expect(screen.getByRole("alert").textContent).toMatch(/本文/);
 		expect(createMentorRequestMock).not.toHaveBeenCalled();
@@ -87,14 +87,14 @@ describe("MentorRequestForm (P11-06)", () => {
 		render(<MentorRequestForm />);
 		fillForm("Hello", "body content");
 		await act(async () => {
-			fireEvent.submit(screen.getByLabelText("相談募集フォーム"));
+			fireEvent.submit(screen.getByLabelText("相談投稿フォーム"));
 		});
 		expect(createMentorRequestMock).toHaveBeenCalledWith({
 			title: "Hello",
 			body: "body content",
 			target_skill_tag_names: [],
 		});
-		expect(toastSuccessMock).toHaveBeenCalledWith("募集を投稿しました");
+		expect(toastSuccessMock).toHaveBeenCalledWith("相談を投稿しました");
 		expect(routerPushMock).toHaveBeenCalledWith("/mentor/wanted/42");
 	});
 
@@ -103,7 +103,7 @@ describe("MentorRequestForm (P11-06)", () => {
 		render(<MentorRequestForm />);
 		fillForm("t", "b", "  django ,  drf, ,  python ");
 		await act(async () => {
-			fireEvent.submit(screen.getByLabelText("相談募集フォーム"));
+			fireEvent.submit(screen.getByLabelText("相談投稿フォーム"));
 		});
 		expect(createMentorRequestMock).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -119,7 +119,7 @@ describe("MentorRequestForm (P11-06)", () => {
 		render(<MentorRequestForm />);
 		fillForm("t", "b", "foo");
 		await act(async () => {
-			fireEvent.submit(screen.getByLabelText("相談募集フォーム"));
+			fireEvent.submit(screen.getByLabelText("相談投稿フォーム"));
 		});
 		expect(screen.getByRole("alert").textContent).toMatch(/未登録/);
 		expect(routerPushMock).not.toHaveBeenCalled();
