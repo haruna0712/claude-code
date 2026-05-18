@@ -37,7 +37,7 @@ export default function MentorsModeTabs({ mode, tag }: MentorsModeTabsProps) {
 
 	return (
 		<nav
-			aria-label="メンター surface 切替"
+			aria-label="メンタータブ"
 			className="mb-4 grid grid-cols-2 rounded-md border border-[color:var(--a-border)] p-1"
 			style={{ background: "var(--a-bg-muted)" }}
 		>

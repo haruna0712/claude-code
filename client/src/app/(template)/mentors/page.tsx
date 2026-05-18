@@ -41,7 +41,9 @@ interface PageProps {
 }
 
 function resolveTab(raw: string | undefined): MentorsTabMode {
-	return raw === "directory" ? "directory" : "requests";
+	// #759 ts-reviewer MEDIUM: case-insensitive で誤入力を拾う
+	// (URL builder 等が DIRECTORY を生成しても正しく解釈)。
+	return raw?.toLowerCase() === "directory" ? "directory" : "requests";
 }
 
 async function fetchRequestsSSR(

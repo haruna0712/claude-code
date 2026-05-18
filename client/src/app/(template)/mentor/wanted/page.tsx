@@ -16,8 +16,10 @@ interface PageProps {
 
 export default function MentorWantedListRedirect({ searchParams }: PageProps) {
 	const tag = searchParams?.tag;
-	const target = tag
-		? `/mentors?tab=requests&tag=${encodeURIComponent(tag)}`
-		: "/mentors?tab=requests";
-	redirect(target);
+	// #759 ts-reviewer MEDIUM: URLSearchParams で構築して MentorsModeTabs と同じ
+	// pattern に揃える (将来 query param を増やす時の percent-encoding 差を防ぐ)。
+	const params = new URLSearchParams();
+	params.set("tab", "requests");
+	if (tag) params.set("tag", tag);
+	redirect(`/mentors?${params.toString()}`);
 }
