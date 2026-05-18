@@ -200,6 +200,11 @@ export default function TweetComposer({
 	const onPickDraft = useCallback(
 		(draft: TweetSummary) => {
 			setBody(draft.body);
+			// NOTE: draft.tags は意図的に load しない (spec §2 「やらない」)。
+			// 現状 backend serializer の update が body のみ受付なので、 tags を
+			// 復元しても update できず、 publish 時にだけ tag が消えるという
+			// 混乱を招く。 V2 で backend 側 tags 更新が入ったら draft.tags を
+			// setTags(draft.tags) で復元する。
 			setTags([]);
 			setTagInput("");
 			setLoadedDraftId(draft.id);
