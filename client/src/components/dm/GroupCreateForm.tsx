@@ -7,8 +7,9 @@
  * `POST /api/v1/dm/rooms/` を叩いて成功時は `/messages/<id>` に遷移する。
  *
  * scope:
- * - 名前 1-50 字
- * - 招待メンバーは @handle を改行 / カンマ区切りで入力 (incremental search はフォローアップ)
+ * - 名前 1-50 字 (必須)
+ * - 招待メンバーは任意 (#790)。 @handle を改行 / カンマ区切りで入力
+ *   (incremental search はフォローアップ)。 backend (allow_empty=True) と整合。
  * - creator + 19 名 = 20 名上限 (server side validation と整合)
  * - icon upload は Phase 3 範囲外 (auto-color initials を採用、別 issue)
  *
@@ -86,11 +87,12 @@ export default function GroupCreateForm({
 		else if (trimmedName.length > 50)
 			next.name = "グループ名は 50 字以内で入力してください";
 
-		if (parsedHandles.length === 0) {
-			next.handles = "1 名以上の招待メンバーが必要です";
-		} else if (parsedHandles.length > 19) {
+		// #790: メンバーは任意 (0 人 OK)。 backend (allow_empty=True) と整合し、
+		// LINE / Slack / Discord 慣習に揃える。 空白 / カンマのみ入力は
+		// parsedHandles が [] になるため 0 人扱い (regex チェックも skip) で正しい。
+		if (parsedHandles.length > 19) {
 			next.handles = `招待は最大 19 名 (creator 含む 20 名) です (現在 ${parsedHandles.length} 名)`;
-		} else {
+		} else if (parsedHandles.length > 0) {
 			const invalid = parsedHandles.filter((h) => !HANDLE_REGEX.test(h));
 			if (invalid.length > 0) {
 				next.handles = `不正な handle: ${invalid.slice(0, 3).join(", ")}${invalid.length > 3 ? " ..." : ""}`;
@@ -122,8 +124,8 @@ export default function GroupCreateForm({
 		}
 	};
 
-	const submitDisabled =
-		isLoading || name.trim().length === 0 || parsedHandles.length === 0;
+	// #790: メンバーは任意。name が空でなければ submit 可能。
+	const submitDisabled = isLoading || name.trim().length === 0;
 
 	return (
 		<form
@@ -171,7 +173,7 @@ export default function GroupCreateForm({
 					htmlFor="group-handles"
 					className="text-baby_white text-sm font-semibold"
 				>
-					招待メンバー (@handle、改行 / スペース / カンマ区切り)
+					招待メンバー (任意、後から追加可)
 				</label>
 				<textarea
 					ref={handlesRef}
@@ -179,7 +181,6 @@ export default function GroupCreateForm({
 					value={handlesRaw}
 					onChange={(e) => setHandlesRaw(e.target.value)}
 					rows={3}
-					required
 					aria-invalid={Boolean(errors.handles)}
 					aria-describedby={
 						errors.handles
@@ -189,7 +190,8 @@ export default function GroupCreateForm({
 					className="bg-baby_veryBlack text-baby_white focus-visible:ring-baby_blue rounded-md px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2"
 				/>
 				<p id="group-handles-hint" className="text-baby_grey text-xs">
-					選択中: {parsedHandles.length} 名 (上限 19 名)
+					@handle を改行 / スペース / カンマ区切りで入力。 選択中:{" "}
+					{parsedHandles.length} 名 (上限 19 名)
 				</p>
 				{errors.handles ? (
 					<p

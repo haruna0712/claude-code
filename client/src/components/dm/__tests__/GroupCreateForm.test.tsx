@@ -33,6 +33,52 @@ describe("GroupCreateForm", () => {
 		expect(screen.getByRole("button", { name: /作成/ })).toBeEnabled();
 	});
 
+	// #790: メンバー必須を解除。名前のみでも作成可能。
+	it("名前のみ (handle 空) で submit が enable", async () => {
+		render(<GroupCreateForm />);
+		await userEvent.type(screen.getByLabelText(/グループ名/), "個人メモ");
+		expect(screen.getByRole("button", { name: /作成/ })).toBeEnabled();
+	});
+
+	// #790: 名前を入れてから消すと submit が再 disable される (regression 防止)。
+	it("名前を入れてから消すと submit 無効に戻る", async () => {
+		render(<GroupCreateForm />);
+		const nameInput = screen.getByLabelText(/グループ名/);
+		await userEvent.type(nameInput, "メモ");
+		expect(screen.getByRole("button", { name: /作成/ })).toBeEnabled();
+		await userEvent.clear(nameInput);
+		expect(screen.getByRole("button", { name: /作成/ })).toBeDisabled();
+	});
+
+	// #790: 名前のみで作成すると invitee_handles=[] で POST、 /messages/<id> へ遷移。
+	it("名前のみで作成成功 → 空 invitee_handles で POST + 遷移", async () => {
+		mockCreate.mockReturnValue({
+			unwrap: () =>
+				Promise.resolve({ id: 200, kind: "group", name: "個人メモ" }),
+		});
+		render(<GroupCreateForm />);
+		await userEvent.type(screen.getByLabelText(/グループ名/), "個人メモ");
+		await userEvent.click(screen.getByRole("button", { name: /作成/ }));
+		await waitFor(() =>
+			expect(mockCreate).toHaveBeenCalledWith({
+				kind: "group",
+				name: "個人メモ",
+				invitee_handles: [],
+			}),
+		);
+		await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/messages/200"));
+	});
+
+	// #790: label に "任意" が含まれていることを確認 (UX 文言の regression 防止)。
+	// label element 自体に "任意" 文字列があるかを直接見る (getByLabelText は
+	// label resolution が複雑なので getByText で簡潔に)。
+	it("label に 任意 が含まれている", () => {
+		render(<GroupCreateForm />);
+		expect(
+			screen.getByText(/招待メンバー \(任意/, { selector: "label" }),
+		).toBeInTheDocument();
+	});
+
 	it("不正な handle で role=alert を表示", async () => {
 		render(<GroupCreateForm />);
 		await userEvent.type(screen.getByLabelText(/グループ名/), "X");
