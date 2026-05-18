@@ -78,3 +78,24 @@ STATIC_URL = "/static/"
 # 定義時に分岐させる方針に変更 (DRF SimpleRateThrottle の class-level
 # THROTTLE_RATES が import 時に固定されるため、production.py での後付け
 # override は無効だった)。本ファイルでは throttle 関連 override は行わない。
+
+# #763: HSTS (HTTP Strict Transport Security)。
+# spec: docs/specs/xss-defense-spec.md §3.1
+#
+# stg と production 両方が DJANGO_SETTINGS_MODULE=config.settings.production で動くため、
+# env `HSTS_PROFILE` で profile 切替する。 default は safe (stg) = 5 分。
+# production environment では ECS task definition で HSTS_PROFILE=production を inject。
+#
+# - HSTS_PROFILE=production: max-age=31536000 (1 year) + includeSubDomains + preload
+#   (業界標準、 真の本番ドメインで HSTS preload list 提出可能、 hardest 保護)
+# - HSTS_PROFILE=stg (default): max-age=300 (5 分)
+#   (stg は domain 切替 / 停止リスクがあるので browser cache に長期残らないよう短く)
+_HSTS_PROFILE = getenv("HSTS_PROFILE", "stg")
+if _HSTS_PROFILE == "production":
+    SECURE_HSTS_SECONDS = 31_536_000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+else:
+    SECURE_HSTS_SECONDS = 300  # 5 min, stg-safe
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False
