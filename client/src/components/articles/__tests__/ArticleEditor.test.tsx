@@ -232,6 +232,37 @@ describe("ArticleEditor", () => {
 			);
 		});
 
+		it("BD-2: End キーで Preview tab、 Home キーで Write tab に jump", () => {
+			render(<ArticleEditor mode="create" />);
+			const writeTab = screen.getByRole("tab", { name: "Write" });
+			// End → Preview
+			fireEvent.keyDown(writeTab, { key: "End" });
+			expect(screen.getByRole("tab", { name: "Preview" })).toHaveAttribute(
+				"aria-selected",
+				"true",
+			);
+			// Home → Write
+			const previewTab = screen.getByRole("tab", { name: "Preview" });
+			fireEvent.keyDown(previewTab, { key: "Home" });
+			expect(screen.getByRole("tab", { name: "Write" })).toHaveAttribute(
+				"aria-selected",
+				"true",
+			);
+		});
+
+		it("HP-3: Preview → Write 切替で textarea に focus が戻る (= firstViewModeRender guard 後)", () => {
+			render(<ArticleEditor mode="create" />);
+			// 初期は Write tab。 mount 直後の useEffect は firstViewModeRender で skip されるため
+			// textarea にいきなり focus は飛ばない (= 検証は body 全体の activeElement を見ない)。
+			// Preview に切替 → Write に戻す → textarea が document.activeElement
+			fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
+			fireEvent.click(screen.getByRole("tab", { name: "Write" }));
+			const textarea = screen.getByLabelText("本文 (Markdown)", {
+				exact: false,
+			}) as HTMLTextAreaElement;
+			expect(document.activeElement).toBe(textarea);
+		});
+
 		it("SE-2: Preview に切り替えても title / slug / tags / status の input 値は維持される", () => {
 			render(<ArticleEditor mode="create" />);
 			const titleInput = screen.getByLabelText(/タイトル/, {
