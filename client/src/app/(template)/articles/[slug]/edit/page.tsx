@@ -94,8 +94,9 @@ export default async function EditArticlePage({ params }: PageProps) {
 					</p>
 				</div>
 			</header>
-			{/* #786: 1280 viewport で textarea が縮む regression を解消するため p-5 → p-3。 */}
-			<div className="p-3">
+			{/* #786: 1280 viewport で textarea が縮む regression を解消するため p-5 → p-3。
+			    #788 (c): mobile (< md) は p-4 (16px) で edge 詰まりを回避、 md+ で p-3。 */}
+			<div className="p-4 md:p-3">
 				<ArticleEditor mode="edit" initial={article} />
 			</div>
 		</>

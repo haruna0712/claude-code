@@ -420,7 +420,14 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 				: "更新";
 
 	return (
-		<form onSubmit={handleSubmit} className="space-y-3">
+		// #788: form 全体を flex-col + min-h-[calc(100vh-headerOffset)] にして
+		// textarea / preview pane が flex-1 で画面下まで自然に広がるようにする
+		// (= gan-evaluator R4 指摘の「下部空白 350px+」 を解消)。
+		// space-y-3 → space-y-2 で要素間 vertical gap を縮め、 縦の余白を本文に回す。
+		<form
+			onSubmit={handleSubmit}
+			className="flex min-h-[calc(100vh-120px)] flex-col space-y-2"
+		>
 			{error && (
 				<p
 					role="alert"
@@ -436,7 +443,7 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 			    ため sidebar を `xl` (1280-1535) で 240px、 `2xl` (1536+) で 280px に
 			    段階化。 + gap を 4 → 3 (= -4px)。 1280 で main col +44px (= sidebar
 			    -40 + gap -4) で textarea が 60%+ に到達 (= ハルナさん要望「広く」 達成)。 */}
-			<div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_240px] 2xl:grid-cols-[minmax(0,1fr)_280px]">
+			<div className="grid flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_240px] 2xl:grid-cols-[minmax(0,1fr)_280px]">
 				{/* main col: tablist + editor / preview panel */}
 				<div className="flex min-w-0 flex-col">
 					{/* tablist (Write / Preview) + 右端に「画像を追加」 + Cancel + 保存 */}
@@ -558,7 +565,7 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 							required
 							aria-label="本文 (Markdown)"
 							aria-describedby="body-help"
-							className={`h-[calc(100vh-220px)] min-h-[24rem] w-full rounded p-3 font-mono text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+							className={`min-h-[24rem] w-full flex-1 rounded p-3 font-mono text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
 								isDragging
 									? "ring-[color:var(--a-accent)]/40 border-2 border-dashed border-[color:var(--a-accent)] bg-[color:var(--a-bg-subtle)] ring-2"
 									: "border border-border bg-background"
@@ -612,7 +619,7 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 						style={viewMode !== "preview" ? { display: "none" } : undefined}
 						tabIndex={0}
 						aria-label="本文プレビュー"
-						className="mt-2 h-[calc(100vh-220px)] min-h-[24rem] overflow-y-auto rounded border border-border bg-muted/20 p-4 text-sm"
+						className="mt-2 min-h-[24rem] flex-1 overflow-y-auto rounded border border-border bg-muted/20 p-4 text-sm"
 					>
 						<MarkdownPreview body={body} />
 						<p className="mt-3 text-xs text-muted-foreground">
