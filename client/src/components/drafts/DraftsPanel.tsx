@@ -109,7 +109,11 @@ export default function DraftsPanel({ initial }: DraftsPanelProps) {
 							>
 								作成日時: {formatJstDateTime(d.created_at)}
 							</div>
-							<div className="whitespace-pre-wrap" style={{ fontSize: 14 }}>
+							{/* #773: 長文 draft で row が縦に膨らんで「公開する」 / 「削除」 が画面外に流れるのを防ぐため、 2 行で truncate (X 流儀)。 a11y: line-clamp は CSS 上の見た目省略なので DOM の text content には full body が残る = screen reader には全文届く。 */}
+							<div
+								className="line-clamp-2 whitespace-pre-wrap break-words"
+								style={{ fontSize: 14 }}
+							>
 								{d.body}
 							</div>
 							{d.tags && d.tags.length > 0 ? (
