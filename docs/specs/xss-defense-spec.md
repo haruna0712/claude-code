@@ -130,8 +130,9 @@ export function middleware(request: NextRequest) {
 
 export const config = {
 	matcher: [
-		// Skip Next internals + static assets (security headers は HTML response にだけ必要)
-		"/((?!_next/static|_next/image|favicon.ico).*)",
+		// Skip Next internals + static assets + Sentry tunnel (security headers は HTML response にだけ必要)
+		// `monitoring` は Sentry tunnel route (proxied JSON、 HTML ではない)
+		"/((?!_next/static|_next/image|favicon.ico|monitoring).*)",
 	],
 };
 ```
