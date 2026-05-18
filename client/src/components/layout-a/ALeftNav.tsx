@@ -79,16 +79,11 @@ const NAV_ITEMS: NavItemDef[] = [
 	},
 	{ href: "/articles", label: "記事", Icon: FileText },
 	{ href: "/boards", label: "掲示板", Icon: Flame },
-	// Phase 11 11-A (P11-09 follow-up): home (A direction) でも mentor board を
-	// 1 click 到達できるようにする。 既存 `leftNavLinks` (LeftNavbar / MobileNavbar
-	// 用、 X 風レイアウト) には追加済だが、 home が使う ALeftNav は別 list を持つ
-	// (#550 POC) ため、 ここにも明示する。
-	// #744: label を「メンター募集」 → 「相談を募集中」 / 「メンターを探す」 →
-	// 「メンター一覧」 (両方「メンター」 で始まって icon も people 系で synonym
-	// collision を起こしていたため、 board / directory の semantic を明示する形に)。
-	{ href: "/mentor/wanted", label: "相談を募集中", Icon: Handshake },
-	// Phase 11-B (P11-14): mentor 検索 (anon 可)。 「一覧」 で directory 明示。
-	{ href: "/mentors", label: "メンター一覧", Icon: Users },
+	// Phase 11 11-A (P11-09 follow-up): home (A direction) でも mentor surface を
+	// 1 click 到達できるようにする。
+	// #759: /mentor/wanted (相談 board) と /mentors (mentor 一覧) を
+	// /mentors?tab=requests|directory に統合。 nav 1 entry「メンター」 のみ。
+	{ href: "/mentors", label: "メンター", Icon: Handshake },
 	// Phase 14 (P14-05): Claude Agent。 ログイン必須 (Anthropic 課金で
 	// per-user 10/day 制限)。 leftNavLinks (X 風 LeftNavbar) と同 entry を
 	// A direction の home にも明示する。
