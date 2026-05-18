@@ -48,6 +48,7 @@ from apps.tweets.serializers import (
     TweetListSerializer,
     TweetUpdateSerializer,
 )
+from apps.tweets.side_effects import emit_create_side_effects
 
 # #769: publish action での body length validation 用 (P1-10 char_count の lazy import
 # pattern を踏襲、 module 未配備時は len() のみで足切り)
@@ -493,6 +494,16 @@ class TweetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         instance.refresh_from_db()
+
+        # #770 fix: signal handler が draft で skip するため、 公開時に副作用
+        # (= mention 通知 / counter bump / OGP fetch / home TL invalidate) を
+        # `transaction.on_commit` で 1 回だけ発火させる。 通常 tweet 作成経路
+        # (= POST /tweets/ で is_draft=false) と同じ helper を共有することで
+        # セマンティクスを揃える。 python-reviewer HIGH (#770): lambda で
+        # mutable instance を握らず pk を渡して helper 内で fresh fetch する。
+        tweet_pk = instance.pk
+        transaction.on_commit(lambda: emit_create_side_effects(tweet_pk))
+
         out = TweetDetailSerializer(
             instance,
             context=self.get_serializer_context(),
