@@ -27,6 +27,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers as drf_serializers
 from rest_framework import status, viewsets
@@ -410,6 +411,7 @@ class TweetViewSet(viewsets.ModelViewSet):
         url_path="publish",
         permission_classes=[IsAuthenticated],
     )
+    @transaction.atomic
     def publish(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/v1/tweets/<id>/publish/ — 自分の下書きを公開する。
 

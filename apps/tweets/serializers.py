@@ -580,4 +580,6 @@ class TweetUpdateSerializer(serializers.Serializer):
             body=new_body,
             updated_at=now,
         )
+        # database-reviewer LOW: fields= を省略しないこと (全カラム SELECT になり、
+        # draft autosave 系の高頻度経路で性能劣化する)。 必要 field だけ refresh。
         instance.refresh_from_db(fields=["body", "updated_at"])
