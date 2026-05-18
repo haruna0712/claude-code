@@ -136,7 +136,16 @@ export default function MessagesPage() {
 					</Dialog>
 				</div>
 			</header>
-			<div className="p-5">
+			{/*
+				#791: 内側 wrapper にも mobile 用 padding-bottom を持たせる。
+				(template) layout 側の `pb-28` は外側 scroll container のため、
+				room list が overflow して長くなったときに最終 row 下端の
+				余白を確保できない。 ui-ux-tester が 375x812 で実機重なりを
+				検出したのもこのシナリオ。 内側に `pb-20` を持たせて 最終 row
+				下にナビ高さ分の clearance を作る。 sm+ では `pb-5` (= 元の p-5)
+				に戻して desktop で余分な空白が出ないようにする。
+			*/}
+			<div className="p-5 pb-20 sm:pb-5">
 				<RoomList currentUserId={profile.pkid} />
 			</div>
 		</>
