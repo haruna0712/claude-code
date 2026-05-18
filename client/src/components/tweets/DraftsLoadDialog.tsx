@@ -40,6 +40,11 @@ interface DraftsLoadDialogProps {
 	onPick: (draft: TweetSummary) => void;
 }
 
+/** aria-label 用に body を 20 文字で truncate。 越えた場合は …  を末尾につける。 */
+function truncatedLabel(body: string): string {
+	return body.length > 20 ? body.slice(0, 20) + "…" : body;
+}
+
 export default function DraftsLoadDialog({
 	open,
 	onOpenChange,
@@ -52,6 +57,9 @@ export default function DraftsLoadDialog({
 	useEffect(() => {
 		if (!open) return;
 		let cancelled = false;
+		// reviewer M3: open 再 toggle で前回 list が flash する問題回避のため
+		// fetch 開始時に drafts を null (= loading) に戻す。
+		setDrafts(null);
 		setIsLoading(true);
 		fetchDrafts()
 			.then((page) => {
@@ -148,7 +156,7 @@ export default function DraftsLoadDialog({
 										size="sm"
 										variant="outline"
 										onClick={() => onPick(draft)}
-										aria-label={`下書き「${draft.body.slice(0, 20)}」を編集する`}
+										aria-label={`下書き「${truncatedLabel(draft.body)}」を編集する`}
 									>
 										<Pencil className="mr-1 h-3.5 w-3.5" />
 										編集
@@ -159,7 +167,7 @@ export default function DraftsLoadDialog({
 										variant="ghost"
 										disabled={pendingDeleteId === draft.id}
 										onClick={() => onDelete(draft.id)}
-										aria-label={`下書き「${draft.body.slice(0, 20)}」を削除する`}
+										aria-label={`下書き「${truncatedLabel(draft.body)}」を削除する`}
 									>
 										{pendingDeleteId === draft.id ? (
 											<Loader2 className="h-3.5 w-3.5 animate-spin" />

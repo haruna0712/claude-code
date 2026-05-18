@@ -133,6 +133,10 @@ export default function TweetComposer({
 				// #767: 既存 draft 編集モード → body update してから publish。
 				// tags 編集は V1 で skip (backend serializer の update が body のみ受付)。
 				await updateTweet(loadedDraftId, { body });
+				// updateTweet 成功時点で server 側 draft body が確定したので、
+				// publish 前に autosave key を clear (publish が落ちても data drift
+				// しないため、 typescript-reviewer H1)。
+				clearBodyAutosave();
 				tweet = await publishDraft(loadedDraftId);
 			} else {
 				tweet = await createTweet({ body, tags });
