@@ -145,6 +145,8 @@ pathname === "/search" ||
 - `/messages/<id>`: 個別 DM thread の集中 (M-2) 確保。 `/messages` list と `/messages/invitations` は除外
 - `/articles/<slug>`: 長文記事読みの集中 (M-1) 確保。 list (`/articles`)、 new (`/articles/new`)、 edit (`/articles/<slug>/edit`) は別判定で既に excluded
 
+> **#756 update (2026-05-18)**: `/messages` list と `/messages/invitations` も hide 対象に拡張。 X (Twitter) は DM section を 2-pane (会話一覧 + active thread or empty state) で組んでおり右 rail を出すスペース自体ない。 X 準拠路線で統一。 詳細: `docs/specs/explore-search-rightrail-spec.md` §8 (本 doc は元の #741 状態を保持、 §8 で update を追記する流儀)。
+
 #### 3.4.2 search panel 削除
 
 `ARightRail.tsx:63-90` の `<Link href="/search">` block 全体を削除。 `/explore` 最上部に search box が常設されるので冗長。

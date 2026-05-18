@@ -41,7 +41,7 @@ describe("shouldHideRightRail", () => {
 		});
 	});
 
-	describe("private read/write (#741): /messages/<id>", () => {
+	describe("private read/write (#741 個別、 #756 で /messages 全体に拡張)", () => {
 		it("returns true for individual thread /messages/abc123", () => {
 			expect(shouldHideRightRail("/messages/abc123")).toBe(true);
 		});
@@ -52,12 +52,12 @@ describe("shouldHideRightRail", () => {
 			).toBe(true);
 		});
 
-		it("returns false for /messages list view (browse)", () => {
-			expect(shouldHideRightRail("/messages")).toBe(false);
+		it("returns true for /messages list view (#756: X 準拠で 2-pane の右側 thread 占有)", () => {
+			expect(shouldHideRightRail("/messages")).toBe(true);
 		});
 
-		it("returns false for /messages/invitations sub-page", () => {
-			expect(shouldHideRightRail("/messages/invitations")).toBe(false);
+		it("returns true for /messages/invitations sub-page (#756: DM section 配下)", () => {
+			expect(shouldHideRightRail("/messages/invitations")).toBe(true);
 		});
 	});
 
@@ -86,8 +86,6 @@ describe("shouldHideRightRail", () => {
 		it.each([
 			["/"],
 			["/notifications"],
-			["/messages"],
-			["/messages/invitations"],
 			["/articles"],
 			["/boards"],
 			["/boards/django"],

@@ -307,7 +307,7 @@ test.describe("#741 /explore + search + right rail IA refactor", () => {
 		await ctx.close();
 	});
 
-	test("RAIL-SHOW-3: /messages list で右 rail 表示 (list 系維持)", async ({
+	test("RAIL-HIDE-4 (#756): /messages list で右 rail 非表示 (X 2-pane 準拠)", async ({
 		browser,
 	}) => {
 		const ctx = await browser.newContext();
@@ -316,7 +316,8 @@ test.describe("#741 /explore + search + right rail IA refactor", () => {
 		await page.setViewportSize({ width: 1280, height: 800 });
 		await page.goto(`${BASE}/messages`);
 
-		await expect(page.locator(RAIL_SELECTOR)).toBeVisible({ timeout: 15000 });
+		// #756: X 準拠で /messages 全体 (list + thread + invitations) を hide。
+		await expect(page.locator(RAIL_SELECTOR)).toHaveCount(0);
 
 		await ctx.close();
 	});

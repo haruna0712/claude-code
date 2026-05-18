@@ -19,7 +19,10 @@
  *      - `/agent` / `/agent/*` (Claude Agent LLM chat workspace)
  *
  *   4. **Private read/write surface**
- *      - `/messages/<id>` (個別 DM thread。 list と invitations は除外して rail 表示)
+ *      - `/messages` 全体 (#756: list + thread + invitations すべて hide)。
+ *        X (Twitter) は DM を 2-pane (会話一覧 + active thread or empty state) で
+ *        構成しているため右側が thread pane に占有され、 trending rail を出す
+ *        スペース自体ない。 X 準拠路線で同じ挙動にする。
  *
  *   5. **長文 read surface**
  *      - `/articles/<slug>` (記事詳細。 list / new / edit は別判定)
@@ -52,13 +55,11 @@ export function shouldHideRightRail(pathname: string): boolean {
 	// 3. Focused single-task surface (#741)
 	if (pathname === "/agent" || pathname.startsWith("/agent/")) return true;
 
-	// 4. Private read/write surface (#741)
-	// /messages list (browse) と /messages/invitations は除外して rail を残す。
-	// 個別 thread `/messages/<id>` のみ抑制。
-	// 負の lookahead `(?!invitations$)` で /messages/invitations を弾く。
-	if (/^\/messages\/(?!invitations$)[^/]+$/.test(pathname)) {
+	// 4. Private read/write surface (#741 で個別 thread、 #756 で全体に拡張)
+	// X 準拠: /messages 全体 (list + thread + invitations + 等) を hide。
+	// X は DM を 2-pane (一覧 + thread) で組むので、 右 rail を出すスペース自体ない。
+	if (pathname === "/messages" || pathname.startsWith("/messages/"))
 		return true;
-	}
 
 	// 5. 長文 read surface (#741)
 	// 記事詳細 `/articles/<slug>` のみ。 `/articles` list / `/articles/new` /
