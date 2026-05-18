@@ -164,19 +164,31 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 
 	// code-reviewer H-2 反映: body 更新ごとに pendingCaretRef を flush。 dep array
 	// なしの useEffect は毎レンダー走ってオーバーヘッドになるので body を観測する形に。
+	// typescript-reviewer HIGH (#780): viewMode が "preview" のとき textarea は
+	// hidden なので、 focus / setSelectionRange を skip する (= 不可視要素への
+	// focus 奪取を防ぐ)。 viewMode は ref 経由ではなく毎レンダー closure 経由で読む
+	// (= 再 schedule 不要、 「現在の状態」 として参照するだけ)。
 	useEffect(() => {
 		if (pendingCaretRef.current === null) return;
 		const target = pendingCaretRef.current;
 		pendingCaretRef.current = null;
 		const ta = textareaRef.current;
-		if (ta) {
+		if (ta && viewMode === "write") {
 			ta.focus();
 			ta.setSelectionRange(target, target);
 		}
-	}, [body]);
+	}, [body, viewMode]);
 
 	// #780: Write タブに戻ったら textarea にフォーカスを戻す (UX 改善)。
+	// typescript-reviewer HIGH (#780): mount 時の発火を抑制。 default viewMode が
+	// "write" のため、 初回 mount で page 全体の focus を奪うのを防ぐ。 切替時のみ
+	// focus を返す。
+	const firstViewModeRender = useRef(true);
 	useEffect(() => {
+		if (firstViewModeRender.current) {
+			firstViewModeRender.current = false;
+			return;
+		}
 		if (viewMode === "write") {
 			textareaRef.current?.focus({ preventScroll: true });
 		}
