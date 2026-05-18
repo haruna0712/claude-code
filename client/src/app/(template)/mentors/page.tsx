@@ -202,8 +202,11 @@ function HeaderCta({
 	const href = isAuthenticated
 		? "/mentors/me/edit"
 		: "/login?next=/mentors/me/edit";
+	// #759 code-reviewer MEDIUM: 既存 mentor profile を持つ user にも「登録」 と
+	// 出ると「自分の登録が消えた?」 と誤解しうる。 「メンタープロフィール」 は
+	// 新規登録 / 編集の両方で意味が通る neutral な label。
 	const label = isAuthenticated
-		? "メンターとして登録"
+		? "メンタープロフィール"
 		: "ログインしてメンター登録";
 	return (
 		<Link
