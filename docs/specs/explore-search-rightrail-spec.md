@@ -132,18 +132,22 @@
 `ARightRail.tsx:44-49` の `hideOnFocusedSurface` 判定に以下を追加:
 
 ```ts
+// 現在の shipped 実装 (#741 → #756 update 後)
 pathname === "/search" ||
 	pathname.startsWith("/search/") ||
 	pathname === "/agent" ||
 	pathname.startsWith("/agent/") ||
-	/^\/messages\/(?!invitations$)[^/]+$/.test(pathname) ||
+	pathname === "/messages" ||
+	pathname.startsWith("/messages/") ||
 	/^\/articles\/[^/]+$/.test(pathname);
 ```
 
 - `/search`: search panel 重複 (H-2) 解消 → そもそも rail 全体を隠す
 - `/agent`: LLM chat workspace 集中 (H-3) 確保
-- `/messages/<id>`: 個別 DM thread の集中 (M-2) 確保。 `/messages` list と `/messages/invitations` は除外
+- `/messages*`: **#741** で個別 thread のみ hide だったが、 **#756** で X 準拠 (DM 2-pane で右側 thread 占有) に統一して list + invitations + 全 sub-page を hide 対象に
 - `/articles/<slug>`: 長文記事読みの集中 (M-1) 確保。 list (`/articles`)、 new (`/articles/new`)、 edit (`/articles/<slug>/edit`) は別判定で既に excluded
+
+> **#756 update (2026-05-18)**: `/messages` list と `/messages/invitations` も hide 対象に拡張。 X (Twitter) は DM section を 2-pane (会話一覧 + active thread or empty state) で組んでおり右 rail を出すスペース自体ない。 X 準拠路線で統一。 詳細: `docs/specs/explore-search-rightrail-spec.md` §8 (本 doc は元の #741 状態を保持、 §8 で update を追記する流儀)。
 
 #### 3.4.2 search panel 削除
 
@@ -215,7 +219,7 @@ pathname === "/search" ||
 | 7   | `/agent` に直接 navigate                                | test4             | 右 rail 非表示、 chat UI のみ                                                                         |
 | 8   | `/articles/<existing-slug>` を開く                      | test4             | 右 rail 非表示、 長文記事本文のみ                                                                     |
 | 9   | `/` (home) を開く                                       | test4             | 右 rail **表示** (trending + who-to-follow)、 search panel 削除済確認                                 |
-| 10  | `/messages` list を開く                                 | test4             | 右 rail 表示 (list は browse なので維持)                                                              |
+| 10  | `/messages` list を開く                                 | test4             | **#756**: 右 rail **非表示** (X 準拠の DM 2-pane 路線、 旧 #741 は browse 系として表示していたが反転) |
 | 11  | `/notifications` を開く                                 | test4             | 右 rail 表示 (空 state を rail が補完)                                                                |
 | 12  | 右 rail の dummy footer text が削除されていることを確認 | test4             | `about · pricing` text が DOM に **存在しない**                                                       |
 
