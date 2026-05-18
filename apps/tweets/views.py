@@ -395,12 +395,21 @@ class TweetViewSet(viewsets.ModelViewSet):
     def publish(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/v1/tweets/<id>/publish/ — 自分の下書きを公開する。
 
-        spec: docs/specs/tweet-drafts-spec.md §3.2
+        spec: docs/specs/tweet-drafts-spec.md §3.2 + docs/specs/draft-edit-limit-fix-spec.md §3.2
 
         - 自分の下書き (= `published_at IS NULL` + author=user) のみ
         - 他人の下書き ID → 404 隠蔽 (= ある事実を漏らさない)
         - 既に公開済み → 400
-        - 成功時: `published_at = created_at = now()` に更新し、 detail を返す
+        - 成功時: `published_at = created_at = updated_at = now()` に更新し、 detail を返す
+
+        #769 fix: optional `body` を受け取り、 公開時に body も上書きできる。
+        これにより frontend は「PATCH → publish」 の 2 段呼び出しを廃して 1 段で済む
+        (= record_edit 不発火 = edit_count が動かず、 「編集済」 badge も付かない)。
+
+        - body が指定された場合のみ length validation を実施 (TWEET_BODY_MAX_LENGTH / TWEET_MAX_CHARS)
+        - `.update()` は ``auto_now`` (updated_at) と pre_save signal を bypass するため、
+          `updated_at=now` を明示し、 body 更新時は `language` も明示的に再検出する
+          (silent-failure-hunter MEDIUM #5 / LOW #7)
         """
         instance = self.get_object()  # `_DRAFT_AWARE_ACTIONS` で all_with_drafts
         if instance.author_id != request.user.pk:
@@ -414,13 +423,48 @@ class TweetViewSet(viewsets.ModelViewSet):
                 {"detail": "already_published"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # #769: optional body の length validation
+        body = request.data.get("body") if hasattr(request, "data") else None
+        if body is not None:
+            from apps.tweets.models import TWEET_BODY_MAX_LENGTH
+
+            if len(body) > TWEET_BODY_MAX_LENGTH:
+                raise ValidationError(
+                    {"body": f"本文は {TWEET_BODY_MAX_LENGTH} 字以内で入力してください。"}
+                )
+            try:
+                from apps.tweets.char_count import (
+                    TWEET_MAX_CHARS,
+                    count_tweet_chars,
+                )
+
+                if count_tweet_chars(body) > TWEET_MAX_CHARS:
+                    raise ValidationError(
+                        {
+                            "body": f"本文は URL / Markdown 換算で {TWEET_MAX_CHARS} 字以内にしてください。"
+                        }
+                    )
+            except ImportError:
+                pass  # char_count module 未配備時は len() のみで足切り済
+
         now = timezone.now()
-        # auto_now_add の `created_at` も同時に更新する (spec §2.1)。
-        # bulk update で auto_now_add を回避し、 公開時刻を時系列に正しく載せる。
-        Tweet.all_objects.filter(pk=instance.pk).update(
-            published_at=now,
-            created_at=now,
-        )
+        # spec §2.1: 公開時に created_at == published_at に揃え、 .update() は
+        # auto_now を bypass するので updated_at も明示する。
+        update_fields: dict[str, Any] = {
+            "published_at": now,
+            "created_at": now,
+            "updated_at": now,
+        }
+        if body is not None:
+            update_fields["body"] = body
+            # silent-failure LOW #7: .update() は pre_save signal を bypass するため
+            # auto_detect_language が走らない → 明示的に language を再検出する。
+            from apps.tweets.language_detection import detect_language
+
+            update_fields["language"] = detect_language(body)
+
+        Tweet.all_objects.filter(pk=instance.pk).update(**update_fields)
         instance.refresh_from_db()
         out = TweetDetailSerializer(
             instance,

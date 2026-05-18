@@ -130,14 +130,11 @@ export default function TweetComposer({
 		try {
 			let tweet: TweetSummary;
 			if (loadedDraftId !== null) {
-				// #767: 既存 draft 編集モード → body update してから publish。
-				// tags 編集は V1 で skip (backend serializer の update が body のみ受付)。
-				await updateTweet(loadedDraftId, { body });
-				// updateTweet 成功時点で server 側 draft body が確定したので、
-				// publish 前に autosave key を clear (publish が落ちても data drift
-				// しないため、 typescript-reviewer H1)。
-				clearBodyAutosave();
-				tweet = await publishDraft(loadedDraftId);
+				// #769 fix: 既存 draft 編集モードは publish に body を直接渡して
+				// 1 リクエストで「最新 body + 公開」 を実現する。 旧 2 段呼び出し
+				// (updateTweet → publishDraft) は draft でも record_edit を経由し
+				// edit_count が +1 されてしまうため廃止。
+				tweet = await publishDraft(loadedDraftId, { body });
 			} else {
 				tweet = await createTweet({ body, tags });
 			}
