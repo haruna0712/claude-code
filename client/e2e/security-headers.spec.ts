@@ -58,4 +58,19 @@ test.describe("#763 Security headers (Next.js middleware)", () => {
 
 		await api.dispose();
 	});
+
+	test("SECURITY-HEADERS-3: _next/static は matcher 除外で CSP が乗らない", async () => {
+		// /_next/static/* は middleware の matcher 除外対象。
+		// CSP / Permissions-Policy が emit されないことを検証 (asset chunk が
+		// CSP 違反で blocked されないための保険)。
+		const api = await request.newContext();
+		const response = await api.get(`${BASE}/_next/static/`);
+
+		const headers = response.headers();
+		// CSP は middleware からのみ emit される。 static asset には乗らない。
+		expect(headers["content-security-policy-report-only"]).toBeUndefined();
+		expect(headers["permissions-policy"]).toBeUndefined();
+
+		await api.dispose();
+	});
 });

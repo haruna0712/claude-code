@@ -72,8 +72,9 @@ export function middleware(_request: NextRequest) {
 
 /**
  * matcher: security headers が必要なのは HTML response のみ。
- * Next.js 内部 (`_next/static`, `_next/image`, `favicon.ico`) は skip。
+ * Next.js 内部 (`_next/static`, `_next/image`, `favicon.ico`) と
+ * Sentry tunnel route (`monitoring/sentry`、 proxied JSON) は skip。
  */
 export const config = {
-	matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+	matcher: ["/((?!_next/static|_next/image|favicon.ico|monitoring).*)"],
 };
