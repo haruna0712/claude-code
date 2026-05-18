@@ -26,11 +26,13 @@ describe("shouldHideRightRail", () => {
 		});
 	});
 
-	describe("surface duplication (#741): /search", () => {
+	describe("search surface (#795: 抑制解除、 rail を出す)", () => {
+		// #741 で `/search` 系を 「surface duplication 防止」 で抑制したが、
+		// rail の search panel は削除済みなので duplication 問題なし → #795 で解除。
 		it.each([["/search"], ["/search/users"], ["/search/anything"]])(
-			"returns true for %s",
+			"returns false for %s",
 			(pathname) => {
-				expect(shouldHideRightRail(pathname)).toBe(true);
+				expect(shouldHideRightRail(pathname)).toBe(false);
 			},
 		);
 	});
@@ -109,6 +111,9 @@ describe("shouldHideRightRail", () => {
 			["/drafts"],
 			["/follow-requests"],
 			["/explore"],
+			// #795: /search 系も rail を出す (search panel は rail に無いので duplication なし)
+			["/search"],
+			["/search/users"],
 		])("returns false for %s", (pathname) => {
 			expect(shouldHideRightRail(pathname)).toBe(false);
 		});

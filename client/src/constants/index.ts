@@ -3,14 +3,17 @@ import { LeftNavLink } from "@/types";
 /**
  * LeftNavbar / MobileNavbar に表示する link 一覧 (#297).
  *
- * 並び順は X (旧 Twitter) の左ナビに準拠: ホーム → 探索 → 通知 →
+ * 並び順は X (旧 Twitter) の左ナビに準拠: ホーム → 検索 → 通知 →
  * メッセージ → プロフィール。
  *
  * Phase 1 で導入した SVG 資産 (home.svg) は Home 行のみ後方互換維持のため
  * imgLocation に残し、他 link は lucide-react icon に揃える。
  *
- * #741 で「検索」 entry を削除、 「探索」 icon を Search (虫眼鏡) に統一。
- * Twitter 準拠 IA: search は /explore の component で、 nav 上は 1 entry のみ。
+ * #741 で「検索」 entry を削除して「探索」 (/explore) に統一したが、 #795 で
+ * ハルナさんの product 判断に基づき再調整: nav の入口は 「検索」 (path: /search)。
+ * `/explore` route は残るが nav からは外す。 rail に search panel は戻さない
+ * ため `/search` でも rail (TrendingTags + WhoToFollow) を出して surface
+ * duplication 問題は再発しない。
  */
 export const leftNavLinks: LeftNavLink[] = [
 	{
@@ -20,8 +23,10 @@ export const leftNavLinks: LeftNavLink[] = [
 		iconName: "Home",
 	},
 	{
-		path: "/explore",
-		label: "探索",
+		// #795: 「探索」 → 「検索」 rename + path /explore → /search。
+		// /explore route は残るが nav 入口は /search に。
+		path: "/search",
+		label: "検索",
 		iconName: "Search",
 	},
 	{

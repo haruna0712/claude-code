@@ -1,20 +1,19 @@
 /**
- * Right rail 抑制対象 pathname 判定 (#741).
+ * Right rail 抑制対象 pathname 判定 (#741, #795).
  *
- * Spec: docs/specs/explore-search-rightrail-spec.md §3.4
+ * Spec: docs/specs/explore-search-rightrail-spec.md §3.4 / §9, search-nav-rename-rail-spec.md
  *
- * 右 rail (`ARightRail`) は「 trending + who-to-follow」 を出す chrome だが、
- * 以下の 6 カテゴリでは集中阻害 / surface 重複 / picker page の rail dominant
- * 問題で page purpose と矛盾するため抑制する:
+ * 履歴: #741 で「Surface duplication 防止」 として `/search` 系を category 2 に
+ * 入れたが、 ARightRail から search panel を削除した時点で duplication は
+ * 解消されていた。 #795 で抑制対象から外し、 `/search` でも rail を表示。
+ *
+ * 現役の抑制カテゴリは 5 つ (category 番号は historical):
  *
  *   1. **Composer / Edit form** — 元から抑制対象
  *      - `/settings/*`
  *      - `/articles/new` / `/articles/<slug>/edit`
  *      - `/mentor/wanted/new`
  *      - `/mentors/me/edit`
- *
- *   2. **Surface duplication 防止**
- *      - `/search` / `/search/*` (中央 SearchBox と rail search panel が重複)
  *
  *   3. **Focused single-task surface**
  *      - `/agent` / `/agent/*` (Claude Agent LLM chat workspace)
@@ -41,8 +40,9 @@
  *      将来の picker 以外 (例: `/mentors/<handle>` profile detail) も同じ category
  *      に乗せやすくする (code-reviewer #760 提案)。
  *
- * 採点根拠 (`ui-ux-tester` agent 2026-05-17 audit):
- *   - `/search` rail score: -2 (surface duplication 最悪)
+ * 採点根拠 (`ui-ux-tester` agent 2026-05-17 audit、 #795 で更新):
+ *   - ~~`/search` rail score: -2 (surface duplication 最悪)~~ → #795 で抑制解除。
+ *     rail に search panel が無い前提で duplication 問題は再発しない。
  *   - `/agent` rail score: -2 (LLM chat に discovery ノイズ)
  *   - `/messages/<id>` rail score: -1 (private chat に discovery 不適切)
  *   - `/articles/<slug>` rail score: -1 (長文読みに干渉)
@@ -63,8 +63,8 @@ export function shouldHideRightRail(pathname: string): boolean {
 	if (pathname === "/mentor/wanted/new") return true;
 	if (pathname === "/mentors/me/edit") return true;
 
-	// 2. Surface duplication (#741)
-	if (pathname === "/search" || pathname.startsWith("/search/")) return true;
+	// (category 2 は #741 の `/search` surface duplication 抑制だったが、 #795 で
+	// 解除して `/search` でも rail を表示する方針に変更。 番号は historical 維持。)
 
 	// 3. Focused single-task surface (#741)
 	if (pathname === "/agent" || pathname.startsWith("/agent/")) return true;
