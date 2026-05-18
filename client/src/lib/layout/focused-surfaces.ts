@@ -28,15 +28,18 @@
  *   5. **長文 read surface**
  *      - `/articles/<slug>` (記事詳細。 list / new / edit は別判定)
  *
- *   6. **Picker / utility list surface** (#758, ui-ux-tester re-audit 2026-05-18)
+ *   6. **Non-stream / browser surface (picker / utility list)** (#758, ui-ux-tester re-audit 2026-05-18)
  *      - `/mentor/wanted` 系 (相談 board picker)
  *      - `/mentors` 系 (mentor directory picker + 個別 profile)
  *      - `/boards` 系 (掲示板 board picker + thread list)
  *      - `/articles` (記事 list、 detail は category 5 で既に hide 済)
  *
- *      真の predicate は「is the center an X-style stream」 — picker は stream
- *      ではないので rail なし。 X も Communities / Lists / Bookmarks 等の picker
- *      で rail を出さない。 #741 の「browse = rail OK」 over-generalize を修正。
+ *      真の predicate は「is the center an X-style stream」 — picker / detail /
+ *      browser surface は stream ではないので rail なし。 X も Communities /
+ *      Lists / Bookmarks 等の picker で rail を出さない。 #741 の「browse = rail
+ *      OK」 over-generalize を修正。 命名は "Non-stream / browser surface" として
+ *      将来の picker 以外 (例: `/mentors/<handle>` profile detail) も同じ category
+ *      に乗せやすくする (code-reviewer #760 提案)。
  *
  * 採点根拠 (`ui-ux-tester` agent 2026-05-17 audit):
  *   - `/search` rail score: -2 (surface duplication 最悪)
@@ -77,7 +80,7 @@ export function shouldHideRightRail(pathname: string): boolean {
 	// は category 1 で既に hide、 `/articles` list は category 6 で hide。
 	if (/^\/articles\/[^/]+$/.test(pathname)) return true;
 
-	// 6. Picker / utility list surface (#758)
+	// 6. Non-stream / browser surface (picker / utility list) (#758)
 	// X は Communities / Lists / Bookmarks 等の picker page で rail を出さない。
 	// うちの該当 surface も同様に hide:
 	// note: `/mentor/wanted/new` と `/mentors/me/edit` は category 1 で先に
