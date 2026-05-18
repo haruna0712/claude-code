@@ -129,6 +129,20 @@ describe("shouldHideRightRail", () => {
 			expect(shouldHideRightRail("/settings-not-real")).toBe(false);
 		});
 
+		it.each([
+			["/mentor-archive"],
+			["/mentors-help"],
+			["/boards-index"],
+			["/articles-feed"],
+		])(
+			"returns false for %s (#758 prefix false-positive guard for picker surfaces)",
+			(pathname) => {
+				// slash 区切りを要求するため /mentor- / /mentors- / /boards- /
+				// /articles- で始まる別 path を誤って hide しないことを保証。
+				expect(shouldHideRightRail(pathname)).toBe(false);
+			},
+		);
+
 		it("returns false for /messages-archive (#756 prefix false-positive guard)", () => {
 			// `pathname === "/messages" || startsWith("/messages/")` は
 			// slash 区切りを要求するため /messages で始まる別 path (例: /messages-archive)

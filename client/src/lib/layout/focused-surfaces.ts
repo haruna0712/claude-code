@@ -80,11 +80,16 @@ export function shouldHideRightRail(pathname: string): boolean {
 	// 6. Picker / utility list surface (#758)
 	// X は Communities / Lists / Bookmarks 等の picker page で rail を出さない。
 	// うちの該当 surface も同様に hide:
+	// note: `/mentor/wanted/new` と `/mentors/me/edit` は category 1 で先に
+	// hide=true になるため、 下の startsWith branch は dead だが結果同じなので
+	// 冗長 safety として残す。
 	if (pathname === "/mentor/wanted" || pathname.startsWith("/mentor/wanted/")) {
 		return true;
 	}
 	if (pathname === "/mentors" || pathname.startsWith("/mentors/")) return true;
 	if (pathname === "/boards" || pathname.startsWith("/boards/")) return true;
+	// /articles のみ exact match (subpath は category 1 で composer / edit、
+	// category 5 で /articles/<slug> detail として既に hide 済、 二重 hide 不要)。
 	if (pathname === "/articles") return true;
 
 	return false;
