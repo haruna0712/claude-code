@@ -70,8 +70,8 @@ describe("shouldHideRightRail", () => {
 			expect(shouldHideRightRail("/articles/phase6-stg-check")).toBe(true);
 		});
 
-		it("returns false for /articles list view", () => {
-			expect(shouldHideRightRail("/articles")).toBe(false);
+		it("returns true for /articles list view (#758: picker / utility list)", () => {
+			expect(shouldHideRightRail("/articles")).toBe(true);
 		});
 
 		it("returns true for /articles/me (path 1 segment 判定の副作用)", () => {
@@ -82,13 +82,26 @@ describe("shouldHideRightRail", () => {
 		});
 	});
 
-	describe("rail を表示する surface (false を返す)", () => {
+	describe("picker / utility list surface (#758): rail hide", () => {
+		// X 準拠で picker / list page では rail を出さない。
+		// #741 の「browse = rail OK」 over-generalize を修正。
+		it.each([
+			["/mentor/wanted"],
+			["/mentor/wanted/123"],
+			["/mentors"],
+			["/mentors/some-handle"],
+			["/boards"],
+			["/boards/django"],
+			["/articles"],
+		])("returns true for %s", (pathname) => {
+			expect(shouldHideRightRail(pathname)).toBe(true);
+		});
+	});
+
+	describe("rail を表示する surface (X 準拠 stream 系のみ false を返す)", () => {
 		it.each([
 			["/"],
 			["/notifications"],
-			["/articles"],
-			["/boards"],
-			["/boards/django"],
 			["/threads/1"],
 			["/tweet/230"],
 			["/u/test4"],
@@ -96,9 +109,6 @@ describe("shouldHideRightRail", () => {
 			["/drafts"],
 			["/follow-requests"],
 			["/explore"],
-			["/mentor/wanted"],
-			["/mentors"],
-			["/mentors/some-handle"],
 		])("returns false for %s", (pathname) => {
 			expect(shouldHideRightRail(pathname)).toBe(false);
 		});
@@ -118,6 +128,20 @@ describe("shouldHideRightRail", () => {
 			// /settings で始まる別 path は誤って rail を隠さない。
 			expect(shouldHideRightRail("/settings-not-real")).toBe(false);
 		});
+
+		it.each([
+			["/mentor-archive"],
+			["/mentors-help"],
+			["/boards-index"],
+			["/articles-feed"],
+		])(
+			"returns false for %s (#758 prefix false-positive guard for picker surfaces)",
+			(pathname) => {
+				// slash 区切りを要求するため /mentor- / /mentors- / /boards- /
+				// /articles- で始まる別 path を誤って hide しないことを保証。
+				expect(shouldHideRightRail(pathname)).toBe(false);
+			},
+		);
 
 		it("returns false for /messages-archive (#756 prefix false-positive guard)", () => {
 			// `pathname === "/messages" || startsWith("/messages/")` は

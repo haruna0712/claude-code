@@ -268,6 +268,76 @@ test.describe("#741 /explore + search + right rail IA refactor", () => {
 		await ctx.close();
 	});
 
+	test("RAIL-HIDE-5 (#758): /articles list で右 rail 非表示 (picker)", async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		await loginViaApi(ctx.request, USER1);
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await page.goto(`${BASE}/articles`);
+
+		await expect(page.locator(RAIL_SELECTOR)).toHaveCount(0);
+
+		await ctx.close();
+	});
+
+	test("RAIL-HIDE-6 (#758): /boards で右 rail 非表示 (board picker)", async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		await loginViaApi(ctx.request, USER1);
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await page.goto(`${BASE}/boards`);
+
+		await expect(page.locator(RAIL_SELECTOR)).toHaveCount(0);
+
+		await ctx.close();
+	});
+
+	test("RAIL-HIDE-7 (#758): /boards/<slug> で右 rail 非表示 (thread list)", async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		await loginViaApi(ctx.request, USER1);
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await page.goto(`${BASE}/boards/django`);
+
+		await expect(page.locator(RAIL_SELECTOR)).toHaveCount(0);
+
+		await ctx.close();
+	});
+
+	test("RAIL-HIDE-8 (#758): /mentor/wanted で右 rail 非表示 (相談 board picker)", async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		await loginViaApi(ctx.request, USER1);
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await page.goto(`${BASE}/mentor/wanted`);
+
+		await expect(page.locator(RAIL_SELECTOR)).toHaveCount(0);
+
+		await ctx.close();
+	});
+
+	test("RAIL-HIDE-9 (#758): /mentors で右 rail 非表示 (mentor directory picker)", async ({
+		browser,
+	}) => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		await loginViaApi(ctx.request, USER1);
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await page.goto(`${BASE}/mentors`);
+
+		await expect(page.locator(RAIL_SELECTOR)).toHaveCount(0);
+
+		await ctx.close();
+	});
+
 	// ───────────────────────────────────────────────── 右 rail 表示 group
 
 	test("RAIL-SHOW-1: / (home) で右 rail 表示、 search panel は削除済", async ({
