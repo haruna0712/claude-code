@@ -431,10 +431,12 @@ export default function ArticleEditor({ mode, initial }: ArticleEditorProps) {
 			)}
 
 			{/* #780 Zenn 流 2-col layout: main (editor/preview) + 右 sidebar (metadata)。
-			    #784: breakpoint を lg → xl に上げ、 sidebar 幅 320 → 280。 これで
-			    1024 viewport では sidebar が main 下に積み下がって本文 full width、
-			    1280+ で右 sidebar 表示 (gan-evaluator R1 目標 65%+ を達成)。 */}
-			<div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+			    #784: breakpoint を lg → xl に上げ、 sidebar 幅 320 → 280。
+			    #786: 1280 viewport で textarea が 55% に縮む regression を解消する
+			    ため sidebar を `xl` (1280-1535) で 240px、 `2xl` (1536+) で 280px に
+			    段階化。 + gap を 4 → 3 (= -4px)。 1280 で main col +44px (= sidebar
+			    -40 + gap -4) で textarea が 60%+ に到達 (= ハルナさん要望「広く」 達成)。 */}
+			<div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_240px] 2xl:grid-cols-[minmax(0,1fr)_280px]">
 				{/* main col: tablist + editor / preview panel */}
 				<div className="flex min-w-0 flex-col">
 					{/* tablist (Write / Preview) + 右端に「画像を追加」 + Cancel + 保存 */}

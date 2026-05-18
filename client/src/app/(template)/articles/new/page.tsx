@@ -55,7 +55,10 @@ export default function NewArticlePage() {
 					</p>
 				</div>
 			</header>
-			<div className="p-5">
+			{/* #786: 1280 viewport で textarea が 55% に縮む regression を解消するため、
+			    article editor の padding を p-5 (40px) → p-3 (24px) に縮小。 +16px が
+			    本文 textarea の横幅に直接効く。 他 route の padding は影響なし。 */}
+			<div className="p-3">
 				<ArticleEditor mode="create" />
 			</div>
 		</>
