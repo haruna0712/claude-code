@@ -426,6 +426,21 @@ CSRF_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 
+# #763: HTTP security headers (XSS / clickjacking / referrer / MIME sniff の defense-in-depth)。
+# Django SecurityMiddleware が emit する response headers を有効化する。
+# spec: docs/specs/xss-defense-spec.md §3.1
+#
+# - SECURE_CONTENT_TYPE_NOSNIFF: X-Content-Type-Options: nosniff を emit
+#   (browser の MIME sniffing 攻撃を防ぐ、 例: image/png として upload された HTML が
+#   text/html として実行される問題を弾く)
+# - SECURE_BROWSER_XSS_FILTER: X-XSS-Protection: 1; mode=block を emit (legacy、
+#   modern browsers は ignore するが scanner / 古い browser 向けに残す)
+# - SECURE_REFERRER_POLICY: strict-origin-when-cross-origin で full URL leak を防ぐ
+#   (Sentry / CDN への referrer に handle / article slug などが leak しない)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
 # F1-6: CORS 設定。Next.js frontend からの cross-origin リクエストを許可。
 # stg/prod では env CORS_ALLOWED_ORIGINS (カンマ区切り) を必須化。
 # local では空のままで django-cors-headers の default 動作 (全 origin 拒否) になるが、

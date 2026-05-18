@@ -78,3 +78,14 @@ STATIC_URL = "/static/"
 # 定義時に分岐させる方針に変更 (DRF SimpleRateThrottle の class-level
 # THROTTLE_RATES が import 時に固定されるため、production.py での後付け
 # override は無効だった)。本ファイルでは throttle 関連 override は行わない。
+
+# #763: HSTS (HTTP Strict Transport Security)。 production 専用 (stg は短期 max-age
+# でも browser cache に長期残るのを避けたいので production のみ有効化)。
+# spec: docs/specs/xss-defense-spec.md §3.1
+#
+# - max-age=31536000 (1 year): 業界標準
+# - includeSubDomains: 全 subdomain に HSTS 適用 (api.example.com / *.codeplace.me 等)
+# - preload: HSTS preload list (https://hstspreload.org/) 提出可能、 hardest 保護
+SECURE_HSTS_SECONDS = 31_536_000  # 1 year
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
