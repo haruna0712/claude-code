@@ -527,6 +527,36 @@ class TestPublishWithBody:
         )
         assert resp.status_code == 400
 
+    def test_ff4_publish_with_non_string_body_400(self, authed_client):
+        """security-reviewer MEDIUM: 非 string の body は 400。"""
+        u = make_user()
+        d = Tweet.objects.create(author=u, body="x", published_at=None)
+        c = authed_client(u)
+        resp = c.post(
+            f"/api/v1/tweets/{d.id}/publish/",
+            {"body": ["a", "b", "c"]},
+            format="json",
+        )
+        assert resp.status_code == 400
+        d.refresh_from_db()
+        # draft はまだ未公開のまま (publish が走っていない)
+        assert d.published_at is None
+
+    def test_ff5_publish_with_blank_body_400(self, authed_client):
+        """security-reviewer LOW: 空 / 空白だけの body は 400。"""
+        u = make_user()
+        d = Tweet.objects.create(author=u, body="non-empty", published_at=None)
+        c = authed_client(u)
+        for blank in ["", "   ", "\n\t"]:
+            resp = c.post(
+                f"/api/v1/tweets/{d.id}/publish/",
+                {"body": blank},
+                format="json",
+            )
+            assert resp.status_code == 400, blank
+        d.refresh_from_db()
+        assert d.published_at is None  # 未公開のまま
+
 
 @pytest.mark.django_db
 class TestPostPublishEditDegradation:

@@ -442,9 +442,16 @@ class TweetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # #769: optional body の length validation
+        # #769: optional body の validation。 publish action は serializer を経由
+        # しないため type / length / blank を全部ここで担保する (security-reviewer
+        # MEDIUM: `isinstance(body, str)` 抜けで {"body": [...]} のような payload が
+        # len() を通過する穴を塞ぐ。 LOW: 空文字 / 空白だけの body も拒否)。
         body = request.data.get("body")
         if body is not None:
+            if not isinstance(body, str):
+                raise ValidationError({"body": "文字列で指定してください。"})
+            if not body.strip():
+                raise ValidationError({"body": "本文を入力してください。"})
             if len(body) > TWEET_BODY_MAX_LENGTH:
                 raise ValidationError(
                     {"body": f"本文は {TWEET_BODY_MAX_LENGTH} 字以内で入力してください。"}
