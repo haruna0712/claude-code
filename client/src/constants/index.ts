@@ -67,14 +67,9 @@ export const leftNavLinks: LeftNavLink[] = [
 		iconName: "Sparkles",
 		requiresAuth: true,
 	},
-	{
-		// #734: 下書き機能。 ログイン必須 (本人のみ閲覧可)。
-		// spec: docs/specs/tweet-drafts-spec.md §4.3
-		path: "/drafts",
-		label: "下書き",
-		iconName: "Pencil",
-		requiresAuth: true,
-	},
+	// #762: 下書き entry は X 準拠で main nav から削除。 desktop は profile
+	// DropdownMenu 経由、 mobile drawer は keep (X mobile も drawer に Drafts/
+	// Bookmarks を置く)。 /drafts route 自体は維持。
 	{
 		// path は LeftNavbar 側で `/u/<self.handle>` に動的に組み替える
 		path: "",

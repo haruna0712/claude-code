@@ -88,9 +88,8 @@ const NAV_ITEMS: NavItemDef[] = [
 	// per-user 10/day 制限)。 leftNavLinks (X 風 LeftNavbar) と同 entry を
 	// A direction の home にも明示する。
 	{ href: "/agent", label: "Agent", Icon: Sparkles, requiresAuth: true },
-	// #734: 下書き機能。 ログイン必須 (本人のみ閲覧可)。
-	// spec: docs/specs/tweet-drafts-spec.md §4.3
-	{ href: "/drafts", label: "下書き", Icon: Pencil, requiresAuth: true },
+	// #762: 下書き entry は X 準拠で main nav から削除。 profile DropdownMenu
+	// 経由でアクセス。 /drafts route 自体は keep (bookmark / 直 URL 維持)。
 ];
 
 function BrandMark({ size = 22 }: { size?: number }) {
@@ -296,6 +295,14 @@ export default function ALeftNav() {
 							>
 								<User className="size-4" />
 								プロフィール
+							</Link>
+						</DropdownMenuItem>
+						<DropdownMenuItem asChild>
+							{/* #762: 下書きは main nav から外し、 profile menu 経由でアクセス
+							    (X 流儀: drafts は profile-scoped task)。 */}
+							<Link href="/drafts" className="flex items-center gap-2">
+								<Pencil className="size-4" />
+								下書き
 							</Link>
 						</DropdownMenuItem>
 						<DropdownMenuItem asChild>
