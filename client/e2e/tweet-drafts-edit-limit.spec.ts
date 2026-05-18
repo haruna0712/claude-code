@@ -5,7 +5,7 @@
  *
  * 検証:
  *   - E2E-DRAFT-1 (HP-1 / SE-1): 下書き保存 → load → 投稿 → TL に表示、 「編集済」 badge 付かない
- *   - E2E-DRAFT-2 (BD-3 デグレ防止): 公開済み tweet を 5 回 edit → 5 回目までは 200 / 「編集済」 表示、 6 回目は 400
+ *   - (E2E-DRAFT-2 は pytest BD-3 / BD-4 で代替 — spec §4.3 参照)
  *   - E2E-DRAFT-3 (SE-1 network check): draft load → 「投稿」 → publish 1 req のみ、 PATCH は出ない
  *   - E2E-DRAFT-4 (SE-4 デグレ防止): draft 公開後の tweet を edit → 「編集済」 badge が **付く**
  *

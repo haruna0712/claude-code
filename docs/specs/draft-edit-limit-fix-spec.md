@@ -97,17 +97,10 @@ class TweetUpdateSerializer(serializers.Serializer):
     def _save_draft_body(instance: Tweet, new_body: str) -> None:
         """draft の body だけ更新。 edit_count / last_edited_at は触らない。
 
-        #769: record_edit の長さ検証と同じ guard をここでも掛ける (DRY: helper 化を別 PR で検討)。
+        #769: body の長さ / char count 検証は serializer の ``validate_body`` で
+        既に通過しているため、 ここで冗長 guard は書かない (= 二重検証回避)。
+        helper 化検討は別 PR (= YAGNI)。
         """
-        if len(new_body) > TWEET_BODY_MAX_LENGTH:
-            raise DjangoValidationError(
-                {"body": f"本文は {TWEET_BODY_MAX_LENGTH} 字以内で入力してください。"}
-            )
-        if count_tweet_chars(new_body) > TWEET_MAX_CHARS:
-            raise DjangoValidationError(
-                {"body": f"本文は URL / Markdown 換算で {TWEET_MAX_CHARS} 字以内にしてください。"}
-            )
-
         now = timezone.now()
         Tweet.all_objects.filter(pk=instance.pk).update(
             body=new_body,
