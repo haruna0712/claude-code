@@ -189,13 +189,26 @@ export async function fetchDrafts(
  *
  * 自分の下書きを公開する。 publish 成功時は published_at が入った tweet を返す。
  * 他人の draft → 404、 既に公開済み → 400。
+ *
+ * #769 fix: optional `body` を渡せる。 composer の「投稿」 ボタンで draft を
+ * 公開する際に「PATCH してから publish」 の 2 段呼び出しを避け、 1 リクエストで
+ * 「最新 body + 公開」 を実現する (= record_edit 不発火 = edit_count 動かず、
+ * 「編集済」 badge も付かない)。 body を渡さない場合は従来挙動 (= 既存 body のまま公開)。
  */
+export interface PublishDraftPayload {
+	body?: string;
+}
+
 export async function publishDraft(
 	id: number | string,
+	payload: PublishDraftPayload = {},
 	client: AxiosInstance = api,
 ): Promise<TweetSummary> {
 	await ensureCsrfToken(client);
-	const res = await client.post<TweetSummary>(`/tweets/${id}/publish/`);
+	const res = await client.post<TweetSummary>(
+		`/tweets/${id}/publish/`,
+		payload,
+	);
 	return res.data;
 }
 

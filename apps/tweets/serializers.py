@@ -24,6 +24,7 @@ from typing import Any
 
 from django.core.validators import URLValidator
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.tags.models import Tag
@@ -523,12 +524,19 @@ class TweetUpdateSerializer(serializers.Serializer):
     """PATCH /api/v1/tweets/<id>/ 用の write-only serializer。
 
     本文だけが編集可能。tags / images は編集不可 (SPEC §3.5)。
-    実際の編集は ``Tweet.record_edit`` に委譲する — これにより:
-      - 30 分以内制約
-      - 5 回制約
-      - TweetEdit の自動生成
-      - edit_count の原子インクリメント
-    が全て担保される。
+
+    #769 fix: draft (published_at IS NULL) と published で振る舞いを分岐する。
+    - **draft**: 「下書きを書いている」 だけなので record_edit は経由しない。
+      plain update (body + updated_at) のみ。 edit_count / last_edited_at /
+      TweetEdit は触らない。 30 分 / 5 回制約も適用しない。
+    - **published**: 従来どおり ``Tweet.record_edit`` に委譲する — これにより:
+        - 30 分以内制約
+        - 5 回制約
+        - TweetEdit の自動生成
+        - edit_count の原子インクリメント
+      が全て担保される。
+
+    spec: docs/specs/draft-edit-limit-fix-spec.md §3.1
     """
 
     body = serializers.CharField(max_length=TWEET_BODY_MAX_LENGTH)
@@ -542,12 +550,36 @@ class TweetUpdateSerializer(serializers.Serializer):
         return value
 
     def update(self, instance: Tweet, validated_data: dict[str, Any]) -> Tweet:
-        """``Tweet.record_edit`` に委譲する。
+        """draft / published を分岐し、 draft なら plain update、 published なら
+        ``Tweet.record_edit`` に委譲する。
 
         editor は context['request'].user から取得する。
         record_edit は ValidationError を投げる可能性があるので、
         view 側 ``perform_update`` はそれを 400 に map する。
         """
-        editor = self.context["request"].user
-        instance.record_edit(new_body=validated_data["body"], editor=editor)
+        new_body = validated_data["body"]
+        # #769: draft の body 書き換えは「編集」 ではないので record_edit を bypass。
+        if instance.published_at is None:
+            self._save_draft_body(instance, new_body)
+        else:
+            editor = self.context["request"].user
+            instance.record_edit(new_body=new_body, editor=editor)
         return instance
+
+    @staticmethod
+    def _save_draft_body(instance: Tweet, new_body: str) -> None:
+        """draft の body を plain update。 edit_count / last_edited_at は触らない。
+
+        #769: ``.update()`` は ``auto_now`` (updated_at) を bypass するため
+        明示的に ``updated_at=now()`` を渡す (silent-failure-hunter MEDIUM #5)。
+        body 長検証は serializer の ``validate_body`` で既に通過しているが、
+        record_edit と同じ guard を defense-in-depth で再評価しない (= 重複検証回避)。
+        """
+        now = timezone.now()
+        Tweet.all_objects.filter(pk=instance.pk).update(
+            body=new_body,
+            updated_at=now,
+        )
+        # database-reviewer LOW: fields= を省略しないこと (全カラム SELECT になり、
+        # draft autosave 系の高頻度経路で性能劣化する)。 必要 field だけ refresh。
+        instance.refresh_from_db(fields=["body", "updated_at"])

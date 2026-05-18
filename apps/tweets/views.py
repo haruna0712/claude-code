@@ -27,6 +27,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers as drf_serializers
 from rest_framework import status, viewsets
@@ -38,14 +39,32 @@ from rest_framework.response import Response
 
 from apps.common.cookie_auth import CookieAuthentication
 from apps.common.throttling import PostTweetThrottle
+from apps.tweets.language_detection import detect_language
 from apps.tweets.managers import TweetQuerySet
-from apps.tweets.models import Tweet
+from apps.tweets.models import TWEET_BODY_MAX_LENGTH, Tweet
 from apps.tweets.serializers import (
     TweetCreateSerializer,
     TweetDetailSerializer,
     TweetListSerializer,
     TweetUpdateSerializer,
 )
+
+# #769: publish action での body length validation 用 (P1-10 char_count の lazy import
+# pattern を踏襲、 module 未配備時は len() のみで足切り)
+try:
+    from apps.tweets.char_count import (  # type: ignore[attr-defined]
+        TWEET_MAX_CHARS,
+        count_tweet_chars,
+    )
+
+    _HAS_CHAR_COUNT = True
+except ImportError:  # pragma: no cover - P1-10 が merge されたら到達しない
+    _HAS_CHAR_COUNT = False
+    TWEET_MAX_CHARS = TWEET_BODY_MAX_LENGTH
+
+    def count_tweet_chars(_body: str) -> int:  # type: ignore[no-redef]
+        return 0  # fallback never used (gated by _HAS_CHAR_COUNT)
+
 
 # Action 定数 (マジックストリング排除)
 ACTION_LIST = "list"
@@ -392,15 +411,25 @@ class TweetViewSet(viewsets.ModelViewSet):
         url_path="publish",
         permission_classes=[IsAuthenticated],
     )
+    @transaction.atomic
     def publish(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/v1/tweets/<id>/publish/ — 自分の下書きを公開する。
 
-        spec: docs/specs/tweet-drafts-spec.md §3.2
+        spec: docs/specs/tweet-drafts-spec.md §3.2 + docs/specs/draft-edit-limit-fix-spec.md §3.2
 
         - 自分の下書き (= `published_at IS NULL` + author=user) のみ
         - 他人の下書き ID → 404 隠蔽 (= ある事実を漏らさない)
         - 既に公開済み → 400
-        - 成功時: `published_at = created_at = now()` に更新し、 detail を返す
+        - 成功時: `published_at = created_at = updated_at = now()` に更新し、 detail を返す
+
+        #769 fix: optional `body` を受け取り、 公開時に body も上書きできる。
+        これにより frontend は「PATCH → publish」 の 2 段呼び出しを廃して 1 段で済む
+        (= record_edit 不発火 = edit_count が動かず、 「編集済」 badge も付かない)。
+
+        - body が指定された場合のみ length validation を実施 (TWEET_BODY_MAX_LENGTH / TWEET_MAX_CHARS)
+        - `.update()` は ``auto_now`` (updated_at) と pre_save signal を bypass するため、
+          `updated_at=now` を明示し、 body 更新時は `language` も明示的に再検出する
+          (silent-failure-hunter MEDIUM #5 / LOW #7)
         """
         instance = self.get_object()  # `_DRAFT_AWARE_ACTIONS` で all_with_drafts
         if instance.author_id != request.user.pk:
@@ -414,13 +443,55 @@ class TweetViewSet(viewsets.ModelViewSet):
                 {"detail": "already_published"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # #769: optional body の validation。 publish action は serializer を経由
+        # しないため type / length / blank を全部ここで担保する (security-reviewer
+        # MEDIUM: `isinstance(body, str)` 抜けで {"body": [...]} のような payload が
+        # len() を通過する穴を塞ぐ。 LOW: 空文字 / 空白だけの body も拒否)。
+        body = request.data.get("body")
+        if body is not None:
+            if not isinstance(body, str):
+                raise ValidationError({"body": "文字列で指定してください。"})
+            if not body.strip():
+                raise ValidationError({"body": "本文を入力してください。"})
+            if len(body) > TWEET_BODY_MAX_LENGTH:
+                raise ValidationError(
+                    {"body": f"本文は {TWEET_BODY_MAX_LENGTH} 字以内で入力してください。"}
+                )
+            if _HAS_CHAR_COUNT and count_tweet_chars(body) > TWEET_MAX_CHARS:
+                raise ValidationError(
+                    {
+                        "body": f"本文は URL / Markdown 換算で {TWEET_MAX_CHARS} 字以内にしてください。"
+                    }
+                )
+
         now = timezone.now()
-        # auto_now_add の `created_at` も同時に更新する (spec §2.1)。
-        # bulk update で auto_now_add を回避し、 公開時刻を時系列に正しく載せる。
-        Tweet.all_objects.filter(pk=instance.pk).update(
-            published_at=now,
-            created_at=now,
-        )
+        # spec §2.1: 公開時に created_at == published_at に揃え、 .update() は
+        # auto_now を bypass するので updated_at も明示する。
+        update_fields: dict[str, Any] = {
+            "published_at": now,
+            "created_at": now,
+            "updated_at": now,
+        }
+        if body is not None:
+            update_fields["body"] = body
+            # silent-failure LOW #7: .update() は pre_save signal を bypass するため
+            # auto_detect_language が走らない → 明示的に language を再検出する。
+            update_fields["language"] = detect_language(body)
+
+        # #769 python-reviewer HIGH (TOCTOU): `instance.published_at IS NULL` の
+        # check と .update() の間に他リクエストが publish してしまうと double-publish
+        # する。 `.filter(published_at__isnull=True).update()` の行数で勝者判定する
+        # ことで race を排除する (= 後勝ちの 1 行のみが更新成功、 他は 0 行返却)。
+        updated = Tweet.all_objects.filter(
+            pk=instance.pk,
+            published_at__isnull=True,
+        ).update(**update_fields)
+        if updated == 0:
+            return Response(
+                {"detail": "already_published"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         instance.refresh_from_db()
         out = TweetDetailSerializer(
             instance,

@@ -22,7 +22,7 @@ from __future__ import annotations
 import pytest
 from rest_framework.test import APIClient
 
-from apps.tweets.models import Tweet
+from apps.tweets.models import Tweet, TweetEdit
 from apps.tweets.tests._factories import make_user
 
 # ---------------------------------------------------------------------------
@@ -292,3 +292,309 @@ class TestDraftHiddenFromPublicEndpoints:
         # draft は含まれない
         for t in items:
             assert t.published_at is not None
+
+
+# ---------------------------------------------------------------------------
+# #769 fix: draft の PATCH は record_edit を経由しない
+#
+# spec: docs/specs/draft-edit-limit-fix-spec.md §4.1
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestDraftPatchDoesNotRecordEdit:
+    """#769 §4.1 期待しない副作用 SE-1〜3 + Happy path HP-1。
+
+    draft (= published_at IS NULL) の body 書き換えは「下書きを書いている」 だけで
+    「編集」 ではないため、 edit_count / last_edited_at / TweetEdit を触らない。
+    """
+
+    def test_hp1_draft_patch_returns_200_and_does_not_increment_edit_count(self, authed_client):
+        u = make_user()
+        d = Tweet.objects.create(author=u, body="initial", published_at=None)
+        c = authed_client(u)
+        resp = c.patch(
+            f"/api/v1/tweets/{d.id}/",
+            {"body": "hello"},
+            format="json",
+        )
+        assert resp.status_code == 200, resp.data
+        d.refresh_from_db()
+        assert d.body == "hello"
+        assert d.edit_count == 0
+        assert d.last_edited_at is None
+        # TweetEdit 履歴が作られていない
+
+        assert TweetEdit.objects.filter(tweet=d).count() == 0
+
+    def test_se3_draft_patch_updates_updated_at_but_not_last_edited_at(self, authed_client):
+        u = make_user()
+        d = Tweet.objects.create(author=u, body="initial", published_at=None)
+        old_updated_at = d.updated_at
+        c = authed_client(u)
+        resp = c.patch(
+            f"/api/v1/tweets/{d.id}/",
+            {"body": "x"},
+            format="json",
+        )
+        assert resp.status_code == 200, resp.data
+        d.refresh_from_db()
+        assert d.updated_at > old_updated_at  # 動く
+        assert d.last_edited_at is None  # 動かない
+
+
+@pytest.mark.django_db
+class TestDraftPatchBoundary:
+    """#769 §4.1 境界 BD-1 / BD-2。 draft は 5 回 / 30 分制約の対象外。"""
+
+    def test_bd1_draft_can_be_patched_six_times_in_a_row(self, authed_client):
+        u = make_user()
+        d = Tweet.objects.create(author=u, body="v0", published_at=None)
+        c = authed_client(u)
+        for i in range(1, 7):  # 6 回連続
+            resp = c.patch(
+                f"/api/v1/tweets/{d.id}/",
+                {"body": f"v{i}"},
+                format="json",
+            )
+            assert resp.status_code == 200, (i, resp.data)
+        d.refresh_from_db()
+        assert d.body == "v6"
+        assert d.edit_count == 0  # 一度も加算されていない
+
+        assert TweetEdit.objects.filter(tweet=d).count() == 0
+
+    def test_bd2_draft_can_be_patched_after_30_min_window(self, authed_client):
+        """draft 作成から 31 分後でも PATCH 可能 (= 公開済みの 30 分 window 制約は適用されない)。
+
+        python-reviewer MEDIUM: ``authed_client`` も draft 作成と同じ freeze_time scope
+        に入れて、 token TTL 等の時刻依存処理が一貫した時刻で動くようにする。
+        """
+        from freezegun import freeze_time
+
+        u = make_user()
+        with freeze_time("2026-05-18 00:00:00"):
+            d = Tweet.objects.create(author=u, body="v0", published_at=None)
+            c = authed_client(u)
+        with freeze_time("2026-05-18 00:31:00"):  # 31 分後
+            resp = c.patch(
+                f"/api/v1/tweets/{d.id}/",
+                {"body": "after-30min"},
+                format="json",
+            )
+        assert resp.status_code == 200, resp.data
+        d.refresh_from_db()
+        assert d.body == "after-30min"
+        assert d.edit_count == 0
+
+
+@pytest.mark.django_db
+class TestPublishedTweetEditConstraintsPreserved:
+    """#769 §4.1 BD-3 / BD-4。 公開済み tweet の edit 経路 (= record_edit) は壊さない。"""
+
+    def test_bd3_published_tweet_hits_5_edit_limit(self, authed_client):
+        u = make_user()
+        t = Tweet.objects.create(author=u, body="v0")  # auto-publishes
+        c = authed_client(u)
+        for i in range(1, 6):  # 5 回までは 200
+            resp = c.patch(
+                f"/api/v1/tweets/{t.id}/",
+                {"body": f"v{i}"},
+                format="json",
+            )
+            assert resp.status_code == 200, (i, resp.data)
+        # 6 回目で 400「これ以上編集できません」
+        resp = c.patch(
+            f"/api/v1/tweets/{t.id}/",
+            {"body": "v6"},
+            format="json",
+        )
+        assert resp.status_code == 400
+        t.refresh_from_db()
+        assert t.edit_count == 5  # 5 で止まっている
+        assert t.body == "v5"  # v6 は反映されていない
+
+    def test_bd4_edit_count_4_succeeds_5_succeeds_then_caps(self, authed_client):
+        u = make_user()
+        t = Tweet.objects.create(author=u, body="v0")
+        # fixture で edit_count を 4 に進める
+        Tweet.all_objects.filter(pk=t.pk).update(edit_count=4)
+        c = authed_client(u)
+        # ちょうど 5 回目の edit → 200
+        resp = c.patch(
+            f"/api/v1/tweets/{t.id}/",
+            {"body": "fifth"},
+            format="json",
+        )
+        assert resp.status_code == 200
+        t.refresh_from_db()
+        assert t.edit_count == 5
+        # edit_count=5 で次の PATCH は 400
+        resp = c.patch(
+            f"/api/v1/tweets/{t.id}/",
+            {"body": "sixth"},
+            format="json",
+        )
+        assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+class TestPublishWithBody:
+    """#769 §4.1 HP-2 / SE-1 / SE-2 / SE-5。 publish action が optional body を受ける。"""
+
+    def test_hp2_publish_with_body_overwrites(self, authed_client):
+        u = make_user()
+        d = Tweet.objects.create(author=u, body="draft body", published_at=None)
+        c = authed_client(u)
+        resp = c.post(
+            f"/api/v1/tweets/{d.id}/publish/",
+            {"body": "published body"},
+            format="json",
+        )
+        assert resp.status_code == 200, resp.data
+        assert resp.data["body"] == "published body"
+        assert resp.data["published_at"] is not None
+        d.refresh_from_db()
+        assert d.body == "published body"
+        # spec §2.1: 公開時に created_at == published_at に揃える
+        assert d.created_at == d.published_at
+        # silent-failure MEDIUM #5: updated_at も動く
+        assert d.updated_at >= d.published_at
+
+    def test_se1_publish_does_not_record_edit(self, authed_client):
+        u = make_user()
+        d = Tweet.objects.create(author=u, body="x", published_at=None)
+        c = authed_client(u)
+        resp = c.post(
+            f"/api/v1/tweets/{d.id}/publish/",
+            {"body": "y"},
+            format="json",
+        )
+        assert resp.status_code == 200
+        d.refresh_from_db()
+        assert d.body == "y"
+        assert d.edit_count == 0  # 「編集済」 にならない
+        assert d.last_edited_at is None
+
+        assert TweetEdit.objects.filter(tweet=d).count() == 0
+
+    def test_se2_publish_after_five_patches_still_succeeds_with_edit_count_zero(
+        self, authed_client
+    ):
+        u = make_user()
+        d = Tweet.objects.create(author=u, body="v0", published_at=None)
+        c = authed_client(u)
+        for i in range(1, 6):
+            c.patch(
+                f"/api/v1/tweets/{d.id}/",
+                {"body": f"v{i}"},
+                format="json",
+            )
+        # publish with new body
+        resp = c.post(
+            f"/api/v1/tweets/{d.id}/publish/",
+            {"body": "final"},
+            format="json",
+        )
+        assert resp.status_code == 200, resp.data
+        d.refresh_from_db()
+        assert d.body == "final"
+        assert d.edit_count == 0
+
+    def test_publish_without_body_keeps_existing_body_backward_compat(self, authed_client):
+        """既存挙動: body を渡さない publish は body をそのまま公開 (regression check)。"""
+        u = make_user()
+        d = Tweet.objects.create(author=u, body="existing", published_at=None)
+        c = authed_client(u)
+        resp = c.post(f"/api/v1/tweets/{d.id}/publish/")
+        assert resp.status_code == 200, resp.data
+        d.refresh_from_db()
+        assert d.body == "existing"
+        assert d.published_at is not None
+
+    def test_ff3_publish_with_too_long_body_400(self, authed_client):
+        """body length validation: 181 chars → 400。"""
+        from apps.tweets.models import TWEET_BODY_MAX_LENGTH
+
+        u = make_user()
+        d = Tweet.objects.create(author=u, body="x", published_at=None)
+        c = authed_client(u)
+        too_long = "a" * (TWEET_BODY_MAX_LENGTH + 1)
+        resp = c.post(
+            f"/api/v1/tweets/{d.id}/publish/",
+            {"body": too_long},
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_ff4_publish_with_non_string_body_400(self, authed_client):
+        """security-reviewer MEDIUM: 非 string の body は 400。"""
+        u = make_user()
+        d = Tweet.objects.create(author=u, body="x", published_at=None)
+        c = authed_client(u)
+        resp = c.post(
+            f"/api/v1/tweets/{d.id}/publish/",
+            {"body": ["a", "b", "c"]},
+            format="json",
+        )
+        assert resp.status_code == 400
+        d.refresh_from_db()
+        # draft はまだ未公開のまま (publish が走っていない)
+        assert d.published_at is None
+
+    def test_ff5_publish_with_blank_body_400(self, authed_client):
+        """security-reviewer LOW: 空 / 空白だけの body は 400。"""
+        u = make_user()
+        d = Tweet.objects.create(author=u, body="non-empty", published_at=None)
+        c = authed_client(u)
+        for blank in ["", "   ", "\n\t"]:
+            resp = c.post(
+                f"/api/v1/tweets/{d.id}/publish/",
+                {"body": blank},
+                format="json",
+            )
+            assert resp.status_code == 400, blank
+        d.refresh_from_db()
+        assert d.published_at is None  # 未公開のまま
+
+
+@pytest.mark.django_db
+class TestPostPublishEditDegradation:
+    """#769 §4.1 SE-4。 publish 後の tweet は従来 record_edit 経路で edit 可能。"""
+
+    def test_se4_publish_then_edit_increments_edit_count(self, authed_client):
+        u = make_user()
+        d = Tweet.objects.create(author=u, body="v0", published_at=None)
+        c = authed_client(u)
+        # publish (body 渡さず)
+        resp = c.post(f"/api/v1/tweets/{d.id}/publish/")
+        assert resp.status_code == 200
+        # 公開後の tweet を edit → 従来どおり record_edit が走る
+        resp = c.patch(
+            f"/api/v1/tweets/{d.id}/",
+            {"body": "post-publish edit"},
+            format="json",
+        )
+        assert resp.status_code == 200
+        d.refresh_from_db()
+        assert d.body == "post-publish edit"
+        assert d.edit_count == 1
+        assert d.last_edited_at is not None
+
+        assert TweetEdit.objects.filter(tweet=d).count() == 1
+
+
+@pytest.mark.django_db
+class TestDraftPatchAuth:
+    """#769 §4.1 FF-2。 匿名で draft PATCH は不可。"""
+
+    def test_ff2_anonymous_patch_draft_unauthorized(self):
+        owner = make_user()
+        d = Tweet.objects.create(author=owner, body="x", published_at=None)
+        c = APIClient()
+        resp = c.patch(
+            f"/api/v1/tweets/{d.id}/",
+            {"body": "y"},
+            format="json",
+        )
+        assert resp.status_code in (401, 403)
