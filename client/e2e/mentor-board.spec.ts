@@ -82,14 +82,15 @@ test.describe("Phase 11 11-A mentor board (#624)", () => {
 		await navLink.click();
 		await mentee.waitForURL(`${BASE}/mentor/wanted`);
 
-		// 「募集を出す」 CTA から /new
-		await mentee.getByRole("link", { name: "募集を出す" }).click();
+		// #754: CTA を「募集を出す」 → 「相談を投稿する」 に変更。
+		await mentee.getByRole("link", { name: "相談を投稿する" }).click();
 		await mentee.waitForURL(`${BASE}/mentor/wanted/new`);
 
 		const title = `E2E mentor-board ${Date.now()}`;
 		await mentee.getByLabel("タイトル").fill(title);
 		await mentee.getByLabel(/^本文/).fill("E2E でメンターを募集しています。");
-		await mentee.getByRole("button", { name: "募集を投稿する" }).click();
+		// #753: submit button「募集を投稿する」 → 「相談を投稿する」 (form aria-label 統一の続き)。
+		await mentee.getByRole("button", { name: "相談を投稿する" }).click();
 
 		// 詳細ページに遷移
 		await mentee.waitForURL(/\/mentor\/wanted\/\d+/, { timeout: 15000 });
@@ -137,9 +138,9 @@ test.describe("Phase 11 11-A mentor board (#624)", () => {
 		const list = await ctx.request.get(`${BASE}/mentor/wanted`);
 		expect(list.status()).toBe(200);
 		await page.goto(`${BASE}/mentor/wanted`);
-		// anon のときは「ログインして募集する」 が出る
+		// #754: anon CTA を「ログインして募集する」 → 「ログインして相談する」 に変更。
 		await expect(
-			page.getByRole("link", { name: "ログインして募集する" }),
+			page.getByRole("link", { name: "ログインして相談する" }),
 		).toBeVisible({ timeout: 15000 });
 		await ctx.close();
 	});
