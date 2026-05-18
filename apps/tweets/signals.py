@@ -26,7 +26,7 @@ from django.dispatch import receiver
 
 from apps.tweets.language_detection import detect_language
 from apps.tweets.models import Tweet, TweetType
-from apps.tweets.side_effects import _bump_field, emit_create_side_effects
+from apps.tweets.side_effects import bump_field, emit_create_side_effects
 
 
 @receiver(post_save, sender=Tweet)
@@ -62,11 +62,11 @@ def on_tweet_deleted(sender: type[Tweet], instance: Tweet, **kwargs: Any) -> Non
 
     def _bump() -> None:
         if target_type == TweetType.REPLY:
-            _bump_field(reply_to_pk, "reply_count", -1)
+            bump_field(reply_to_pk, "reply_count", -1)
         elif target_type == TweetType.QUOTE:
-            _bump_field(quote_of_pk, "quote_count", -1)
+            bump_field(quote_of_pk, "quote_count", -1)
         elif target_type == TweetType.REPOST:
-            _bump_field(repost_of_pk, "repost_count", -1)
+            bump_field(repost_of_pk, "repost_count", -1)
 
     transaction.on_commit(_bump)
 

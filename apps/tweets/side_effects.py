@@ -20,6 +20,7 @@ python-reviewer HIGH (#770 review): caller が pk を渡し、 helper 内で
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
@@ -29,13 +30,15 @@ from django.db.models.functions import Greatest
 from apps.common.blocking import safe_notify
 from apps.tweets.models import Tweet, TweetType
 
+logger = logging.getLogger(__name__)
+
 # #412: mention 抽出の正規表現と上限。spec §12 より handle 数 10 超過時は
 # Celery off-load を検討する想定だが、本 Issue では同期処理 + 上限で抑える。
 _MENTION_RE = re.compile(r"(?<![A-Za-z0-9_])@([A-Za-z0-9_]{3,30})")
 MAX_MENTION_NOTIFY = 10
 
 
-def _bump_field(tweet_pk: int | None, field: str, delta: int) -> None:
+def bump_field(tweet_pk: int | None, field: str, delta: int) -> None:
     if tweet_pk is None:
         return
     if delta >= 0:
@@ -66,7 +69,12 @@ def emit_create_side_effects(tweet_pk: int) -> None:
         return
 
     if instance.published_at is None:
-        raise ValueError(f"emit_create_side_effects called on unpublished tweet pk={tweet_pk}")
+        # code-reviewer MEDIUM: Django は ``transaction.on_commit`` callback 内の
+        # 例外を silent に swallow するので、 ValueError raise だけでは Sentry に
+        # 届かない。 明示的に error ログを残してから raise する。
+        msg = f"emit_create_side_effects called on unpublished tweet pk={tweet_pk}"
+        logger.error(msg)
+        raise ValueError(msg)
 
     actor = instance.author
     target_type = instance.type
@@ -79,7 +87,7 @@ def emit_create_side_effects(tweet_pk: int) -> None:
     body = instance.body
 
     if target_type == TweetType.REPLY:
-        _bump_field(reply_to_pk, "reply_count", 1)
+        bump_field(reply_to_pk, "reply_count", 1)
         if reply_to_obj is not None:
             # #412: target_type/target_id を追加 (Notification 解決用)
             safe_notify(
@@ -90,7 +98,7 @@ def emit_create_side_effects(tweet_pk: int) -> None:
                 target_id=tweet_pk,
             )
     elif target_type == TweetType.QUOTE:
-        _bump_field(quote_of_pk, "quote_count", 1)
+        bump_field(quote_of_pk, "quote_count", 1)
         if quote_of_obj is not None:
             safe_notify(
                 kind="quote",
@@ -100,7 +108,7 @@ def emit_create_side_effects(tweet_pk: int) -> None:
                 target_id=tweet_pk,
             )
     elif target_type == TweetType.REPOST:
-        _bump_field(repost_of_pk, "repost_count", 1)
+        bump_field(repost_of_pk, "repost_count", 1)
         if repost_of_obj is not None:
             safe_notify(
                 kind="repost",
