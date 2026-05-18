@@ -1,8 +1,9 @@
 /**
- * Tests for RoomList (P3-08 / Issue #233).
+ * Tests for RoomList (P3-08 / Issue #233, #792 で招待 callout 撤去後).
  *
  * RTK Query hook を mock して 4 状態 (loading / error / empty / 成功) を検証。
- * 招待バッジの表示 / 未読バッジの a11y label / 順序 (ordering は backend 側) も。
+ * 未読バッジの a11y label / 順序 (ordering は backend 側) を検証。
+ * #792: 招待 callout は PendingInvitationsSection に移動済 → 関連テスト削除。
  */
 
 import { render, screen } from "@testing-library/react";
@@ -12,11 +13,9 @@ import RoomList from "@/components/dm/RoomList";
 import type { DMRoom } from "@/lib/redux/features/dm/types";
 
 const mockListRooms = vi.fn();
-const mockListInvitations = vi.fn();
 
 vi.mock("@/lib/redux/features/dm/dmApiSlice", () => ({
 	useListDMRoomsQuery: () => mockListRooms(),
-	useListInvitationsQuery: () => mockListInvitations(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -57,11 +56,7 @@ function makeRoom(overrides: Partial<DMRoom> = {}): DMRoom {
 
 describe("RoomList", () => {
 	beforeEach(() => {
-		mockListInvitations.mockReturnValue({
-			data: { count: 0, next: null, previous: null, results: [] },
-			isLoading: false,
-			isError: false,
-		});
+		mockListRooms.mockReset();
 	});
 
 	it("loading 状態を role=status で表示する", () => {
@@ -152,21 +147,9 @@ describe("RoomList", () => {
 		expect(screen.getByText("MyTeam")).toBeInTheDocument();
 	});
 
-	it("pending invitation がある時 callout を表示する", () => {
-		mockListRooms.mockReturnValue({
-			data: { count: 0, next: null, previous: null, results: [] },
-			isLoading: false,
-			isError: false,
-		});
-		mockListInvitations.mockReturnValue({
-			data: { count: 3, next: null, previous: null, results: [] },
-			isLoading: false,
-			isError: false,
-		});
-		render(<RoomList currentUserId={100} />);
-		const callout = screen.getByLabelText(/保留中のグループ招待 3 件/);
-		expect(callout).toHaveAttribute("href", "/messages/invitations");
-	});
+	// #792: 招待 callout は PendingInvitationsSection に移動したので、
+	// 旧 「pending invitation callout」 テストは削除。 招待 UI の検証は
+	// PendingInvitationsSection.test.tsx 側で扱う。
 
 	it("各 room へのリンク先が `/messages/<id>` である", () => {
 		mockListRooms.mockReturnValue({
