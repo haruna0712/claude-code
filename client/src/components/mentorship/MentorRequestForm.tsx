@@ -81,7 +81,7 @@ export default function MentorRequestForm() {
 		<form
 			onSubmit={handleSubmit}
 			className="space-y-4"
-			aria-label="メンター募集フォーム"
+			aria-label="相談募集フォーム"
 		>
 			{error && (
 				<p
@@ -153,7 +153,7 @@ export default function MentorRequestForm() {
 				disabled={submitting}
 				className="rounded-full bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
 			>
-				{submitting ? "投稿中…" : "募集を投稿する"}
+				{submitting ? "投稿中…" : "相談を投稿する"}
 			</button>
 		</form>
 	);

@@ -2,9 +2,9 @@
  * /mentor/wanted — メンター募集 board 一覧 (P11-06 / Phase 11 11-A).
  *
  * 匿名閲覧可。 SSR で公開募集 (status=open) 一覧を fetch。 sticky header に
- * 「募集を出す」 CTA を auth のみで表示、 anon は「ログインして募集する」 で
+ * 「相談を投稿する」 CTA を auth のみで表示、 anon は「ログインして相談する」 で
  * /login?next=/mentor/wanted/new に誘導 (PR #608 ALeftNav 「投稿する」 CTA と
- * 同流儀)。
+ * 同流儀。 #754 で「募集」 → 「相談」 terminology に統一)。
  *
  * spec: docs/specs/phase-11-mentor-board-spec.md §7
  */
@@ -101,7 +101,7 @@ export default async function MentorWantedListPage({
 					style={{ background: "var(--a-accent)", fontSize: 12.5 }}
 				>
 					<Feather className="size-3.5" aria-hidden="true" />
-					{isAuthenticated ? "募集を出す" : "ログインして募集する"}
+					{isAuthenticated ? "相談を投稿する" : "ログインして相談する"}
 				</Link>
 			</header>
 
