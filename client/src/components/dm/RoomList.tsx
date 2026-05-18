@@ -7,17 +7,15 @@
  * 4 状態を扱い、room を `last_message_at` 降順で並べる (バックエンド側で
  * order_by 済み。クライアントで再ソートしない)。
  *
- * 招待バッジ: pending invitations が 1 件以上あれば `招待 N 件`の callout を上部に表示。
- * 新規 DM 作成 / グループ作成 UI は P3-11 (#236) で別 PR、本 PR では空状態 CTA のみ。
+ * #792: 招待 callout は本コンポーネントから撤去し、 `PendingInvitationsSection`
+ * (room list の親 wrapper で先に render) に統合した。 一つの surface で
+ * 保留中招待を扱う inline disclosure に集約。
  */
 
 import Link from "next/link";
 
 import RoomListItem from "@/components/dm/RoomListItem";
-import {
-	useListDMRoomsQuery,
-	useListInvitationsQuery,
-} from "@/lib/redux/features/dm/dmApiSlice";
+import { useListDMRoomsQuery } from "@/lib/redux/features/dm/dmApiSlice";
 
 interface RoomListProps {
 	currentUserId: number;
@@ -25,10 +23,8 @@ interface RoomListProps {
 
 export default function RoomList({ currentUserId }: RoomListProps) {
 	const roomsQuery = useListDMRoomsQuery();
-	const invitationsQuery = useListInvitationsQuery({ status: "pending" });
 
 	const rooms = roomsQuery.data?.results ?? [];
-	const pendingInvitationCount = invitationsQuery.data?.count ?? 0;
 
 	if (roomsQuery.isLoading) {
 		return (
@@ -52,16 +48,6 @@ export default function RoomList({ currentUserId }: RoomListProps) {
 
 	return (
 		<div data-testid="room-list">
-			{pendingInvitationCount > 0 ? (
-				<Link
-					href="/messages/invitations"
-					className="border-baby_blue/40 bg-baby_blue/5 text-baby_blue hover:bg-baby_blue/10 focus-visible:ring-baby_blue focus-visible:ring-offset-baby_veryBlack mb-4 block rounded-md border px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-					aria-label={`保留中のグループ招待 ${pendingInvitationCount} 件、招待ページに移動`}
-				>
-					保留中のグループ招待が <strong>{pendingInvitationCount}</strong>{" "}
-					件あります <span aria-hidden="true">→</span>
-				</Link>
-			) : null}
 			{rooms.length === 0 ? (
 				<div className="py-12 text-center">
 					<p className="text-baby_grey">まだメッセージはありません。</p>
