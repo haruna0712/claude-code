@@ -79,13 +79,23 @@ STATIC_URL = "/static/"
 # THROTTLE_RATES が import 時に固定されるため、production.py での後付け
 # override は無効だった)。本ファイルでは throttle 関連 override は行わない。
 
-# #763: HSTS (HTTP Strict Transport Security)。 production 専用 (stg は短期 max-age
-# でも browser cache に長期残るのを避けたいので production のみ有効化)。
+# #763: HSTS (HTTP Strict Transport Security)。
 # spec: docs/specs/xss-defense-spec.md §3.1
 #
-# - max-age=31536000 (1 year): 業界標準
-# - includeSubDomains: 全 subdomain に HSTS 適用 (api.example.com / *.codeplace.me 等)
-# - preload: HSTS preload list (https://hstspreload.org/) 提出可能、 hardest 保護
-SECURE_HSTS_SECONDS = 31_536_000  # 1 year
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = True
+# stg と production 両方が DJANGO_SETTINGS_MODULE=config.settings.production で動くため、
+# env `HSTS_PROFILE` で profile 切替する。 default は safe (stg) = 5 分。
+# production environment では ECS task definition で HSTS_PROFILE=production を inject。
+#
+# - HSTS_PROFILE=production: max-age=31536000 (1 year) + includeSubDomains + preload
+#   (業界標準、 真の本番ドメインで HSTS preload list 提出可能、 hardest 保護)
+# - HSTS_PROFILE=stg (default): max-age=300 (5 分)
+#   (stg は domain 切替 / 停止リスクがあるので browser cache に長期残らないよう短く)
+_HSTS_PROFILE = getenv("HSTS_PROFILE", "stg")
+if _HSTS_PROFILE == "production":
+    SECURE_HSTS_SECONDS = 31_536_000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+else:
+    SECURE_HSTS_SECONDS = 300  # 5 min, stg-safe
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False

@@ -38,15 +38,15 @@
 
 ### 1.2 Security Headers 現状
 
-| header                            | status                                            | 推奨                                                                       |
-| --------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------- |
-| `Content-Security-Policy`         | **未設定** (Next.js / Django / nginx すべて 0 件) | 本 PR で追加 (report-only 先行)                                            |
-| `X-Frame-Options: DENY`           | ✅ (Django default、 clickjacking 対策)           | keep + CSP `frame-ancestors 'none'` で重ね                                 |
-| `X-Content-Type-Options: nosniff` | **未設定**                                        | 本 PR で追加 (Django `SECURE_CONTENT_TYPE_NOSNIFF=True`)                   |
-| `Strict-Transport-Security`       | **未設定**                                        | 本 PR で追加 (production のみ、 `SECURE_HSTS_SECONDS=31536000`)            |
-| `Referrer-Policy`                 | **未設定**                                        | 本 PR で追加 (`strict-origin-when-cross-origin`)                           |
-| `Permissions-Policy`              | **未設定**                                        | 本 PR で追加 (`camera=(), microphone=(), geolocation=()`)                  |
-| `X-XSS-Protection`                | **未設定**                                        | 本 PR で追加 (legacy だが scanner 対策、 `SECURE_BROWSER_XSS_FILTER=True`) |
+| header                            | status                                            | 推奨                                                                      |
+| --------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
+| `Content-Security-Policy`         | **未設定** (Next.js / Django / nginx すべて 0 件) | 本 PR で追加 (report-only 先行)                                           |
+| `X-Frame-Options: DENY`           | ✅ (Django default、 clickjacking 対策)           | keep + CSP `frame-ancestors 'none'` で重ね                                |
+| `X-Content-Type-Options: nosniff` | **未設定**                                        | 本 PR で追加 (Django `SECURE_CONTENT_TYPE_NOSNIFF=True`)                  |
+| `Strict-Transport-Security`       | **未設定**                                        | 本 PR で追加 (env `HSTS_PROFILE`、 stg=5min / production=1year + preload) |
+| `Referrer-Policy`                 | **未設定**                                        | 本 PR で追加 (`strict-origin-when-cross-origin`)                          |
+| `Permissions-Policy`              | **未設定**                                        | 本 PR で追加 (`camera=(), microphone=(), geolocation=()`)                 |
+| `X-XSS-Protection`                | **未設定** (Django 4.0+ で middleware が無視)     | emit しない (modern browsers 非サポート、 legacy scanner は nginx 側で)   |
 
 ---
 
@@ -71,16 +71,23 @@
 
 ```python
 SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_BROWSER_XSS_FILTER = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+# 注: SECURE_BROWSER_XSS_FILTER は Django 4.0+ で middleware が無視するので emit しない
 ```
 
-`config/settings/production.py`:
+`config/settings/production.py` — stg と production 両方が `config.settings.production`
+を load するため、 env `HSTS_PROFILE` で profile 切替する:
 
 ```python
-SECURE_HSTS_SECONDS = 31536000  # 1 year
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = True
+_HSTS_PROFILE = getenv("HSTS_PROFILE", "stg")  # default は safe
+if _HSTS_PROFILE == "production":
+    SECURE_HSTS_SECONDS = 31_536_000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+else:
+    SECURE_HSTS_SECONDS = 300  # 5 min stg-safe (domain 切替リスク回避)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False
 ```
 
 ### 3.2 Next.js security headers + CSP middleware
@@ -187,7 +194,7 @@ export const config = {
 
 ## 7. ロールバック
 
-- Django settings 削除のみで back to なし state (HSTS 1 year は browser cache に残るので production deploy 前に十分検証する)
+- Django settings 削除のみで back to なし state (stg は HSTS max-age=300 のみ、 5 分で browser cache 失効。 production profile を有効化するのは真の本番ドメイン確定後)
 - Next.js `middleware.ts` 削除で headers なし
 - CSP は report-only 配備のため violation で機能が壊れることはない (= safe rollout)
 

@@ -433,12 +433,14 @@ SESSION_COOKIE_SAMESITE = "Lax"
 # - SECURE_CONTENT_TYPE_NOSNIFF: X-Content-Type-Options: nosniff を emit
 #   (browser の MIME sniffing 攻撃を防ぐ、 例: image/png として upload された HTML が
 #   text/html として実行される問題を弾く)
-# - SECURE_BROWSER_XSS_FILTER: X-XSS-Protection: 1; mode=block を emit (legacy、
-#   modern browsers は ignore するが scanner / 古い browser 向けに残す)
 # - SECURE_REFERRER_POLICY: strict-origin-when-cross-origin で full URL leak を防ぐ
 #   (Sentry / CDN への referrer に handle / article slug などが leak しない)
+#
+# 注: `SECURE_BROWSER_XSS_FILTER` (X-XSS-Protection) は Django 4.0+ で
+# SecurityMiddleware が無視するようになった。 modern browsers (Chrome 78+, Firefox 全 ver)
+# も非サポート。 必要なら nginx / ALB 側で header injection するか custom middleware を
+# 立てる。 ここでは emit しない。
 SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_BROWSER_XSS_FILTER = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 
 # F1-6: CORS 設定。Next.js frontend からの cross-origin リクエストを許可。
