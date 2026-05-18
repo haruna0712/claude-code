@@ -91,11 +91,15 @@ def read_my_recent_tweets(user: AbstractBaseUser, limit: int = 10) -> str:
         該当 0 件なら ``"# 最近の自分の tweet (0 件)\n(無し)"``。
     """
     n = _clamp(limit, 1, _MAX_RECENT_TWEETS)
+    # #771: ``Tweet.objects`` (TweetManager 既定) が ``is_deleted=False`` +
+    # ``published_at__isnull=False`` を自動適用するので、 ここで明示する必要
+    # なし。 draft / soft-delete された tweet は agent からは絶対に読まれない。
+    # この信頼は ``apps/tweets/managers.py`` ``TweetManager.get_queryset`` に
+    # 集約されているので、 manager 既定を変えるときは agent tool 経路を要再点検。
     qs = (
         Tweet.objects.filter(
             author=user,
             type=TweetType.ORIGINAL,
-            is_deleted=False,
         )
         .order_by("-created_at")
         .select_related("author")[:n]
@@ -208,10 +212,12 @@ def search_tweets_by_tag(
     if not Tag.objects.filter(name=tag_name).exists():
         return f"# tag '{tag_name}' は存在しません"
 
+    # #771: ``Tweet.objects`` (TweetManager 既定) が ``is_deleted=False`` +
+    # ``published_at__isnull=False`` を自動適用する。 詳細は read_my_recent_tweets
+    # のコメントを参照。
     qs = (
         Tweet.objects.filter(
             tags__name=tag_name,
-            is_deleted=False,
             type=TweetType.ORIGINAL,
         )
         # #735: 鍵アカ author の tweet は viewer (= agent 起動者) が approved

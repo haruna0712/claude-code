@@ -275,6 +275,36 @@ class TestDraftsHiddenFromAgentTools:
         assert "public py tweet" in out
         assert "DRAFT-PY-SECRET" not in out
 
+    def test_read_my_recent_tweets_excludes_soft_deleted(self):
+        """#771: redundant `is_deleted=False` filter を削除しても、 manager
+        既定 (= ``is_deleted=False, published_at__isnull=False``) で
+        論理削除済 tweet は agent から見えないままであること。
+        """
+        me = _make_user("me-soft-rec@example.com", "me_soft_rec")
+        Tweet.objects.create(author=me, body="alive one")
+        deleted = Tweet.objects.create(author=me, body="DELETED-SECRET")
+        deleted.soft_delete()
+        out = read_my_recent_tweets(me)
+        assert "alive one" in out
+        assert "DELETED-SECRET" not in out
+
+    def test_search_tweets_by_tag_excludes_soft_deleted(self):
+        """#771: search でも同様に論理削除済 tweet が見えないこと。"""
+        me = _make_user("me-soft-tag@example.com", "me_soft_tag")
+        tag = Tag.objects.create(
+            name="rust-soft-771",
+            display_name="RUST",
+            is_approved=True,
+        )
+        alive = Tweet.objects.create(author=me, body="alive rust tweet")
+        alive.tags.add(tag)
+        deleted = Tweet.objects.create(author=me, body="DELETED-RUST-SECRET")
+        deleted.tags.add(tag)
+        deleted.soft_delete()
+        out = search_tweets_by_tag(me, "rust-soft-771")
+        assert "alive rust tweet" in out
+        assert "DELETED-RUST-SECRET" not in out
+
 
 # ---------------------------------------------------------------------------
 # #735: 鍵アカ user の tweet は agent tool に露出してはならない
