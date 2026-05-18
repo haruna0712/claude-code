@@ -107,7 +107,7 @@ describe("DraftsPanel (#734)", () => {
 		await waitFor(() => {
 			expect(publishDraftMock).toHaveBeenCalledWith(1);
 		});
-		expect(toastSuccessSpy).toHaveBeenCalledWith("公開しました");
+		expect(toastSuccessSpy).toHaveBeenCalledWith("投稿しました");
 		// 行が消えて empty state になる
 		await waitFor(() => {
 			expect(screen.queryByText("ready")).not.toBeInTheDocument();

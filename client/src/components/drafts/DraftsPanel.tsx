@@ -40,7 +40,8 @@ export default function DraftsPanel({ initial }: DraftsPanelProps) {
 		try {
 			await publishDraft(id);
 			setDrafts((prev) => prev.filter((d) => d.id !== id));
-			toast.success("公開しました");
+			// #774: composer の「投稿」 と統一して「投稿しました」 (= X 流儀)。
+			toast.success("投稿しました");
 			router.refresh();
 		} catch (e) {
 			const status = e instanceof AxiosError ? e.response?.status : undefined;

@@ -183,7 +183,8 @@ test.describe("#734 Tweet 下書き機能", () => {
 		const row = page.locator("li", { hasText: marker }).first();
 		await row.getByRole("button", { name: "下書きを公開する" }).click();
 
-		await expect(page.getByText(/公開しました/)).toBeVisible({
+		// #774: toast 文言は composer と統一して「投稿しました」。
+		await expect(page.getByText(/投稿しました/)).toBeVisible({
 			timeout: 10_000,
 		});
 		// 行が消える
