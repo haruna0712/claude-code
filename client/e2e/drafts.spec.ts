@@ -89,15 +89,15 @@ async function uiLogin(page: Page, email: string, password: string) {
 }
 
 test.describe("#734 Tweet 下書き機能", () => {
-	test("DRAFTS-1: ホーム → leftNav「下書き」 1 click で /drafts 到達", async ({
+	test("DRAFTS-1: ホーム → profile menu「下書き」 で /drafts 到達 (#762: nav から削除 → menu 経由に)", async ({
 		page,
 	}) => {
 		await uiLogin(page, USER1.email, USER1.password);
 		await page.goto("/");
-		await page
-			.getByRole("link", { name: "下書き", exact: true })
-			.first()
-			.click();
+		// #762: 下書きは main nav から外し profile DropdownMenu 経由に統合 (X 準拠)。
+		// avatar pod (DropdownMenu trigger) を開いてから menu の「下書き」 link を click。
+		await page.getByRole("button", { name: /のメニューを開く$/ }).click();
+		await page.getByRole("menuitem", { name: "下書き" }).click();
 		await page.waitForURL(/\/drafts$/, { timeout: 10_000 });
 		await expect(
 			page.getByRole("heading", { name: "下書き", level: 1 }),
