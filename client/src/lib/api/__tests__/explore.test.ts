@@ -7,7 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiServerError } from "@/lib/api/server";
 import {
 	fetchExploreTimeline,
+	fetchLatestTimeline,
 	type ExploreTimelinePage,
+	type LatestTimelinePage,
 } from "@/lib/api/explore";
 import type { TweetSummary } from "@/lib/api/tweets";
 
@@ -213,5 +215,95 @@ describe("fetchExploreTimeline", () => {
 
 		const result = await fetchExploreTimeline(20);
 		expect(result.results.map((t) => t.id)).toEqual([3, 1, 2]);
+	});
+});
+
+// --------------------------------------------------------------------------- //
+// fetchLatestTimeline (#803)                                                  //
+// --------------------------------------------------------------------------- //
+
+describe("fetchLatestTimeline", () => {
+	const originalFetch = globalThis.fetch;
+
+	beforeEach(() => {
+		cookiesMock.mockReturnValue([]);
+	});
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+		vi.clearAllMocks();
+	});
+
+	it("GETs /api/v1/timeline/latest/ with default limit=20 and no cursor", async () => {
+		const fetchSpy = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					results: [SAMPLE_TWEET],
+					next_cursor: null,
+					has_more: false,
+				}),
+				{
+					status: 200,
+					headers: { "content-type": "application/json" },
+				},
+			),
+		);
+		globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+		const result = await fetchLatestTimeline();
+
+		expect(fetchSpy).toHaveBeenCalledOnce();
+		const [url] = fetchSpy.mock.calls[0]!;
+		expect(url).toContain("/timeline/latest/");
+		expect(url).toContain("limit=20");
+		expect(url).not.toContain("cursor=");
+		const typed: LatestTimelinePage = result;
+		expect(typed.has_more).toBe(false);
+	});
+
+	it("forwards cursor query param when provided", async () => {
+		const fetchSpy = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					results: [],
+					next_cursor: "eyJpZCI6OTl9",
+					has_more: true,
+				}),
+				{
+					status: 200,
+					headers: { "content-type": "application/json" },
+				},
+			),
+		);
+		globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+		await fetchLatestTimeline(50, "abc123");
+
+		const [url] = fetchSpy.mock.calls[0]!;
+		expect(url).toContain("limit=50");
+		expect(url).toContain("cursor=abc123");
+	});
+
+	it("throws ApiServerError on 500", async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue(
+			new Response(JSON.stringify({ detail: "Server Error" }), {
+				status: 500,
+				headers: { "content-type": "application/json" },
+			}),
+		) as unknown as typeof fetch;
+
+		await expect(fetchLatestTimeline(20)).rejects.toBeInstanceOf(
+			ApiServerError,
+		);
+	});
+
+	it("propagates network errors (TypeError)", async () => {
+		globalThis.fetch = vi
+			.fn()
+			.mockRejectedValue(
+				new TypeError("Failed to fetch"),
+			) as unknown as typeof fetch;
+
+		await expect(fetchLatestTimeline(20)).rejects.toThrow();
 	});
 });

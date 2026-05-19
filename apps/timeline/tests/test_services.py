@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
 
 from apps.follows.tests._factories import make_follow, make_user
 from apps.timeline.services import (
@@ -11,6 +14,7 @@ from apps.timeline.services import (
     _interleave_70_30,
     build_explore_tl,
     build_home_tl,
+    build_latest_tl,
 )
 from apps.tweets.models import Tweet, TweetType
 from apps.tweets.tests._factories import make_tweet
@@ -139,6 +143,93 @@ def test_build_explore_tl_returns_only_with_reactions() -> None:
     pks = {t.pk for t in result}
     assert with_reaction.pk in pks
     assert no_reaction.pk not in pks
+
+
+# --------------------------------------------------------------------------- #
+# build_latest_tl (#803): 最新の投稿 feed
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.django_db(transaction=True)
+def test_build_latest_tl_orders_by_created_at_desc() -> None:
+    """latest feed は -created_at で並ぶ (最新が先頭)."""
+    a = make_user()
+    b = make_user()
+    old = make_tweet(author=a, body="old")
+    new = make_tweet(author=b, body="new")
+    # code-reviewer MEDIUM 反映: created_at を強制設定して時刻差を確実に作る。
+    # auto_now_add は同一 transaction 内で sub-ms 差になり順序保証が弱い。
+    now = timezone.now()
+    Tweet.objects.filter(pk=old.pk).update(created_at=now - timedelta(seconds=10))
+    Tweet.objects.filter(pk=new.pk).update(created_at=now)
+
+    result = build_latest_tl(viewer=None, limit=20)
+    pks_in_order = [t.pk for t in result]
+    assert new.pk in pks_in_order
+    assert old.pk in pks_in_order
+    # 最新の new が old より前
+    assert pks_in_order.index(new.pk) < pks_in_order.index(old.pk)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_build_latest_tl_excludes_private_account_tweets() -> None:
+    """#735 contract: 鍵アカ (is_private=True) の tweet は latest feed に出ない."""
+    public_author = make_user()
+    private_author = make_user()
+    private_author.is_private = True
+    private_author.save(update_fields=["is_private"])
+
+    public_t = make_tweet(author=public_author, body="public")
+    private_t = make_tweet(author=private_author, body="private")
+
+    # anonymous viewer
+    result = build_latest_tl(viewer=None, limit=20)
+    pks = {t.pk for t in result}
+    assert public_t.pk in pks
+    assert private_t.pk not in pks
+
+    # authenticated viewer でも同じ (本 endpoint は公開 feed なので一律 hide)
+    viewer = make_user()
+    result_authed = build_latest_tl(viewer=viewer, limit=20)
+    pks_authed = {t.pk for t in result_authed}
+    assert public_t.pk in pks_authed
+    assert private_t.pk not in pks_authed
+
+
+@pytest.mark.django_db(transaction=True)
+def test_build_latest_tl_includes_zero_reaction_tweets() -> None:
+    """trending と違い、 reaction_count=0 でも latest には含まれる."""
+    author = make_user()
+    no_reaction = make_tweet(author=author, body="no reactions yet")
+
+    result = build_latest_tl(viewer=None, limit=20)
+    assert no_reaction.pk in {t.pk for t in result}
+
+
+@pytest.mark.django_db(transaction=True)
+def test_build_latest_tl_excludes_repost_type() -> None:
+    """REPOST は最新の投稿 feed では noise になるため除外."""
+    a = make_user()
+    b = make_user()
+    original = make_tweet(author=a, body="original")
+    repost = Tweet.objects.create(author=b, body="", type=TweetType.REPOST, repost_of=original)
+
+    result = build_latest_tl(viewer=None, limit=20)
+    pks = {t.pk for t in result}
+    assert original.pk in pks
+    assert repost.pk not in pks
+
+
+@pytest.mark.django_db(transaction=True)
+def test_build_latest_tl_anonymous_viewer_sees_all() -> None:
+    """anonymous (viewer=None) で Block filter を skip し全 tweet が見える."""
+    a = make_user()
+    # python-reviewer HIGH 反映: 変数名 `t` だと set comprehension の loop 変数と
+    # shadowing する。 `tweet` に rename。
+    tweet = make_tweet(author=a, body="hello world")
+
+    result = build_latest_tl(viewer=None, limit=20)
+    assert tweet.pk in {t.pk for t in result}
 
 
 @pytest.mark.django_db(transaction=True)

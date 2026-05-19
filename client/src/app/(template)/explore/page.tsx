@@ -1,54 +1,40 @@
 /**
  * /explore — discovery surface for both anonymous AND authenticated visitors.
  *
- * Spec: docs/specs/explore-search-rightrail-spec.md
+ * Spec: docs/specs/explore-search-rightrail-spec.md, explore-latest-feed-spec.md
  *
- * Twitter / X 準拠 IA (#741):
- *   - 全 persona でアクセス可能 (logged-in も redirect しない)
- *   - 最上部に SearchBox 常置 (submit → /search?q=...)
- *   - 本文は trending tweets feed
- *   - logged-out 時のみ HeroBanner + StickyLoginBanner を出す
+ * 構成 (#803 で再設計):
+ *   - 最上部に SearchBox (sticky bar)、 submit → /search?q=...
+ *   - 本文は 「最新の投稿」 feed (-created_at 順、 GET /api/v1/timeline/latest/)
+ *   - 右 rail (ARightRail = TrendingTags + WhoToFollow) は (template) layout が自動配置
  *
- * 関連 SPEC: §16.2 (discovery / acquisition)。
+ * #803 で削除した要素:
+ *   - 旧 「トレンドツイート」 (24h reaction 数上位、 fetchExploreTimeline)
+ *     → 別 surface で再利用する場合は backend endpoint は残してあるので可
+ *   - logged-in 空 trending 時の WhoToFollow inline (#746)
+ *     → 右 rail に同じ component あり
+ *   - HeroBanner / StickyLoginBanner (logged-out 用 CTA)
+ *     → A direction では anon でも 中央 column は SearchBox + latest だけのシンプル構成
  */
 
 import type { Metadata } from "next";
 
-import HeroBanner from "@/components/explore/HeroBanner";
-import StickyLoginBanner from "@/components/explore/StickyLoginBanner";
 import SearchBox from "@/components/search/SearchBox";
-import WhoToFollow from "@/components/sidebar/WhoToFollow";
 import TweetCardList from "@/components/timeline/TweetCardList";
-import { ApiServerError, serverFetch } from "@/lib/api/server";
-import { fetchExploreTimeline } from "@/lib/api/explore";
+import { fetchLatestTimeline } from "@/lib/api/explore";
 import { stringifyJsonLd } from "@/lib/json-ld";
 
 export const metadata: Metadata = {
 	title: "探索 — エンジニア SNS",
 	description:
-		"トレンドのツイートを見つけ、 技術タグや人を検索する discovery surface。",
+		"最新の投稿を時系列で眺め、 ツイート・タグ・ユーザーを検索する discovery surface。",
 	openGraph: {
 		title: "探索 — エンジニア SNS",
 		description:
-			"トレンドのツイートを見つけ、 技術タグや人を検索する discovery surface。",
+			"最新の投稿を時系列で眺め、 ツイート・タグ・ユーザーを検索する discovery surface。",
 		type: "website",
 	},
 };
-
-interface CurrentUser {
-	id: string;
-	username: string;
-}
-
-async function isAuthenticated(): Promise<boolean> {
-	try {
-		await serverFetch<CurrentUser>("/users/me/");
-		return true;
-	} catch (err) {
-		if (err instanceof ApiServerError && err.status === 401) return false;
-		return false;
-	}
-}
 
 const websiteJsonLd = {
 	"@context": "https://schema.org",
@@ -60,19 +46,12 @@ const websiteJsonLd = {
 };
 
 export default async function ExplorePage() {
-	const authed = await isAuthenticated();
-
-	// #746: fetchExploreTimeline が throw した (network / 5xx / timeout) 場合、
-	// 空 page を返して下流の empty-state branch に流す。 「trending tweets が
-	// 集計されてない」 と「 backend エラー」 は UI 上 区別せず、 どちらでも
-	// WhoToFollow fallback を出す (blank page よりは discovery surface を見せる
-	// 方が UX が良い)。 観測性は別途 Sentry / structlog が拾うので、 UI で
-	// distinguish しない方針。
-	const page = await fetchExploreTimeline(20).catch(() => ({
+	// #803: 最新の投稿 feed を fetch。 fail 時は空 page (empty state branch に流す)。
+	// 観測性は Sentry / structlog 側で拾うので UI 上は区別しない。
+	const page = await fetchLatestTimeline(20).catch(() => ({
 		results: [],
-		count: 0,
-		next: null,
-		previous: null,
+		next_cursor: null,
+		has_more: false,
 	}));
 
 	return (
@@ -82,10 +61,7 @@ export default async function ExplorePage() {
 				dangerouslySetInnerHTML={{ __html: stringifyJsonLd(websiteJsonLd) }}
 			/>
 
-			{/*
-			 * Sticky context bar with search box.
-			 * Twitter analog: /explore 最上部の search field。
-			 */}
+			{/* sticky 検索 box (Twitter analog: /explore 最上部 search field)。 */}
 			<div
 				className="sticky top-0 z-10 px-5 py-3"
 				style={{
@@ -109,10 +85,9 @@ export default async function ExplorePage() {
 					</span>
 				</div>
 				{/*
-				 * #741 a11y M-1: /search route (default "ツイート検索") よりも広い
-				 * 検索対象 (tweet/tag/user) を表現する label を渡す。 同じ component
-				 * が異なる文脈で使われるとき screen reader が「ここで何ができるか」 を
-				 * 正しく伝えるための差分。
+				 * #741 a11y M-1: /search route の SearchBox より広い検索対象を表す
+				 * label を渡す。 同じ component が異なる文脈で使われるときに SR が
+				 * 「ここで何ができるか」 を正しく伝えるための差分。
 				 */}
 				<SearchBox formAriaLabel="サイト内検索 (ツイート・タグ・ユーザー)" />
 			</div>
@@ -121,53 +96,23 @@ export default async function ExplorePage() {
 			 * #741 a11y H-2 (WCAG 2.4.11 Focus Not Obscured Minimum):
 			 * 上の sticky 80-100px bar が tab focus した focusable を覆わないよう、
 			 * descendant の focusable 要素に scroll-margin-top を当てる。
-			 * Tailwind arbitrary descendant `[&_a]:scroll-mt-24` 等で focusable
-			 * (link / button / input) のみ対象 (text 全体に当てると意図しない動作)。
 			 */}
 			<article className="min-w-0 [&_a]:scroll-mt-28 [&_button]:scroll-mt-28 [&_input]:scroll-mt-28">
-				{!authed && <HeroBanner />}
-
-				<section aria-labelledby="explore-feed-heading" className="mt-8 px-5">
+				<section aria-labelledby="explore-latest-heading" className="mt-8 px-5">
 					<h2
-						id="explore-feed-heading"
+						id="explore-latest-heading"
 						className="mb-4 px-2 text-lg font-semibold text-foreground"
 					>
-						トレンドツイート
+						最新の投稿
 					</h2>
 
 					<TweetCardList
 						tweets={page.results}
-						ariaLabel="トレンドツイート"
-						emptyMessage="今は表示できるツイートがありません。"
+						ariaLabel="最新の投稿"
+						emptyMessage="まだ投稿がありません。"
 					/>
 				</section>
-
-				{/*
-				 * #746: trending tweets が空のとき (まだ集計されていない、
-				 * 一時的に backend がデータを返せない、 等)、 ページが「壊れて見える」
-				 * ほどスパースになるのを防ぐため、 既存 `WhoToFollow` を inline で
-				 * fallback render する。 logged-in なら personalised recommendations、
-				 * anon なら popular users (component 内で auth state 判定済)。
-				 *
-				 * 右 rail にも WhoToFollow があるが、 (a) 右 rail は lg+ のみ表示
-				 * (mobile/tablet で消える)、 (b) 中央 column の inline 表示は
-				 * desktop でも「次の action はこれ」 として導線強化になる、 ので
-				 * 重複を許容。
-				 *
-				 * 見出しは WhoToFollow 内蔵 h2「おすすめユーザー」 をそのまま使う:
-				 * - 外側に「代わりに…」 のような追加 h2 を置くと nested heading 重複
-				 *   + 「primary content が壊れた」 と読ませる framing になる
-				 *   (code-reviewer 指摘)
-				 * - bare=false (default) で card style も維持
-				 */}
-				{page.results.length === 0 && (
-					<div className="mt-6 px-5">
-						<WhoToFollow isAuthenticated={authed} />
-					</div>
-				)}
 			</article>
-
-			{!authed && <StickyLoginBanner />}
 		</>
 	);
 }
