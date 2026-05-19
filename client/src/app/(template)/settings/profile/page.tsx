@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import OccupationChipPicker from "@/components/profile/OccupationChipPicker";
 import ProfileEditForm from "@/components/profile/ProfileEditForm";
+import type { Occupation } from "@/lib/api/occupation";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import type { CurrentUser } from "@/lib/api/users";
 
@@ -19,9 +21,36 @@ async function loadCurrentUser(): Promise<CurrentUser | null> {
 	}
 }
 
+async function loadOccupations(): Promise<Occupation[]> {
+	try {
+		return await serverFetch<Occupation[]>("/occupations/");
+	} catch {
+		// Phase 12 P12-06 backend が落ちていたら chip section は empty-state を出す。
+		return [];
+	}
+}
+
+async function loadMyOccupations(): Promise<string[]> {
+	try {
+		const res = await serverFetch<{ slugs: string[] }>(
+			"/users/me/occupations/",
+		);
+		return res.slugs;
+	} catch {
+		// 認証必須 endpoint。 ログイン後にこのページに到達しているので 401 は通常
+		// 起きないが、 念のため空配列で fail-safe。
+		return [];
+	}
+}
+
 export default async function ProfileSettingsPage() {
 	const currentUser = await loadCurrentUser();
 	if (!currentUser) redirect("/login");
+
+	const [occupations, myOccupationSlugs] = await Promise.all([
+		loadOccupations(),
+		loadMyOccupations(),
+	]);
 
 	return (
 		<>
@@ -44,12 +73,21 @@ export default async function ProfileSettingsPage() {
 						className="truncate text-[color:var(--a-text-subtle)]"
 						style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
 					>
-						表示名 / bio / 画像 / 外部リンク
+						表示名 / bio / 画像 / 外部リンク / 職業
 					</p>
 				</div>
 			</header>
-			<div className="p-5">
+			<div className="space-y-6 p-5">
 				<ProfileEditForm initialUser={currentUser} />
+				<div
+					className="rounded-lg border p-4"
+					style={{ borderColor: "var(--a-border)" }}
+				>
+					<OccupationChipPicker
+						allOccupations={occupations}
+						initialSelectedSlugs={myOccupationSlugs}
+					/>
+				</div>
 			</div>
 		</>
 	);
