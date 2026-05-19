@@ -61,6 +61,8 @@ EXPECTED_PUBLIC_KEYS = {
     # #735: 鍵アカ機能。 FollowButton の 3 状態 + 「非公開アカウント」 表示用。
     "is_private",
     "follow_status",
+    # Phase 12 P12-06: 職業 chip (controlled vocabulary)。 空配列なら未設定。
+    "occupations",
 }
 
 

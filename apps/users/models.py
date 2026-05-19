@@ -119,6 +119,17 @@ class User(AbstractUser):
         ),
     )
 
+    # ---- Phase 12 P12-06: Occupation (職業) ----
+    # 1 user あたり最大 3 件 (``UserOccupation.MAX_PER_USER``)。
+    # ``Occupation`` / ``UserOccupation`` は同一 module 内、 定義順の都合で
+    # forward reference (文字列) で参照する。
+    occupations = models.ManyToManyField(
+        "Occupation",
+        through="UserOccupation",
+        related_name="users",
+        blank=True,
+    )
+
     # ---- 課金 / オンボーディング ----
     is_premium = models.BooleanField(
         verbose_name=_("Is Premium"),
@@ -288,3 +299,80 @@ class UserResidence(models.Model):
 
     def __str__(self) -> str:
         return f"UserResidence(user={self.user_id}, ({self.latitude},{self.longitude}) r={self.radius_m}m)"
+
+
+# --- Phase 12 (P12-06): Occupation ---
+
+
+class Occupation(models.Model):
+    """エンジニア職業の controlled vocabulary (Phase 12 P12-06)。
+
+    spec: docs/specs/phase-12-residence-map-spec.md §9
+
+    ``apps.tags.Tag`` (community-grown 技術タグ) と違って admin seed / 管理。
+    User からは編集不可、 ``UserOccupation`` (through M2M) で紐付ける。
+    廃止時は ``is_active=False`` (soft delete) を使う — 既に紐付いた user の
+    過去データを壊さないため。
+    """
+
+    slug = models.SlugField(max_length=50, unique=True)
+    display_name = models.CharField(max_length=50)
+    display_order = models.PositiveSmallIntegerField(default=100)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        # admin 一覧 + API list で「人気順に近い任意の sort 軸」 として
+        # display_order を使う。 同順は slug ASC で安定。
+        ordering = ["display_order", "slug"]
+        indexes = [
+            # API list の絞り込み (is_active=True 前提) を index 利用可にする。
+            models.Index(
+                fields=["is_active", "display_order"],
+                name="users_occ_active_order_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return self.display_name
+
+
+class UserOccupation(models.Model):
+    """User ↔ Occupation の through (Phase 12 P12-06)。
+
+    将来 ``is_primary`` (主な職業 1 件) を追加できるよう through 化している。
+    今は flat M2M として使う。
+    """
+
+    # 1 user あたりの最大件数。 serializer 層で enforce する (DB の CHECK には
+    # GROUP BY 制約が無いので app 層で見る)。
+    MAX_PER_USER = 3
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="user_occupations",
+    )
+    occupation = models.ForeignKey(
+        Occupation,
+        on_delete=models.CASCADE,
+        related_name="user_occupations",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "occupation"],
+                name="user_occupation_unique",
+            ),
+        ]
+        indexes = [
+            # 検索 API の ``?occupation=slug`` filter (P12-07) で
+            # ``occupation_id`` を JOIN するため。
+            models.Index(fields=["occupation"], name="user_occupation_occ_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"UserOccupation(user={self.user_id}, occ={self.occupation_id})"

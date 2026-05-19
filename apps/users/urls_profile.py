@@ -26,6 +26,7 @@ from .views import (
     CompleteOnboardingView,
     HeaderUploadUrlView,
     MeView,
+    MyOccupationsView,
     MyUserResidenceView,
     PublicProfileView,
     UserFullTextSearchView,
@@ -69,6 +70,13 @@ urlpatterns = [
         "me/residence/",
         MyUserResidenceView.as_view(),
         name="users-me-residence",
+    ),
+    # P12-06: 自分の occupations (職業) を取得 / 置換する。
+    # me/ 系として <str:username>/ より前に登録 (greedy 回避)。
+    path(
+        "me/occupations/",
+        MyOccupationsView.as_view(),
+        name="users-me-occupations",
     ),
     path("<str:username>/", PublicProfileView.as_view(), name="users-public-profile"),
     # P12-01: 他人の居住地参照 (anon 閲覧可)。 PublicProfileView より長い path なので
