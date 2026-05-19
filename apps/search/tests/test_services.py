@@ -99,3 +99,61 @@ class TestSearchTweets:
         )
 
         assert search_tweets("approved marker", viewer=follower) == [tweet]
+
+
+# --------------------------------------------------------------------------- #
+# #811: sort=latest|top の order 切替
+# --------------------------------------------------------------------------- #
+
+
+class TestSearchTweetsSort:
+    """sort=latest (default) は -created_at、 sort=top は popularity_score 順."""
+
+    @pytest.fixture
+    def author(self, db):
+        return User.objects.create_user(username="bob", email="bob@example.com", password="x")
+
+    @pytest.fixture
+    def graded_tweets(self, author):
+        # 古い順に作成、 engagement を後から update して 「最新」 と 「注目」 の
+        # 順序が異なるシナリオを作る。
+        old = Tweet.objects.create(author=author, body="hello world (oldest)")
+        mid = Tweet.objects.create(author=author, body="hello world (mid)")
+        new = Tweet.objects.create(author=author, body="hello world (newest)")
+        # popularity_score = reaction*2 + repost*3 + reply*1:
+        #   old: 10*2 + 0  + 0 = 20  ← 最高
+        #   mid:  0   + 0  + 0 = 0
+        #   new:  1*2 + 1*3 + 0 = 5
+        Tweet.objects.filter(pk=old.pk).update(reaction_count=10)
+        Tweet.objects.filter(pk=new.pk).update(reaction_count=1, repost_count=1)
+        return {"old": old, "mid": mid, "new": new}
+
+    def test_default_sort_is_latest(self, graded_tweets):
+        """sort 未指定なら -created_at 順 (new → mid → old)."""
+        results = search_tweets("hello world")
+        ids = [t.pk for t in results]
+        assert ids == [
+            graded_tweets["new"].pk,
+            graded_tweets["mid"].pk,
+            graded_tweets["old"].pk,
+        ]
+
+    def test_sort_latest_explicit(self, graded_tweets):
+        """sort='latest' は default と同じ -created_at 順."""
+        results = search_tweets("hello world", sort="latest")
+        ids = [t.pk for t in results]
+        assert ids == [
+            graded_tweets["new"].pk,
+            graded_tweets["mid"].pk,
+            graded_tweets["old"].pk,
+        ]
+
+    def test_sort_top_orders_by_popularity_score(self, graded_tweets):
+        """sort='top' は popularity_score DESC (old=20 → new=5 → mid=0)."""
+        results = search_tweets("hello world", sort="top")
+        ids = [t.pk for t in results]
+        assert ids == [
+            graded_tweets["old"].pk,
+            graded_tweets["new"].pk,
+            graded_tweets["mid"].pk,
+        ]

@@ -1,5 +1,5 @@
 /**
- * /explore と /search の共通 chrome (#806, #808).
+ * /explore と /search の共通 chrome (#806, #808, #811).
  *
  * ハルナさん指示 (2026-05-19): /explore と /search は「投稿を除いて完全に
  * 一致」 した layout。 URL は別だが見た目は同じ。 chrome (header + tabs +
@@ -13,6 +13,9 @@
  * IsAuthenticated 化したので anon SSR は 401 を受けて空結果になる前提。 UI
  * 側で promo に切り替えて acquisition funnel に流す。
  *
+ * #811: 検索結果に sort tab (最新 / 注目) を追加。 X の Top / Latest 切替に
+ * 倣う。 URL の `?sort=top` で navigate、 default は latest。
+ *
  * page.tsx 側で data fetch を済ませて props として渡す (server component
  * のままにするため)。
  */
@@ -22,6 +25,7 @@ import Link from "next/link";
 import SearchBox from "@/components/search/SearchBox";
 import SearchModeTabs from "@/components/search/SearchModeTabs";
 import TweetCardList from "@/components/timeline/TweetCardList";
+import type { SearchSort } from "@/lib/api/search";
 import type { TweetSummary } from "@/lib/api/tweets";
 import type { CurrentUser } from "@/lib/api/users";
 
@@ -36,6 +40,26 @@ interface SearchExploreSurfaceProps {
 	latestTweets: TweetSummary[];
 	/** ログイン中ユーザー (TweetCard の reaction state / 翻訳 prefs 用)。 */
 	currentUser: CurrentUser | null;
+	/**
+	 * #811: 検索結果 sort (latest / top)。 URL `?sort=...` から渡す。
+	 * default は "latest"。 q なしのときは無視 (最新の投稿 feed は常に時系列)。
+	 */
+	sort?: SearchSort;
+	/**
+	 * #811: tab href に使う pathname (例 `/search` / `/explore`)。
+	 * SearchModeTabs と同様、 現在の URL から page.tsx 側が渡す。
+	 */
+	basePathname?: string;
+}
+
+function buildSortHref(
+	pathname: string,
+	query: string,
+	sort: SearchSort,
+): string {
+	const params = new URLSearchParams({ q: query });
+	if (sort !== "latest") params.set("sort", sort);
+	return `${pathname}?${params.toString()}`;
 }
 
 export default function SearchExploreSurface({
@@ -44,6 +68,8 @@ export default function SearchExploreSurface({
 	searchResults,
 	latestTweets,
 	currentUser,
+	sort = "latest",
+	basePathname = "/search",
 }: SearchExploreSurfaceProps) {
 	return (
 		<>
@@ -123,6 +149,39 @@ export default function SearchExploreSurface({
 						</section>
 					) : (
 						<section aria-label="検索結果" className="space-y-3">
+							{/* #811: 最新 / 注目 タブ。 URL `?sort=top` で navigate、
+							    default は latest (sort param なし)。 click は Link 経由で
+							    server-side で再 fetch (small dataset 想定で client 切替なし)。 */}
+							<div
+								role="tablist"
+								aria-label="検索結果の並び替え"
+								className="mb-4 flex border-b border-[color:var(--a-border)]"
+							>
+								<Link
+									role="tab"
+									aria-selected={sort === "latest"}
+									href={buildSortHref(basePathname, query, "latest")}
+									className={`flex-1 py-2 text-center text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)] ${
+										sort === "latest"
+											? "border-b-2 border-[color:var(--a-accent)] text-[color:var(--a-text)]"
+											: "border-b-2 border-transparent text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)]"
+									}`}
+								>
+									最新
+								</Link>
+								<Link
+									role="tab"
+									aria-selected={sort === "top"}
+									href={buildSortHref(basePathname, query, "top")}
+									className={`flex-1 py-2 text-center text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent)] ${
+										sort === "top"
+											? "border-b-2 border-[color:var(--a-accent)] text-[color:var(--a-text)]"
+											: "border-b-2 border-transparent text-[color:var(--a-text-muted)] hover:text-[color:var(--a-text)]"
+									}`}
+								>
+									注目
+								</Link>
+							</div>
 							<TweetCardList
 								tweets={searchResults}
 								ariaLabel={`「${query}」の検索結果`}

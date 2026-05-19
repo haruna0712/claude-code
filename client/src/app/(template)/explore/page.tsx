@@ -19,10 +19,14 @@ import type { Metadata } from "next";
 
 import SearchExploreSurface from "@/components/search/SearchExploreSurface";
 import { fetchLatestTimeline } from "@/lib/api/explore";
-import { fetchSearch } from "@/lib/api/search";
+import { fetchSearch, type SearchSort } from "@/lib/api/search";
 import { serverFetch } from "@/lib/api/server";
 import type { CurrentUser } from "@/lib/api/users";
 import { stringifyJsonLd } from "@/lib/json-ld";
+
+function normalizeSort(value: string | undefined): SearchSort {
+	return value === "top" ? "top" : "latest";
+}
 
 export const metadata: Metadata = {
 	title: "探索 — エンジニア SNS",
@@ -54,19 +58,21 @@ async function loadCurrentUser(): Promise<CurrentUser | null> {
 }
 
 interface ExplorePageProps {
-	searchParams: { q?: string };
+	searchParams: { q?: string; sort?: string };
 }
 
 export default async function ExplorePage({ searchParams }: ExplorePageProps) {
 	const query = (searchParams.q ?? "").trim();
+	const sort = normalizeSort(searchParams.sort);
 	const [searchData, latestData, currentUser] = await Promise.all([
 		query
-			? fetchSearch(query).catch(() => ({
+			? fetchSearch(query, 20, sort).catch(() => ({
 					query,
+					sort,
 					results: [],
 					count: 0,
 				}))
-			: Promise.resolve({ query: "", results: [], count: 0 }),
+			: Promise.resolve({ query: "", sort, results: [], count: 0 }),
 		query
 			? Promise.resolve({ results: [], next_cursor: null, has_more: false })
 			: fetchLatestTimeline(20).catch(() => ({
@@ -89,6 +95,8 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
 				searchResults={searchData.results}
 				latestTweets={latestData.results}
 				currentUser={currentUser}
+				sort={sort}
+				basePathname="/explore"
 			/>
 		</>
 	);

@@ -10,8 +10,9 @@ ADR-0002 で pg_bigm + Lindera を仮採用しているので、Postgres 本番�
 from __future__ import annotations
 
 from datetime import datetime, time, timedelta
+from typing import Literal
 
-from django.db.models import QuerySet
+from django.db.models import F, QuerySet
 from django.utils import timezone
 
 from apps.search.parser import ParsedQuery, parse_search_query
@@ -19,6 +20,24 @@ from apps.tweets.models import Tweet
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
+
+SortOrder = Literal["latest", "top"]
+DEFAULT_SORT: SortOrder = "latest"
+
+# #811: 「注目」 tab の engagement 代理 score。 本物の impression_count は
+# 未実装のため、 既存 reaction / repost / reply の重み付け合算で代用。
+# 重み: repost=3 (拡散行動が最も信号強い) > reaction=2 (好印象) > reply=1 (議論)。
+# 将来 impression_count を導入したら別 sort 候補にできる。
+POPULARITY_REACTION_WEIGHT = 2
+POPULARITY_REPOST_WEIGHT = 3
+POPULARITY_REPLY_WEIGHT = 1
+
+
+def _normalize_sort(value: str | None) -> SortOrder:
+    """Query param からの sort 値を正規化。 不正値は default にフォールバック。"""
+    if value == "top":
+        return "top"
+    return "latest"
 
 
 def _apply_filters(qs: QuerySet[Tweet], parsed: ParsedQuery) -> QuerySet[Tweet]:
@@ -59,12 +78,23 @@ def _apply_filters(qs: QuerySet[Tweet], parsed: ParsedQuery) -> QuerySet[Tweet]:
     return qs
 
 
-def search_tweets(query: str, limit: int = DEFAULT_LIMIT, viewer=None) -> list[Tweet]:
+def search_tweets(
+    query: str,
+    limit: int = DEFAULT_LIMIT,
+    viewer=None,
+    sort: SortOrder = DEFAULT_SORT,
+) -> list[Tweet]:
     """Tweet を ``query`` で検索する。
 
     クエリ文字列は ``parse_search_query`` で operator + keywords に分解し、
     keywords は本文 (body) に対する icontains マッチ、operator は
     ``_apply_filters`` で QuerySet に適用する。空クエリは空リストを返す。
+
+    #811: ``sort`` parameter で結果の順序を切替:
+      - ``latest`` (default): ``-created_at, -id`` (X の 「最新」 相当)
+      - ``top``: popularity_score (reaction*2 + repost*3 + reply*1) DESC、
+        tie-break で ``-created_at`` (X の 「注目」 相当、 engagement 代理)
+    本物の impression_count は未実装 (#811 follow-up で別途設計)。
     """
     parsed = parse_search_query(query)
     has_filter = bool(
@@ -85,4 +115,16 @@ def search_tweets(query: str, limit: int = DEFAULT_LIMIT, viewer=None) -> list[T
     if parsed.keywords:
         qs = qs.filter(body__icontains=parsed.keywords)
 
-    return list(qs.order_by("-created_at", "-id")[:capped])
+    if sort == "top":
+        # popularity_score を annotate して降順、 同 score は最新優先。
+        qs = qs.annotate(
+            popularity_score=(
+                F("reaction_count") * POPULARITY_REACTION_WEIGHT
+                + F("repost_count") * POPULARITY_REPOST_WEIGHT
+                + F("reply_count") * POPULARITY_REPLY_WEIGHT
+            )
+        ).order_by("-popularity_score", "-created_at", "-id")
+    else:
+        qs = qs.order_by("-created_at", "-id")
+
+    return list(qs[:capped])

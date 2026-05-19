@@ -131,6 +131,74 @@ describe("SearchExploreSurface", () => {
 		expect(screen.getByLabelText("「django」の検索結果")).toBeInTheDocument();
 	});
 
+	// #811: 検索結果に 「最新 / 注目」 sort tab。
+	it("logged-in + q あり: 「最新」 / 「注目」 sort tab + aria-selected", () => {
+		render(
+			<SearchExploreSurface
+				query="django"
+				searchCount={3}
+				searchResults={[SAMPLE_TWEET]}
+				latestTweets={[]}
+				currentUser={LOGGED_IN_USER}
+				sort="latest"
+				basePathname="/search"
+			/>,
+		);
+		expect(
+			screen.getByRole("tablist", { name: "検索結果の並び替え" }),
+		).toBeInTheDocument();
+		const latestTab = screen.getByRole("tab", { name: "最新" });
+		const topTab = screen.getByRole("tab", { name: "注目" });
+		expect(latestTab).toHaveAttribute("aria-selected", "true");
+		expect(topTab).toHaveAttribute("aria-selected", "false");
+		expect(latestTab).toHaveAttribute("href", "/search?q=django");
+		expect(topTab).toHaveAttribute("href", "/search?q=django&sort=top");
+	});
+
+	it("sort='top' で 「注目」 が aria-selected=true", () => {
+		render(
+			<SearchExploreSurface
+				query="django"
+				searchCount={3}
+				searchResults={[SAMPLE_TWEET]}
+				latestTweets={[]}
+				currentUser={LOGGED_IN_USER}
+				sort="top"
+				basePathname="/search"
+			/>,
+		);
+		expect(screen.getByRole("tab", { name: "最新" })).toHaveAttribute(
+			"aria-selected",
+			"false",
+		);
+		expect(screen.getByRole("tab", { name: "注目" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
+	});
+
+	it("basePathname='/explore' で tab href が /explore?q=... を指す", () => {
+		render(
+			<SearchExploreSurface
+				query="rust"
+				searchCount={1}
+				searchResults={[SAMPLE_TWEET]}
+				latestTweets={[]}
+				currentUser={LOGGED_IN_USER}
+				sort="latest"
+				basePathname="/explore"
+			/>,
+		);
+		expect(screen.getByRole("tab", { name: "最新" })).toHaveAttribute(
+			"href",
+			"/explore?q=rust",
+		);
+		expect(screen.getByRole("tab", { name: "注目" })).toHaveAttribute(
+			"href",
+			"/explore?q=rust&sort=top",
+		);
+	});
+
 	// #808: anon + q あり → 検索結果ではなく 「ログインして検索」 promo を表示。
 	it("anon + q ありのとき: promo 表示、 件数行 / 検索結果 section は出ない", () => {
 		render(

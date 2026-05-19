@@ -41,3 +41,41 @@ def test_search_anon_blocked_regardless_of_query() -> None:
     assert client.get("/api/v1/search/").status_code == 401
     # q ありだが anon
     assert client.get("/api/v1/search/?q=anything").status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# #811: sort=latest|top の response body 反映 (services 詳細 test は test_services.py)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.django_db(transaction=True)
+def test_search_response_includes_sort_default() -> None:
+    """sort 未指定なら response body に sort='latest' が含まれる."""
+    user = make_user()
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.get("/api/v1/search/?q=anything")
+    assert response.status_code == 200
+    assert response.json().get("sort") == "latest"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_search_response_includes_sort_top() -> None:
+    """sort=top を渡すと response body に sort='top'."""
+    user = make_user()
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.get("/api/v1/search/?q=anything&sort=top")
+    assert response.status_code == 200
+    assert response.json().get("sort") == "top"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_search_invalid_sort_falls_back_to_latest() -> None:
+    """不正な sort 値は latest に fallback (400 でなく安全側)."""
+    user = make_user()
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.get("/api/v1/search/?q=anything&sort=garbage")
+    assert response.status_code == 200
+    assert response.json().get("sort") == "latest"
