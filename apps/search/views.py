@@ -2,12 +2,17 @@
 
 GET /api/v1/search/?q=...&limit=N
 
-未ログインでも検索可。フィルタ演算子は P2-12 (#206) で拡張。
+#808 (2026-05-19): permission を IsAuthenticated に変更。 ハルナさん指示で
+anon の検索クエリ実行を禁止する (search?q=... での lurker 検索を遮断、
+acquisition funnel として 「検索したいなら登録して」 と促す)。 anon は frontend
+の SearchExploreSurface 側で 「検索はログインが必要です」 promo を見るだけ。
+
+フィルタ演算子は P2-12 (#206) で拡張。
 """
 
 from __future__ import annotations
 
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,7 +22,7 @@ from apps.tweets.serializers import TweetListSerializer
 
 
 class SearchView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request: Request) -> Response:
         query = (request.query_params.get("q") or "").strip()

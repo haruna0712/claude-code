@@ -63,9 +63,9 @@ interface NavItemDef {
 
 const NAV_ITEMS: NavItemDef[] = [
 	{ href: "/", label: "ホーム", Icon: Home },
-	// #741 で /explore 統一 → #795 で /search → #803 で /explore に戻す。
-	// label 「検索」 は維持、 /explore は SearchBox + 最新の投稿 feed の 2 段構成 (#803)。
-	{ href: "/explore", label: "検索", Icon: Search },
+	// path 変遷: #741 /explore → #795 /search → #803 /explore → #808 /search 固定。
+	// #806 chrome 統合後の tab URL 跳び問題回避のため nav は /search に集約。
+	{ href: "/search", label: "検索", Icon: Search },
 	{
 		href: "/notifications",
 		label: "通知",
