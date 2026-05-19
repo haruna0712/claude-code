@@ -24,13 +24,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.common.cookie_auth import CookieAuthentication, CSRFEnforcingAuthentication
-from apps.users.models import Occupation, UserOccupation, UserResidence
+from apps.users.models import UserResidence
 from apps.users.s3_presign import generate_presigned_upload_url
 from apps.users.serializers import (
     CustomUserSerializer,
-    MyOccupationsReadSerializer,
-    MyOccupationsWriteSerializer,
-    OccupationSerializer,
     PublicProfileSerializer,
     UploadUrlRequestSerializer,
     UserResidenceSerializer,
@@ -1039,66 +1036,5 @@ class UserFullTextSearchView(ListAPIView):
         return qs.order_by("_distance_km", "username")
 
 
-# ---------------------------------------------------------------------------
-# Phase 12 P12-06: Occupation API
-# ---------------------------------------------------------------------------
-
-
-class OccupationListView(ListAPIView):
-    """``GET /api/v1/occupations/``: controlled vocabulary を返す (anon 可)。
-
-    廃止職業 (``is_active=False``) は除外。 ordering は
-    ``Occupation.Meta.ordering`` (= ``display_order, slug``)。
-    pagination は無し (16 件程度のため)。
-    """
-
-    serializer_class = OccupationSerializer
-    permission_classes = [AllowAny]
-    pagination_class = None
-
-    def get_queryset(self) -> QuerySet:
-        return Occupation.objects.filter(is_active=True)
-
-
-class MyOccupationsView(APIView):
-    """``/api/v1/users/me/occupations/`` — 自分の occupations の GET / PUT.
-
-    - GET: ``{"slugs": [...]}`` で自分の slug 配列を返す。 未設定は空配列。
-    - PUT: ``{"slugs": [...]}`` で **置換** semantics。 最大 3 件。
-
-    認証は Cookie + CSRF。 ``MyUserResidenceView`` 等プロジェクトの状態変更
-    エンドポイントと揃えて ``CSRFEnforcingAuthentication`` を明示する
-    (グローバル fallback の ``JWTAuthentication`` では PUT 時に CSRF が
-    効かない経路があるため、 二重防衛のために authentication_classes を明示)。
-    """
-
-    authentication_classes = [CSRFEnforcingAuthentication, CookieAuthentication]
-    permission_classes = [IsAuthenticated]
-    parser_classes = [JSONParser]
-    # 意図しない HTTP method 経由の副作用を防ぐ (プロジェクト規約)。
-    http_method_names = ["get", "put", "head", "options"]
-
-    def get(self, request: Request) -> Response:
-        slugs = list(request.user.occupations.filter(is_active=True).values_list("slug", flat=True))
-        return Response(
-            MyOccupationsReadSerializer({"slugs": slugs}).data,
-            status=status.HTTP_200_OK,
-        )
-
-    def put(self, request: Request) -> Response:
-        serializer = MyOccupationsWriteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        slugs: list[str] = serializer.validated_data["slugs"]
-
-        # 置換: 既存 UserOccupation を全消ししてから新しい slug 集合を bulk insert。
-        # トランザクション内で実行して、 中途半端な状態を残さない。
-        with transaction.atomic():
-            UserOccupation.objects.filter(user=request.user).delete()
-            if slugs:
-                occupations = Occupation.objects.filter(slug__in=slugs, is_active=True)
-                UserOccupation.objects.bulk_create(
-                    [UserOccupation(user=request.user, occupation=o) for o in occupations]
-                )
-
-        # response は GET と同じ shape (今 DB に入っている slug を返す)。
-        return self.get(request)
+# Phase 12 P12-06: Occupation 系 view は views_occupation.py に分離した
+# (apps/users/views.py が 800 行上限を超えるため。 code-reviewer HIGH 指摘)。

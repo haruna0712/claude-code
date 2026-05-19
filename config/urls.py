@@ -11,7 +11,7 @@ from rest_framework import permissions
 
 from apps.common.views import csrf_token as csrf_token_view
 from apps.common.views import health as health_view
-from apps.users.views import OccupationListView
+from apps.users.views_occupation import OccupationListView
 from config.openapi import api_info
 
 schema_view = get_schema_view(

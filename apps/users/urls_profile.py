@@ -26,13 +26,13 @@ from .views import (
     CompleteOnboardingView,
     HeaderUploadUrlView,
     MeView,
-    MyOccupationsView,
     MyUserResidenceView,
     PublicProfileView,
     UserFullTextSearchView,
     UserResidenceByHandleView,
     UserSearchView,
 )
+from .views_occupation import MyOccupationsView
 
 urlpatterns = [
     # Issue #480: handle 前方一致検索 (autocomplete 用)。

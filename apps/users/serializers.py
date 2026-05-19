@@ -317,16 +317,6 @@ class OccupationSerializer(serializers.ModelSerializer):
         read_only_fields = list(fields)
 
 
-class MyOccupationsReadSerializer(serializers.Serializer):
-    """``GET /api/v1/users/me/occupations/`` の read serializer。
-
-    response shape: ``{"slugs": [...]}``。 順序は ``Occupation.Meta.ordering``
-    (= display_order ASC) を継承する。
-    """
-
-    slugs = serializers.ListField(child=serializers.CharField(), read_only=True)
-
-
 class MyOccupationsWriteSerializer(serializers.Serializer):
     """``PUT /api/v1/users/me/occupations/`` の write serializer.
 

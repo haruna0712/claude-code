@@ -25,16 +25,36 @@ from apps.users.models import Occupation, UserOccupation
 
 @pytest.fixture
 def occupations(db):
-    """seed が migration 経由で入っている想定だが、 test では明示的に作る。"""
-    items = [
-        Occupation.objects.create(slug="designer", display_name="デザイナー", display_order=10),
-        Occupation.objects.create(slug="frontend", display_name="フロントエンド", display_order=20),
-        Occupation.objects.create(slug="backend", display_name="バックエンド", display_order=30),
-        Occupation.objects.create(
-            slug="deprecated", display_name="廃止職業", display_order=999, is_active=False
-        ),
-    ]
-    return {o.slug: o for o in items}
+    """Phase 12 P12-06 の seed migration (0010_seed_occupations) が test DB にも
+    走るため、 ``create()`` だと slug の UNIQUE 制約に衝突する (code-reviewer HIGH)。
+    seed と同じ slug で ``get_or_create`` してデフォルト値を上書きしないことで、
+    test に必要な subset の Occupation を取得し、 廃止職業 (``deprecated``) は
+    test 用 slug として新規作成する。"""
+
+    designer, _ = Occupation.objects.get_or_create(
+        slug="designer",
+        defaults={"display_name": "デザイナー", "display_order": 10},
+    )
+    frontend, _ = Occupation.objects.get_or_create(
+        slug="frontend",
+        defaults={"display_name": "フロントエンド", "display_order": 20},
+    )
+    backend, _ = Occupation.objects.get_or_create(
+        slug="backend",
+        defaults={"display_name": "バックエンド", "display_order": 30},
+    )
+    deprecated, _ = Occupation.objects.get_or_create(
+        slug="test_deprecated",
+        defaults={"display_name": "廃止職業 (test)", "display_order": 999, "is_active": False},
+    )
+    return {
+        "designer": designer,
+        "frontend": frontend,
+        "backend": backend,
+        # test_deprecated を fixture key としては ``deprecated`` で公開し、
+        # test 内のアサーションを seed-aware にする。
+        "deprecated": deprecated,
+    }
 
 
 @pytest.fixture
@@ -59,25 +79,31 @@ def public_profile_url(handle: str) -> str:
 @pytest.mark.django_db
 @pytest.mark.unit
 class TestOccupationModel:
+    """seed migration (0010_seed_occupations) と衝突しないよう、 test 専用
+    slug (`zz_test_*` prefix、 seed の display_order 範囲を避けて 1000+) を使う。"""
+
     def test_slug_is_unique(self) -> None:
-        Occupation.objects.create(slug="designer", display_name="デザイナー")
+        Occupation.objects.create(slug="zz_test_unique", display_name="t")
         with pytest.raises(IntegrityError):
-            Occupation.objects.create(slug="designer", display_name="重複")
+            Occupation.objects.create(slug="zz_test_unique", display_name="重複")
 
     def test_str_returns_display_name(self) -> None:
-        occ = Occupation.objects.create(slug="frontend", display_name="フロントエンド")
-        assert str(occ) == "フロントエンド"
+        occ = Occupation.objects.create(slug="zz_test_str", display_name="表示名テスト")
+        assert str(occ) == "表示名テスト"
 
     def test_default_ordering_is_display_order_then_slug(self) -> None:
-        Occupation.objects.create(slug="b", display_name="B", display_order=20)
-        Occupation.objects.create(slug="a", display_name="A", display_order=10)
-        Occupation.objects.create(slug="c", display_name="C", display_order=10)
-        ordered = list(Occupation.objects.values_list("slug", flat=True))
-        # display_order ASC、 同順なら slug ASC で安定
-        assert ordered == ["a", "c", "b"]
+        # seed と衝突しない範囲で display_order を確保。 seed の最大は 999 (other)。
+        Occupation.objects.create(slug="zz_b", display_name="B", display_order=2000)
+        Occupation.objects.create(slug="zz_a", display_name="A", display_order=1000)
+        Occupation.objects.create(slug="zz_c", display_name="C", display_order=1000)
+        # zz_* prefix だけに絞れば test fixture の影響を受けない
+        ordered = list(
+            Occupation.objects.filter(slug__startswith="zz_").values_list("slug", flat=True)
+        )
+        assert ordered == ["zz_a", "zz_c", "zz_b"]
 
     def test_is_active_default_true(self) -> None:
-        occ = Occupation.objects.create(slug="x", display_name="X")
+        occ = Occupation.objects.create(slug="zz_test_active", display_name="X")
         assert occ.is_active is True
 
 
@@ -122,20 +148,28 @@ class TestUserOccupationModel:
 @pytest.mark.django_db
 @pytest.mark.integration
 class TestOccupationListAPI:
+    """seed migration で 16 件の active occupation が既に入っている前提で、
+    fixture が追加する ``test_deprecated`` (inactive) は API list に出ない
+    ことだけを exhaustive に検証する。 全件 list 等価は seed に依存して
+    脆くなるので、 部分的な性質 (順序 / 含有 / 形状) で検証する。"""
+
     def test_anon_can_list(self, api_client: APIClient, occupations, occupations_url: str) -> None:
         res = api_client.get(occupations_url)
         assert res.status_code == status.HTTP_200_OK
         slugs = [o["slug"] for o in res.data]
-        # is_active=False は除外
-        assert "deprecated" not in slugs
+        # fixture の test_deprecated は is_active=False なので除外される
+        assert "test_deprecated" not in slugs
+        # seed の active 16 件は全部入る (sanity check)
+        assert "designer" in slugs and "frontend" in slugs
 
     def test_ordering_is_display_order(
         self, api_client: APIClient, occupations, occupations_url: str
     ) -> None:
         res = api_client.get(occupations_url)
         slugs = [o["slug"] for o in res.data]
-        # designer (10) → frontend (20) → backend (30)
-        assert slugs == ["designer", "frontend", "backend"]
+        # display_order: designer(10) < frontend(20) < backend(30)。
+        # seed の他の active 行が間に挟まることはないので index 比較で十分。
+        assert slugs.index("designer") < slugs.index("frontend") < slugs.index("backend")
 
     def test_shape_contains_required_fields(
         self, api_client: APIClient, occupations, occupations_url: str
@@ -251,7 +285,7 @@ class TestMyOccupationsAPI:
         occupations,
         me_occupations_url: str,
     ) -> None:
-        Occupation.objects.create(slug="fullstack", display_name="フルスタック", display_order=40)
+        # seed migration で fullstack も入っているので create 不要。
         user = user_factory()
         api_client.force_authenticate(user=user)
 
@@ -263,6 +297,46 @@ class TestMyOccupationsAPI:
 
         assert res.status_code == status.HTTP_400_BAD_REQUEST
         assert "slugs" in res.data
+
+    def test_put_exactly_max_three_allowed(
+        self,
+        api_client: APIClient,
+        user_factory,
+        occupations,
+        me_occupations_url: str,
+    ) -> None:
+        """境界値: ちょうど 3 件 (= MAX_PER_USER) は成功する (spec §9.6 0→3)。"""
+        user = user_factory()
+        api_client.force_authenticate(user=user)
+
+        res = api_client.put(
+            me_occupations_url,
+            {"slugs": ["designer", "frontend", "backend"]},
+            format="json",
+        )
+
+        assert res.status_code == status.HTTP_200_OK
+        assert set(res.data["slugs"]) == {"designer", "frontend", "backend"}
+        assert UserOccupation.objects.filter(user=user).count() == 3
+
+    def test_put_three_to_one_replacement(
+        self,
+        api_client: APIClient,
+        user_factory,
+        occupations,
+        me_occupations_url: str,
+    ) -> None:
+        """spec §9.6 (3→1): 既存 3 件状態から 1 件に絞る。"""
+        user = user_factory()
+        for slug in ("designer", "frontend", "backend"):
+            UserOccupation.objects.create(user=user, occupation=occupations[slug])
+        api_client.force_authenticate(user=user)
+
+        res = api_client.put(me_occupations_url, {"slugs": ["designer"]}, format="json")
+
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data == {"slugs": ["designer"]}
+        assert UserOccupation.objects.filter(user=user).count() == 1
 
     def test_put_unknown_slug_rejected(
         self,
@@ -289,7 +363,7 @@ class TestMyOccupationsAPI:
         user = user_factory()
         api_client.force_authenticate(user=user)
 
-        res = api_client.put(me_occupations_url, {"slugs": ["deprecated"]}, format="json")
+        res = api_client.put(me_occupations_url, {"slugs": ["test_deprecated"]}, format="json")
 
         assert res.status_code == status.HTTP_400_BAD_REQUEST
         assert "slugs" in res.data
