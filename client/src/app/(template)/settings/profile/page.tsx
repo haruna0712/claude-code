@@ -24,8 +24,11 @@ async function loadCurrentUser(): Promise<CurrentUser | null> {
 async function loadOccupations(): Promise<Occupation[]> {
 	try {
 		return await serverFetch<Occupation[]>("/occupations/");
-	} catch {
-		// Phase 12 P12-06 backend が落ちていたら chip section は empty-state を出す。
+	} catch (error) {
+		// catalog 取得失敗時は empty-state を chip section が出す。
+		// auth は不要なので 401/403 は想定外、 5xx / network も catalog 全体の
+		// 機能停止に過ぎないため fail-safe する (個人データではない)。
+		console.error("loadOccupations failed", error);
 		return [];
 	}
 }
@@ -36,10 +39,18 @@ async function loadMyOccupations(): Promise<string[]> {
 			"/users/me/occupations/",
 		);
 		return res.slugs;
-	} catch {
-		// 認証必須 endpoint。 ログイン後にこのページに到達しているので 401 は通常
-		// 起きないが、 念のため空配列で fail-safe。
-		return [];
+	} catch (error) {
+		// 認証必須 endpoint。 401/403 は「未認証扱い → 空配列」 で安全に degrade。
+		// それ以外 (5xx / network) は **個人データ** を空で上書きしないよう必ず
+		// 投げる (typescript-reviewer HIGH: silent catch は picker が空の状態で
+		// 保存できてしまい既存 occupations を破壊する)。
+		if (
+			error instanceof ApiServerError &&
+			(error.status === 401 || error.status === 403)
+		) {
+			return [];
+		}
+		throw error;
 	}
 }
 

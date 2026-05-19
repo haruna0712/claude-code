@@ -149,18 +149,34 @@ test.describe("Phase 12 P12-06b occupation chip edit + display (#818)", () => {
 		browser,
 	}) => {
 		requireEnv();
-		// 事前条件: USER1 が designer + frontend を持っている (テスト #1 で設定済み、
-		// なくても anon で 200 が返ればよい)
+		// 自前で API seed して、 OCCUPATION-1 の実行順に依存しないようにする
+		// (typescript-reviewer MEDIUM: spec 間の暗黙依存を排除)。
+		const auth = await browser.newContext();
+		const { csrf } = await loginViaApi(auth.request, USER1);
+		const seed = await auth.request.put(
+			`${BASE}/api/v1/users/me/occupations/`,
+			{
+				headers: {
+					"Content-Type": "application/json",
+					"X-CSRFToken": csrf,
+					Referer: `${BASE}/settings/profile`,
+				},
+				data: { slugs: ["designer", "frontend"] },
+			},
+		);
+		expect(seed.status()).toBe(200);
+		await auth.close();
+
+		// anon (cookie 無し) で公開プロフィールを踏む
 		const anon = await browser.newContext();
 		const anonPage = await anon.newPage();
 		await anonPage.goto(`${BASE}/u/${USER1.handle}`);
 
-		// occupation section が存在するか、 もしくは空でも 200 が返るかのいずれか。
-		// 設定済みなら section が見える。
 		const region = anonPage.getByRole("region", { name: "職業" });
-		if (await region.isVisible()) {
-			await expect(region).toBeVisible();
-		}
+		await expect(region).toBeVisible({ timeout: 15000 });
+		await expect(region.getByText("デザイナー")).toBeVisible();
+		await expect(region.getByText("フロントエンドエンジニア")).toBeVisible();
+
 		await anon.close();
 	});
 });

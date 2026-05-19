@@ -9,7 +9,7 @@
  * spec: docs/specs/phase-12-residence-map-spec.md §9
  */
 
-import type { AxiosInstance } from "axios";
+import axios, { type AxiosInstance } from "axios";
 
 import { api, ensureCsrfToken } from "@/lib/api/client";
 
@@ -71,7 +71,7 @@ export async function saveMyOccupations(
 }
 
 function isAuthFailure(error: unknown): boolean {
-	if (typeof error !== "object" || error === null) return false;
-	const status = (error as { response?: { status?: number } }).response?.status;
+	if (!axios.isAxiosError(error)) return false;
+	const status = error.response?.status;
 	return status === 401 || status === 403;
 }

@@ -13,9 +13,11 @@
  *   - success toast is shown via ``role=status`` (also polite)
  */
 
+import axios from "axios";
 import { useState } from "react";
 import { toast } from "react-toastify";
 
+import { parseDrfErrors } from "@/lib/api/errors";
 import {
 	OCCUPATION_MAX_PER_USER,
 	saveMyOccupations,
@@ -70,8 +72,15 @@ export default function OccupationChipPicker({
 			setSelected(nextSaved);
 			toast.success("職業を保存しました");
 		} catch (err: unknown) {
-			const message =
-				err instanceof Error ? err.message : "保存に失敗しました。";
+			// axios error (= サーバ応答あり) は DRF error parser で人間に読める
+			// メッセージを取り出す。 client-side early-throw (Error) は
+			// 既に日本語メッセージなのでそのまま使う。
+			let message = "保存に失敗しました。";
+			if (axios.isAxiosError(err)) {
+				message = parseDrfErrors(err).summary ?? message;
+			} else if (err instanceof Error && err.message) {
+				message = err.message;
+			}
 			setErrorMsg(message);
 		} finally {
 			setIsSaving(false);
