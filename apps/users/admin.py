@@ -4,7 +4,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.translation import gettext_lazy as _
 
 from .forms import UserChangeForm, UserCreationForm
-from .models import UserResidence
+from .models import Occupation, UserOccupation, UserResidence
 
 User = get_user_model()
 
@@ -98,3 +98,23 @@ class UserResidenceAdmin(admin.ModelAdmin):
     search_fields = ("user__username",)
     raw_id_fields = ("user",)
     readonly_fields = ("created_at", "updated_at")
+
+
+# Phase 12 P12-06: Occupation 管理。 ユーザーから新規 / 編集はできず、
+# admin だけが ``is_active=False`` で廃止 / 再有効化を行う。
+@admin.register(Occupation)
+class OccupationAdmin(admin.ModelAdmin):
+    list_display = ("slug", "display_name", "display_order", "is_active", "updated_at")
+    list_filter = ("is_active",)
+    search_fields = ("slug", "display_name")
+    list_editable = ("display_order", "is_active")
+    ordering = ("display_order", "slug")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(UserOccupation)
+class UserOccupationAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "occupation", "created_at")
+    list_select_related = ("user", "occupation")
+    raw_id_fields = ("user",)
+    search_fields = ("user__username", "occupation__slug")

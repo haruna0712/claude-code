@@ -6,7 +6,7 @@ from django.core.validators import URLValidator
 from djoser.serializers import UserCreateSerializer, UserSerializer
 from rest_framework import serializers
 
-from apps.users.models import UserResidence
+from apps.users.models import Occupation, UserOccupation, UserResidence
 from apps.users.s3_presign import ALLOWED_CONTENT_TYPES, MAX_CONTENT_LENGTH
 from apps.users.validators import validate_handle, validate_media_url
 
@@ -147,6 +147,15 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     is_muting = serializers.SerializerMethodField()
     # Phase 4B (#449): ReportDialog で target_id (UUID) として送る。
     user_id = serializers.UUIDField(source="id", read_only=True)
+    # Phase 12 P12-06: 職業 (controlled vocabulary)。
+    # 公開プロフィール上に chip 表示するため slug + display_name のみを露出する。
+    occupations = serializers.SerializerMethodField()
+
+    def get_occupations(self, obj: User) -> list[dict[str, str]]:
+        # ``user.occupations.all()`` は M2M で、 ``Occupation.Meta.ordering``
+        # (display_order ASC) を継承する。 ``PublicProfileView.get_queryset``
+        # が ``prefetch_related("occupations")`` を入れているので N+1 にならない。
+        return [{"slug": o.slug, "display_name": o.display_name} for o in obj.occupations.all()]
 
     def get_is_following(self, obj: User) -> bool:
         request = self.context.get("request")
@@ -230,6 +239,8 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             # - follow_status: viewer→obj への follow 状態 (approved | pending | null)
             "is_private",
             "follow_status",
+            # Phase 12 P12-06: occupation chip 一覧 (空配列なら未設定)。
+            "occupations",
         ]
         # 公開 API はすべて read_only (PATCH は /me/ 経由のみ)。
         # ``fields`` と同じ list を参照させると、DRF 内部で片方に mutate が走った
@@ -286,3 +297,65 @@ class UserResidenceWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserResidence
         fields = ["latitude", "longitude", "radius_m"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 12 P12-06: Occupation (controlled vocabulary of engineer roles)
+# ---------------------------------------------------------------------------
+
+
+class OccupationSerializer(serializers.ModelSerializer):
+    """``GET /api/v1/occupations/`` の read-only serializer.
+
+    ``is_active`` は API には露出させない (廃止職業は list view 側で
+    そもそも除外するため、 client は気にする必要が無い)。
+    """
+
+    class Meta:
+        model = Occupation
+        fields = ["slug", "display_name", "display_order"]
+        read_only_fields = list(fields)
+
+
+class MyOccupationsWriteSerializer(serializers.Serializer):
+    """``PUT /api/v1/users/me/occupations/`` の write serializer.
+
+    body: ``{"slugs": [...]}`` — **置換** semantics。 既存 UserOccupation を
+    すべて消してから request の slug 集合に置き換える。
+
+    validation:
+      - ``slugs`` が array で無ければ 400
+      - 要素が string で無ければ 400
+      - 重複 slug は 400 (client 側の bug を早期検知)
+      - len > MAX_PER_USER (= 3) は 400
+      - 未知 slug は 400
+      - ``is_active=False`` の slug は 400 (廃止職業は選択不可)
+    """
+
+    slugs = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, max_length=50),
+        allow_empty=True,
+    )
+
+    def validate_slugs(self, value: list[str]) -> list[str]:
+        if len(value) > UserOccupation.MAX_PER_USER:
+            raise serializers.ValidationError(
+                f"職業は最大 {UserOccupation.MAX_PER_USER} 件まで選択できます。"
+            )
+        if len(set(value)) != len(value):
+            raise serializers.ValidationError("同じ職業を複数回指定することはできません。")
+
+        if value:
+            # 1 query で active occupation を全部引いて差集合で検証 (N+1 防止)。
+            existing = set(
+                Occupation.objects.filter(slug__in=value, is_active=True).values_list(
+                    "slug", flat=True
+                )
+            )
+            missing = [s for s in value if s not in existing]
+            if missing:
+                # ``value`` は事前に重複チェック済みなので ``missing`` も重複しない。
+                raise serializers.ValidationError(
+                    f"未知または廃止された職業: {', '.join(sorted(missing))}"
+                )
+        return value

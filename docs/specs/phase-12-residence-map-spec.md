@@ -290,6 +290,170 @@ PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/onboarding-
 2. ✅ **P12-02** (#679 merged): 設定 UI + プロフィール map 表示 (Leaflet + OSM)
 3. ✅ **P12-04** (#680 merged): 汎用 user search page (full-text、 cursor pagination)
 4. ✅ **P12-05** (#681 merged): 近所検索 (haversine SQL, near_me=1 / near=lat,lng)
-5. **P12-03** (本 PR): signup wizard step 2 (居住地 prompt) — Phase 12 完了
+5. ✅ **P12-03** (merged): signup wizard step 2 (居住地 prompt)
+6. **P12-06** (#815): `Occupation` model + 多選択編集 UI (本 spec §9 / 本 PR は backend、 frontend は follow-up)
+7. **P12-07** (#816): `/api/v1/users/search/?occupation=` filter + chip filter UI
+8. **P12-08** (#817): `/search/users` に Leaflet 地図 view toggle (job filter と組み合わせ可能)
 
 各段階で `gan-evaluator` agent に採点させて UX を確認 (新 route 追加なので Phase 11 同様の必須運用)。
+
+---
+
+## 9. 職業 (Occupation) model — P12-06
+
+### 9.1 背景
+
+ハルナさん要望: 「ユーザー検索で地図上で検索できるようにならないかな？地図の上に検索欄があって、職業がデザイナーの人を検索する」
+
+地図 view (P12-08) と職業フィルタ (P12-07) を実装する前提として、 **そもそも User に「職業」 フィールドが無い**。 これを最初に整える。
+
+設計判断:
+
+- 自由 string では「フロントエンド」 「Frontend」 「frontend」 が一致せず検索品質が低い
+- 既存 `apps.tags.Tag` (技術タグ用、 user-proposed + moderator approval) とは目的が違う
+  - `Tag` = community-grown taxonomy (TypeScript / Next.js 等、 何百件にもなる)
+  - `Occupation` = curated, fixed vocabulary (~16 件、 admin が seed/管理)
+- → **別 model `Occupation` (apps/users) + User との M2M** で実装
+
+### 9.2 データモデル
+
+```python
+# apps/users/models.py
+class Occupation(models.Model):
+    """エンジニア職業の controlled vocabulary (P12-06)。
+
+    Tag (apps.tags) と違って admin seed/管理で、 ユーザー側からは作成・編集不可。
+    M2M で User と紐付ける (1 user あたり最大 3 件)。
+    """
+
+    slug          = SlugField(max_length=50, unique=True)
+    display_name  = CharField(max_length=50)
+    display_order = PositiveSmallIntegerField(default=100)
+    is_active     = BooleanField(default=True)
+    created_at    = DateTimeField(auto_now_add=True)
+    updated_at    = DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["display_order", "slug"]
+        indexes = [
+            models.Index(fields=["is_active", "display_order"], name="users_occ_active_order_idx"),
+        ]
+
+
+class UserOccupation(models.Model):
+    """User ↔ Occupation の through (P12-06)。
+
+    将来「主な職業 (1件)」 を強調するための ``is_primary`` を追加できるよう through 化。
+    """
+
+    MAX_PER_USER = 3
+
+    user        = ForeignKey(User, on_delete=CASCADE, related_name="user_occupations")
+    occupation  = ForeignKey(Occupation, on_delete=CASCADE, related_name="user_occupations")
+    created_at  = DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["user", "occupation"], name="user_occupation_unique"),
+        ]
+        indexes = [
+            models.Index(fields=["occupation"], name="user_occupation_occ_idx"),
+        ]
+
+
+# User に M2M 追加
+class User(AbstractUser):
+    ...
+    occupations = models.ManyToManyField(
+        Occupation,
+        through="UserOccupation",
+        related_name="users",
+        blank=True,
+    )
+```
+
+**制約**:
+
+- 1 user あたり **最大 3 件** (serializer 層で enforce)
+- `Occupation.is_active=False` は API list / PUT で除外
+- User 削除 → `UserOccupation` も CASCADE
+- Occupation 削除 → `UserOccupation` も CASCADE (admin は soft delete `is_active=False` を推奨)
+
+### 9.3 初期 seed (data migration)
+
+```python
+INITIAL_OCCUPATIONS = [
+    ("designer",   "デザイナー",                    10),
+    ("frontend",   "フロントエンドエンジニア",       20),
+    ("backend",    "バックエンドエンジニア",         30),
+    ("fullstack",  "フルスタックエンジニア",         40),
+    ("mobile",     "モバイルエンジニア",             50),
+    ("ml",         "ML / AI エンジニア",             60),
+    ("data",       "データエンジニア / アナリスト",  70),
+    ("sre",        "SRE / インフラ",                 80),
+    ("security",   "セキュリティ",                   90),
+    ("game",       "ゲーム開発",                    100),
+    ("embedded",   "組み込み / ハードウェア",       110),
+    ("qa",         "QA / テスト",                   120),
+    ("pm",         "プロダクトマネージャ",          130),
+    ("em",         "エンジニアリングマネージャ",    140),
+    ("student",    "学生",                          150),
+    ("other",      "その他",                        999),
+]
+```
+
+seed は **冪等** (`update_or_create`)。 将来 admin から増減可能。
+
+### 9.4 API
+
+| Method | Path                            | 認証 | 内容                                                                |
+| ------ | ------------------------------- | ---- | ------------------------------------------------------------------- |
+| GET    | `/api/v1/occupations/`          | anon | `is_active=True` を `display_order` 順で返す                        |
+| GET    | `/api/v1/users/me/occupations/` | auth | 自分の slug 配列                                                    |
+| PUT    | `/api/v1/users/me/occupations/` | auth | body `{"slugs": [...]}` で **置換** (最大 3、 4 件以上は 400)       |
+| GET    | `/api/v1/users/<handle>/`       | anon | 既存 profile response に `occupations: [{slug, display_name}, ...]` |
+
+PUT を **置換** にする理由: M2M の add/remove を逐次 API で叩くより、 client が「最終的にこの 3 つ」 を declarative に渡せる方がシンプル + 競合に強い。
+
+**バリデーション**:
+
+- `slugs` が array でない / non-string element / 空文字混入 → 400
+- `len(slugs) > 3` → 400
+- 未知 slug → 400 (`{slugs: ["unknown slug: ..."]}`)
+- `is_active=False` slug → 400 (廃止済み職業は選択不可)
+- 重複 slug (`["a", "a"]`) → 400
+
+### 9.5 frontend (本 PR では未実装、 follow-up issue で対応)
+
+P12-06 の frontend (`/settings/profile` chip 多選択 + `/u/<handle>` 表示) は backend が緑になった後の follow-up PR で実装する。 backend PR を軽く保つ + frontend は a11y / E2E のレビュー量が backend と独立で大きいため。
+
+### 9.6 backend テスト (P12-06)
+
+`apps/users/tests/test_occupation.py`:
+
+- `TestOccupationModel`: slug unique / `__str__` / ordering (display_order ASC)
+- `TestUserOccupationModel`: 同一 (user, occupation) は IntegrityError / User CASCADE / Occupation CASCADE
+- `TestOccupationListAPI`: anon 200 / is_active=False 除外 / display_order 順 / shape = `[{slug, display_name, display_order}]`
+- `TestMyOccupationsAPI`:
+  - GET 認証必須 (401/403)
+  - GET 未設定 → 空配列 `{"slugs": []}`
+  - GET 設定済み → slug 配列
+  - PUT 認証必須
+  - PUT で置換 (既存 0 → 2、 2 → 3、 3 → 1)
+  - PUT 空配列で全消し
+  - PUT 4 件で 400
+  - PUT 未知 slug で 400
+  - PUT is_active=False slug で 400
+  - PUT 重複 slug で 400
+  - PUT non-array で 400
+- `TestUserProfileOccupationField`: GET `/api/v1/users/<handle>/` で `occupations` 配列が含まれる、 未設定 user は空配列
+
+実行:
+
+```bash
+docker compose -f local.yml exec api pytest apps/users/tests/test_occupation.py -v --no-cov
+```
+
+### 9.7 frontend テスト (P12-06 follow-up)
+
+follow-up issue で実装。 概要は P12-07 / P12-08 と同様の chip 多選択 vitest + Playwright E2E。

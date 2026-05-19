@@ -601,7 +601,11 @@ class PublicProfileView(RetrieveAPIView):
     # 表現できない。代わりに ``get_object()`` を override する。
 
     def get_queryset(self):
-        return User.objects.filter(is_active=True)
+        # Phase 12 P12-06: ``PublicProfileSerializer.get_occupations`` が
+        # ``obj.occupations.all()`` を呼ぶため、 ここで M2M を prefetch して
+        # N+1 を防ぐ。 シングル取得でも 2 query → 1+1 = 2 query で同等だが、
+        # 将来 list 文脈で再利用されたときの保険として明示する。
+        return User.objects.filter(is_active=True).prefetch_related("occupations")
 
     def get_object(self):
         """username の大文字小文字を無視して解決する。
@@ -1030,3 +1034,7 @@ class UserFullTextSearchView(ListAPIView):
         # paginator (UserSearchProximityCursorPagination) も同じ ordering を持つので
         # 上書きされるが、 get_queryset 単体で使う pytest 経路でも安定するよう明示する。
         return qs.order_by("_distance_km", "username")
+
+
+# Phase 12 P12-06: Occupation 系 view は views_occupation.py に分離した
+# (apps/users/views.py が 800 行上限を超えるため。 code-reviewer HIGH 指摘)。

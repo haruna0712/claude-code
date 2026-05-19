@@ -11,6 +11,7 @@ from rest_framework import permissions
 
 from apps.common.views import csrf_token as csrf_token_view
 from apps.common.views import health as health_view
+from apps.users.views_occupation import OccupationListView
 from config.openapi import api_info
 
 schema_view = get_schema_view(
@@ -65,6 +66,14 @@ urlpatterns = [
     # /api/v1/users/me/ (GET/PATCH) と /api/v1/users/<handle>/ (GET) を提供。
     # 認証系 (/api/v1/auth/) と分離するため apps.users.urls_profile として別登録。
     path("api/v1/users/", include("apps.users.urls_profile")),
+    # Phase 12 P12-06: 職業 (controlled vocabulary) list endpoint。
+    # ``/api/v1/users/<handle>/`` の greedy 回避のため、 users prefix の
+    # 外側に置く (occupations は user-scoped ではない global resource)。
+    path(
+        "api/v1/occupations/",
+        OccupationListView.as_view(),
+        name="occupations-list",
+    ),
     # Phase 0 scaffold (P0-04). Each app ships empty urlpatterns until
     # the owning phase adds real endpoints (see docs/ROADMAP.md).
     path("api/v1/tweets/", include("apps.tweets.urls")),
