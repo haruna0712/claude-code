@@ -1,22 +1,20 @@
 /**
- * /search page (P2-16 / Issue #207).
+ * /search page (P2-16 / Issue #207, refactored #806).
  *
- * 仕様: docs/specs/search-spec.md §4.1
+ * 仕様: docs/specs/search-spec.md §4.1, docs/specs/explore-search-chrome-unify-spec.md
  *
- * - Server Component が ?q を読み /api/v1/search/ を呼ぶ。
- * - 結果カードは TweetCardList (Client Component) に委譲。/explore /tag /u と
- *   同じ rendering pipeline。
- * - #372 修正: 旧 inline article + dangerouslySetInnerHTML 経路は SSR で
- *   isomorphic-dompurify (jsdom 依存) が落ちて 500 を返していた。
- *   TweetCardList で client 側 sanitize に統一して解消。副次的に結果カード
- *   からも reaction / repost / quote / reply の action button が動く。
+ * #806 で /explore と chrome を統一: SearchExploreSurface shared component を
+ * 使う。 q ありなら検索結果、 q なしなら 「最新の投稿」 feed を表示。
+ *
+ * - Server Component が ?q を読み /api/v1/search/ (q ありのみ) と
+ *   /api/v1/timeline/latest/ (q なしフォールバック) を呼ぶ。
+ * - 結果カードは TweetCardList (Client Component) に委譲。
  */
 
 import type { Metadata } from "next";
 
-import SearchBox from "@/components/search/SearchBox";
-import SearchModeTabs from "@/components/search/SearchModeTabs";
-import TweetCardList from "@/components/timeline/TweetCardList";
+import SearchExploreSurface from "@/components/search/SearchExploreSurface";
+import { fetchLatestTimeline } from "@/lib/api/explore";
 import { fetchSearch } from "@/lib/api/search";
 import { serverFetch } from "@/lib/api/server";
 import type { CurrentUser } from "@/lib/api/users";
@@ -41,7 +39,7 @@ export const metadata: Metadata = {
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
 	const query = (searchParams.q ?? "").trim();
-	const [data, currentUser] = await Promise.all([
+	const [searchData, latestData, currentUser] = await Promise.all([
 		query
 			? fetchSearch(query).catch(() => ({
 					query,
@@ -49,65 +47,23 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 					count: 0,
 				}))
 			: Promise.resolve({ query: "", results: [], count: 0 }),
+		query
+			? Promise.resolve({ results: [], next_cursor: null, has_more: false })
+			: fetchLatestTimeline(20).catch(() => ({
+					results: [],
+					next_cursor: null,
+					has_more: false,
+				})),
 		loadCurrentUser(),
 	]);
 
 	return (
-		<>
-			<header
-				className="sticky top-0 z-10 flex items-center gap-3 px-5 py-3"
-				style={{
-					borderBottom: "1px solid var(--a-border)",
-					background: "rgba(255,255,255,0.85)",
-					backdropFilter: "blur(8px)",
-				}}
-			>
-				<div className="min-w-0 flex-1">
-					<h1
-						className="truncate font-semibold tracking-tight"
-						style={{ fontSize: 15, letterSpacing: -0.2 }}
-					>
-						検索
-					</h1>
-					{query && (
-						<p
-							className="truncate text-[color:var(--a-text-subtle)]"
-							style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
-						>
-							「{query}」 — {data.count} 件
-						</p>
-					)}
-				</div>
-			</header>
-
-			<div className="p-5">
-				<SearchModeTabs mode="tweets" query={query} />
-				<p className="mb-3 text-xs text-[color:var(--a-text-muted)]">
-					投稿本文、タグ、投稿者で検索します。ユーザーを探す場合は「ユーザー」タブに切り替えてください。
-				</p>
-				<div className="mb-6">
-					<SearchBox initialValue={query} />
-				</div>
-
-				{!query && (
-					<p className="text-sm text-[color:var(--a-text-muted)]">
-						上のボックスにキーワードを入れて検索してください。
-					</p>
-				)}
-
-				{query && (
-					<section aria-label="検索結果" className="space-y-3">
-						<TweetCardList
-							tweets={data.results}
-							ariaLabel={`「${query}」の検索結果`}
-							emptyMessage="一致するツイートはありません。"
-							currentUserHandle={currentUser?.username}
-							currentUserPreferredLanguage={currentUser?.preferred_language}
-							currentUserAutoTranslate={currentUser?.auto_translate}
-						/>
-					</section>
-				)}
-			</div>
-		</>
+		<SearchExploreSurface
+			query={query}
+			searchCount={searchData.count}
+			searchResults={searchData.results}
+			latestTweets={latestData.results}
+			currentUser={currentUser}
+		/>
 	);
 }
