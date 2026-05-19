@@ -338,6 +338,43 @@ class TestMyOccupationsAPI:
         assert res.data == {"slugs": ["designer"]}
         assert UserOccupation.objects.filter(user=user).count() == 1
 
+    def test_put_race_window_rolls_back_delete(
+        self,
+        api_client: APIClient,
+        user_factory,
+        occupations,
+        me_occupations_url: str,
+    ) -> None:
+        """database-reviewer HIGH regression:
+
+        validate 後、 view 内の `Occupation.filter(is_active=True)` 直前に
+        admin が ``is_active=False`` に flip した race window では、 事前に
+        実行した DELETE を ``transaction.set_rollback(True)`` で巻き戻す
+        必要がある。 ``with atomic(): return Response(409)`` だけでは block が
+        正常終了扱いで commit され、 既存 occupations が消えたまま残る。
+
+        この test は view 側の ``Occupation`` を mock で空 queryset を返すよう
+        差し替えて race window を再現し、 409 が返り、 かつ事前 DELETE が
+        rollback されて元の 1 件が残ることを exhaustive に検証する。
+        """
+        from unittest.mock import patch
+
+        user = user_factory()
+        UserOccupation.objects.create(user=user, occupation=occupations["designer"])
+        api_client.force_authenticate(user=user)
+
+        # serializer の ``validate_slugs`` は別 module の ``Occupation`` を
+        # 参照しているので validate は通常通り pass する。 ここで差し替えるのは
+        # ``views_occupation.Occupation`` だけなので、 「validate OK / view 内
+        # filter で空」 という race window がきれいに再現できる。
+        with patch("apps.users.views_occupation.Occupation") as mocked:
+            mocked.objects.filter.return_value = []
+            res = api_client.put(me_occupations_url, {"slugs": ["frontend"]}, format="json")
+
+        assert res.status_code == status.HTTP_409_CONFLICT
+        # 事前 DELETE がロールバックされて、 元の designer が残っていること。
+        assert list(user.occupations.values_list("slug", flat=True)) == ["designer"]
+
     def test_put_unknown_slug_rejected(
         self,
         api_client: APIClient,

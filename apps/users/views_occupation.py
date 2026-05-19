@@ -79,30 +79,32 @@ class MyOccupationsView(APIView):
 
         # 置換: 既存 UserOccupation を全消ししてから新しい slug 集合を bulk insert。
         # トランザクション内で実行して、 中途半端な状態を残さない。 admin が
-        # トランザクション中に ``is_active=False`` に切り替えても、 ``filter()``
-        # が再評価するので「 validate 時は active だったが insert 時は inactive」
-        # の極小レース窓は ``bulk_create`` 後に件数チェックで吸収する。
+        # トランザクション中に ``is_active=False`` に切り替える race window では、
+        # ``bulk_create`` 直前の件数チェックで検知し、 ``set_rollback`` で DELETE
+        # も巻き戻す (database-reviewer HIGH: ``with atomic(): return`` だけだと
+        # block は正常終了扱いで commit されてしまうため明示 rollback が必須)。
+        race_missing: list[str] = []
         with transaction.atomic():
             UserOccupation.objects.filter(user=request.user).delete()
             if slugs:
                 occupations = list(Occupation.objects.filter(slug__in=slugs, is_active=True))
                 if len(occupations) != len(slugs):
-                    # validate 後に admin 操作で is_active=False になった race window。
-                    # 既に DELETE は実行済みだが atomic でロールバックされる。
-                    missing = sorted(set(slugs) - {o.slug for o in occupations})
-                    return Response(
-                        {
-                            "slugs": [
-                                f"職業が一時的に利用できません。 再試行してください: {', '.join(missing)}"
-                            ]
-                        },
-                        status=status.HTTP_409_CONFLICT,
+                    race_missing = sorted(set(slugs) - {o.slug for o in occupations})
+                    transaction.set_rollback(True)
+                else:
+                    UserOccupation.objects.bulk_create(
+                        [UserOccupation(user=request.user, occupation=o) for o in occupations]
                     )
-                UserOccupation.objects.bulk_create(
-                    [UserOccupation(user=request.user, occupation=o) for o in occupations]
-                )
 
-        return Response(
-            {"slugs": self._current_slugs(request)},
-            status=status.HTTP_200_OK,
-        )
+        if race_missing:
+            return Response(
+                {
+                    "slugs": [
+                        f"職業が一時的に利用できません。 再試行してください: {', '.join(race_missing)}"
+                    ]
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # 成功時は validate 済みの slug を直接返す (race window が無いので確定的)。
+        return Response({"slugs": slugs}, status=status.HTTP_200_OK)
