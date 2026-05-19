@@ -15,7 +15,9 @@ from rest_framework.views import APIView
 
 from apps.timeline.cursor import decode_cursor, encode_cursor
 from apps.timeline.services import (
+    TL_BUFFER_SIZE,
     build_explore_tl,
+    build_latest_tl,
     get_or_build_home_tl,
 )
 from apps.tweets.models import Tweet, TweetType
@@ -174,6 +176,38 @@ class ExploreTimelineView(APIView):
 
         viewer = None if isinstance(request.user, AnonymousUser) else request.user
         full = build_explore_tl(viewer=viewer, limit=limit * 5)
+        page, next_cursor, has_more = _slice_with_cursor(full, cursor.id if cursor else None, limit)
+
+        data = TweetListSerializer(
+            page,
+            many=True,
+            context={
+                "request": request,
+                "viewer_repost_ids": _viewer_repost_ids(request, page),
+            },
+        ).data
+        return Response({"results": data, "next_cursor": next_cursor, "has_more": has_more})
+
+
+class LatestTimelineView(APIView):
+    """GET /api/v1/timeline/latest/?cursor=...&limit=N (#803).
+
+    最新の投稿 feed。 anonymous OK、 ordering は -created_at。 auth 時は viewer の
+    双方向 Block で除外。 cache なし (秒単位で更新されるため)。 REPOST は除外し
+    ORIGINAL / QUOTE のみ。
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        limit = _parse_limit(request)
+        cursor = decode_cursor(request.query_params.get("cursor"))
+
+        viewer = None if isinstance(request.user, AnonymousUser) else request.user
+        # code-reviewer HIGH 反映: build_latest_tl 内部の `[:TL_BUFFER_SIZE]` で
+        # 結局 200 件 cap なので、 `limit * 5` を渡しても無意味。 services 側に
+        # TL_BUFFER_SIZE を直接渡して buffer 全件取得 → 後段で cursor slice する。
+        full = build_latest_tl(viewer=viewer, limit=TL_BUFFER_SIZE)
         page, next_cursor, has_more = _slice_with_cursor(full, cursor.id if cursor else None, limit)
 
         data = TweetListSerializer(

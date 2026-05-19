@@ -46,11 +46,11 @@ interface BottomTabItem {
 }
 
 // #741: Twitter 準拠 IA — explore icon を Search (虫眼鏡) に統一。
-// #795: nav 入口を 「検索」 (/search) に変更。 `/explore` route は残るが
-// nav からは外す。 rail に search panel は無い前提で duplication 問題なし。
+// #795 で path を /search に変えたが、 #803 で /explore に戻す。 /explore page は
+// #803 で 「SearchBox + 最新の投稿 feed」 の 2 段構成にリデザイン済。
 const BOTTOM_TABS: BottomTabItem[] = [
 	{ href: "/", label: "ホーム", Icon: Home },
-	{ href: "/search", label: "検索", Icon: Search },
+	{ href: "/explore", label: "検索", Icon: Search },
 	{ href: "/notifications", label: "通知", Icon: Bell, requiresAuth: true },
 	{
 		href: "/messages",
@@ -257,10 +257,11 @@ function DrawerNav({ onItemClick }: { onItemClick: () => void }) {
 	// ただし auth-scoped task (下書き等) は drawer に残し desktop main nav は profile
 	// menu 経由に分離する場合がある (#762: drafts は X mobile drawer 準拠で keep、
 	// desktop main nav からは削除 → profile DropdownMenu に移動)。
-	// #741 で 「探索」 1 entry に統一 → #795 で nav 入口を 「検索」 (/search) に変更。
+	// #741 で 「探索」 1 entry に統一 → #795 で /search に変更 → #803 で /explore に戻す。
+	// /explore は SearchBox + 最新の投稿 feed の 2 段構成 (#803)。
 	const items: BottomTabItem[] = [
 		{ href: "/", label: "ホーム", Icon: Home },
-		{ href: "/search", label: "検索", Icon: Search },
+		{ href: "/explore", label: "検索", Icon: Search },
 		{ href: "/notifications", label: "通知", Icon: Bell, requiresAuth: true },
 		{
 			href: "/messages",

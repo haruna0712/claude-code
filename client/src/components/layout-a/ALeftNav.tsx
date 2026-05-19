@@ -63,9 +63,9 @@ interface NavItemDef {
 
 const NAV_ITEMS: NavItemDef[] = [
 	{ href: "/", label: "ホーム", Icon: Home },
-	// #741 で 「探索」 (/explore) に統一 → #795 で nav 入口を 「検索」 (/search) に変更。
-	// `/explore` route は残るが nav には出さない。
-	{ href: "/search", label: "検索", Icon: Search },
+	// #741 で /explore 統一 → #795 で /search → #803 で /explore に戻す。
+	// label 「検索」 は維持、 /explore は SearchBox + 最新の投稿 feed の 2 段構成 (#803)。
+	{ href: "/explore", label: "検索", Icon: Search },
 	{
 		href: "/notifications",
 		label: "通知",

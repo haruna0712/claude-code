@@ -299,6 +299,36 @@ def invalidate_home_tl(user) -> None:
     cache.delete(TL_HOME_CACHE_KEY.format(user_id=user.pk))
 
 
+def build_latest_tl(viewer, limit: int = TL_DEFAULT_PAGE_SIZE) -> list[Tweet]:
+    """最新の投稿 feed (#803): 全 public tweets を -created_at で並べる.
+
+    /explore page の中央 column 用。 anonymous OK、 viewer がいれば Block 除外
+    post-filter。 cache 無し (latest は秒単位で変わるため短時間 cache でも
+    刻一刻ずれる)。 buffer で hard limit して大量データを引かないよう保護。
+
+    type filter: ORIGINAL / QUOTE のみ (REPOST は最新の投稿 feed では noise)。
+
+    sec HIGH (#735 contract): 鍵アカ (is_private=True) の tweet は anonymous /
+    非 follower viewer に漏らさない。 `_query_global` と同じく `author__is_private=False`
+    で base filter。 viewer が approved follower であっても本 endpoint では公開
+    feed として一律 hide (鍵アカ tweet は home TL で別経路から見せる、 #735)。
+    """
+    qs = (
+        Tweet.objects.select_related("author")
+        .filter(
+            type__in=[TweetType.ORIGINAL, TweetType.QUOTE],
+            author__is_private=False,
+        )
+        .order_by("-created_at", "-id")[:TL_BUFFER_SIZE]
+    )
+    tweets = list(qs)
+    if viewer is not None and getattr(viewer, "is_authenticated", False):
+        blocked = _exclude_blocked_users_qs(viewer)
+        if blocked:
+            tweets = [t for t in tweets if t.author_id not in blocked]
+    return tweets[:limit]
+
+
 def build_explore_tl(viewer, limit: int = TL_DEFAULT_PAGE_SIZE) -> list[Tweet]:
     """未ログイン用 explore: 24h 内 reaction 数上位.
 

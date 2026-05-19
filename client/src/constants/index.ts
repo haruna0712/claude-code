@@ -23,9 +23,10 @@ export const leftNavLinks: LeftNavLink[] = [
 		iconName: "Home",
 	},
 	{
-		// #795: 「探索」 → 「検索」 rename + path /explore → /search。
-		// /explore route は残るが nav 入口は /search に。
-		path: "/search",
+		// #795 で path を /search に向けたが、 #803 でハルナさん指示により /explore
+		// に戻す。 label 「検索」 は維持。 /explore page は #803 で SearchBox +
+		// 最新の投稿 feed の 2 段構成にリデザイン (旧トレンドツイートは廃止)。
+		path: "/explore",
 		label: "検索",
 		iconName: "Search",
 	},
