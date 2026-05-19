@@ -16,6 +16,7 @@ import NearMeFilter from "@/components/search/NearMeFilter";
 import SearchModeTabs from "@/components/search/SearchModeTabs";
 import UserSearchBox from "@/components/search/UserSearchBox";
 import UserSearchResultCard from "@/components/search/UserSearchResultCard";
+import WhoToFollow from "@/components/sidebar/WhoToFollow";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import {
 	PROXIMITY_RADIUS_DEFAULT_KM,
@@ -208,10 +209,28 @@ export default async function UserSearchPage({
 				</div>
 
 				{!hasAnyQuery && (
-					<p className="text-sm text-[color:var(--a-text-muted)]">
-						ユーザー名 / 表示名 / 自己紹介 (bio) で部分一致検索できます。
-						ログイン中は「近所で絞り込む」 で居住地の近い人だけに絞れます。
-					</p>
+					<>
+						<p className="mb-6 text-sm text-[color:var(--a-text-muted)]">
+							ユーザー名 / 表示名 / 自己紹介 (bio) で部分一致検索できます。
+							ログイン中は「近所で絞り込む」 で居住地の近い人だけに絞れます。
+						</p>
+						{/* #810: ハルナさん指示 — ユーザータブ + q なし のとき
+						    「おすすめユーザー」 を中央に表示 (投稿タブの 「最新の投稿」 と
+						    同じ pattern)。 WhoToFollow は anon でも popular fallback で
+						    動くので auth 分岐なしでそのまま使える。 */}
+						<section
+							aria-labelledby="users-recommended-heading"
+							className="space-y-3"
+						>
+							<h2
+								id="users-recommended-heading"
+								className="mb-4 px-2 text-lg font-semibold text-foreground"
+							>
+								おすすめユーザー
+							</h2>
+							<WhoToFollow isAuthenticated={loggedIn} />
+						</section>
+					</>
 				)}
 
 				{outcome.kind === "missing_residence" && (
