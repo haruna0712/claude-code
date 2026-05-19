@@ -23,10 +23,12 @@ export const leftNavLinks: LeftNavLink[] = [
 		iconName: "Home",
 	},
 	{
-		// #795 で path を /search に向けたが、 #803 でハルナさん指示により /explore
-		// に戻す。 label 「検索」 は維持。 /explore page は #803 で SearchBox +
-		// 最新の投稿 feed の 2 段構成にリデザイン (旧トレンドツイートは廃止)。
-		path: "/explore",
+		// path の変遷: #741 /explore → #795 /search → #803 /explore → #808 /search。
+		// #806 で chrome を統合した後、 /explore でタブ click すると /search に
+		// 飛ぶ URL 跳びが顕在化したため、 ハルナさん指示で nav は /search 固定に
+		// 統一 (タブ問題が起きない pathname に nav を集約)。 label 「検索」 維持。
+		// /explore route は deep link 維持のため残す (nav から見えないだけで 200)。
+		path: "/search",
 		label: "検索",
 		iconName: "Search",
 	},

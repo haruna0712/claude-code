@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import SearchExploreSurface from "@/components/search/SearchExploreSurface";
 import type { TweetSummary } from "@/lib/api/tweets";
+import type { CurrentUser } from "@/lib/api/users";
 
 // SearchBox is a client component that wires next/navigation; mock to render
 // a simple stub so we can assert the surrounding chrome without a full router.
@@ -62,6 +63,28 @@ const SAMPLE_TWEET: TweetSummary = {
 	edit_count: 0,
 };
 
+const LOGGED_IN_USER = {
+	id: "u-1",
+	email: "alice@example.com",
+	username: "alice",
+	full_name: "Alice",
+	display_name: "Alice",
+	bio: "",
+	avatar_url: "",
+	header_url: "",
+	is_premium: false,
+	needs_onboarding: false,
+	github_url: "",
+	x_url: "",
+	zenn_url: "",
+	qiita_url: "",
+	note_url: "",
+	linkedin_url: "",
+	preferred_language: "ja",
+	auto_translate: false,
+	is_private: false,
+} as unknown as CurrentUser;
+
 describe("SearchExploreSurface", () => {
 	it("q なしのとき: h1 '検索' + tabs + 説明 + box + 「最新の投稿」 h2", () => {
 		render(
@@ -88,14 +111,14 @@ describe("SearchExploreSurface", () => {
 		expect(screen.queryByText(/件$/)).not.toBeInTheDocument();
 	});
 
-	it("q ありのとき: 件数行 + 検索結果 section、 「最新の投稿」 は出ない", () => {
+	it("logged-in + q ありのとき: 件数行 + 検索結果 section、 「最新の投稿」 は出ない", () => {
 		render(
 			<SearchExploreSurface
 				query="django"
 				searchCount={42}
 				searchResults={[SAMPLE_TWEET, SAMPLE_TWEET]}
 				latestTweets={[]}
-				currentUser={null}
+				currentUser={LOGGED_IN_USER}
 			/>,
 		);
 		expect(
@@ -106,6 +129,48 @@ describe("SearchExploreSurface", () => {
 			screen.queryByRole("heading", { name: "最新の投稿", level: 2 }),
 		).not.toBeInTheDocument();
 		expect(screen.getByLabelText("「django」の検索結果")).toBeInTheDocument();
+	});
+
+	// #808: anon + q あり → 検索結果ではなく 「ログインして検索」 promo を表示。
+	it("anon + q ありのとき: promo 表示、 件数行 / 検索結果 section は出ない", () => {
+		render(
+			<SearchExploreSurface
+				query="django"
+				searchCount={0}
+				searchResults={[]}
+				latestTweets={[]}
+				currentUser={null}
+			/>,
+		);
+		// chrome は visible
+		expect(
+			screen.getByRole("heading", { name: "検索", level: 1 }),
+		).toBeInTheDocument();
+		expect(screen.getByTestId("search-mode-tabs")).toBeInTheDocument();
+		expect(screen.getByTestId("search-box")).toBeInTheDocument();
+		// promo の h2 + button
+		expect(
+			screen.getByRole("heading", {
+				name: "検索はログインが必要です",
+				level: 2,
+			}),
+		).toBeInTheDocument();
+		expect(screen.getByRole("link", { name: "ログイン" })).toHaveAttribute(
+			"href",
+			expect.stringContaining("/login?next="),
+		);
+		expect(screen.getByRole("link", { name: "新規登録" })).toHaveAttribute(
+			"href",
+			"/register",
+		);
+		// 件数行 / 検索結果 / 「最新の投稿」 は出ない
+		expect(screen.queryByText(/「django」 — /)).not.toBeInTheDocument();
+		expect(
+			screen.queryByLabelText("「django」の検索結果"),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("heading", { name: "最新の投稿", level: 2 }),
+		).not.toBeInTheDocument();
 	});
 
 	it("chrome (h1 + tabs + 説明 + box) は q ありなしに関わらず常に表示", () => {
