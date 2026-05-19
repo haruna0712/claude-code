@@ -604,7 +604,11 @@ class PublicProfileView(RetrieveAPIView):
     # 表現できない。代わりに ``get_object()`` を override する。
 
     def get_queryset(self):
-        return User.objects.filter(is_active=True)
+        # Phase 12 P12-06: ``PublicProfileSerializer.get_occupations`` が
+        # ``obj.occupations.all()`` を呼ぶため、 ここで M2M を prefetch して
+        # N+1 を防ぐ。 シングル取得でも 2 query → 1+1 = 2 query で同等だが、
+        # 将来 list 文脈で再利用されたときの保険として明示する。
+        return User.objects.filter(is_active=True).prefetch_related("occupations")
 
     def get_object(self):
         """username の大文字小文字を無視して解決する。
@@ -1062,11 +1066,17 @@ class MyOccupationsView(APIView):
     - GET: ``{"slugs": [...]}`` で自分の slug 配列を返す。 未設定は空配列。
     - PUT: ``{"slugs": [...]}`` で **置換** semantics。 最大 3 件。
 
-    認証は Cookie + CSRF を経由する。 DRF の標準動作で 401/403 が出る。
+    認証は Cookie + CSRF。 ``MyUserResidenceView`` 等プロジェクトの状態変更
+    エンドポイントと揃えて ``CSRFEnforcingAuthentication`` を明示する
+    (グローバル fallback の ``JWTAuthentication`` では PUT 時に CSRF が
+    効かない経路があるため、 二重防衛のために authentication_classes を明示)。
     """
 
+    authentication_classes = [CSRFEnforcingAuthentication, CookieAuthentication]
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser]
+    # 意図しない HTTP method 経由の副作用を防ぐ (プロジェクト規約)。
+    http_method_names = ["get", "put", "head", "options"]
 
     def get(self, request: Request) -> Response:
         slugs = list(request.user.occupations.filter(is_active=True).values_list("slug", flat=True))

@@ -151,10 +151,10 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     # 公開プロフィール上に chip 表示するため slug + display_name のみを露出する。
     occupations = serializers.SerializerMethodField()
 
-    def get_occupations(self, obj: User) -> list[dict]:
+    def get_occupations(self, obj: User) -> list[dict[str, str]]:
         # ``user.occupations.all()`` は M2M で、 ``Occupation.Meta.ordering``
-        # (display_order ASC) を継承する。 必要なら view 側で
-        # ``prefetch_related("occupations")`` を入れて N+1 を防ぐ。
+        # (display_order ASC) を継承する。 ``PublicProfileView.get_queryset``
+        # が ``prefetch_related("occupations")`` を入れているので N+1 にならない。
         return [{"slug": o.slug, "display_name": o.display_name} for o in obj.occupations.all()]
 
     def get_is_following(self, obj: User) -> bool:
@@ -364,7 +364,8 @@ class MyOccupationsWriteSerializer(serializers.Serializer):
             )
             missing = [s for s in value if s not in existing]
             if missing:
+                # ``value`` は事前に重複チェック済みなので ``missing`` も重複しない。
                 raise serializers.ValidationError(
-                    f"未知または廃止された職業: {', '.join(sorted(set(missing)))}"
+                    f"未知または廃止された職業: {', '.join(sorted(missing))}"
                 )
         return value
