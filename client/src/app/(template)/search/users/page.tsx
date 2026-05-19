@@ -217,7 +217,9 @@ export default async function UserSearchPage({
 						{/* #810: ハルナさん指示 — ユーザータブ + q なし のとき
 						    「おすすめユーザー」 を中央に表示 (投稿タブの 「最新の投稿」 と
 						    同じ pattern)。 WhoToFollow は anon でも popular fallback で
-						    動くので auth 分岐なしでそのまま使える。 */}
+						    動くので auth 分岐なしでそのまま使える。
+						    #810 hotfix: bare={true} で WhoToFollow 内蔵の h2
+						    「おすすめユーザー」 を抑制し、 外側の h2 と重複させない。 */}
 						<section
 							aria-labelledby="users-recommended-heading"
 							className="space-y-3"
@@ -228,7 +230,7 @@ export default async function UserSearchPage({
 							>
 								おすすめユーザー
 							</h2>
-							<WhoToFollow isAuthenticated={loggedIn} />
+							<WhoToFollow isAuthenticated={loggedIn} bare />
 						</section>
 					</>
 				)}
