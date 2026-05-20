@@ -7,14 +7,23 @@
  * (= 3) chips can be active. After ``保存`` the server replaces the user's
  * occupations with the current selection (PUT semantics).
  *
- * a11y:
- *   - chips are ``role=switch`` with ``aria-checked``
- *   - count indicator uses ``aria-live=polite``
- *   - success toast is shown via ``role=status`` (also polite)
+ * a11y design:
+ *   - chips are ``role=switch`` + ``aria-checked``。 visible text 自身が
+ *     accessible name となるよう ``aria-label`` は付けない (重複ラベル回避)。
+ *   - 4 件目以降は ``aria-disabled="true"`` (focusable は維持)。 SR 経由で
+ *     「ここは disabled で、 なぜ disabled か」 を ``aria-describedby`` で説明。
+ *   - 件数 indicator は visible のみ。 max 境界遷移 (3 件到達 / 解除) のときだけ
+ *     別 ``role=status`` region で 1 回 polite アナウンス (連続更新の noise を抑制)。
+ *   - 限定 hint は ``role=status`` で polite。
+ *   - 保存失敗 inline message は ``role=status`` (assertive の `role=alert` は
+ *     session 切れ等の中断系に予約)。
+ *   - 保存中は ``aria-busy=true`` で SR に「処理中」 を伝える。
+ *   - 選択 chip の text 色は AA 4.5:1 を満たす ``--a-accent-deep`` + white、
+ *     さらに ``✓`` icon を併記して色のみ依存を回避。
  */
 
 import axios from "axios";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "react-toastify";
 
 import { parseDrfErrors } from "@/lib/api/errors";
@@ -29,6 +38,8 @@ interface OccupationChipPickerProps {
 	initialSelectedSlugs: string[];
 }
 
+const HINT_ID = "occupation-limit-hint";
+
 export default function OccupationChipPicker({
 	allOccupations,
 	initialSelectedSlugs,
@@ -41,6 +52,11 @@ export default function OccupationChipPicker({
 	);
 	const [isSaving, setIsSaving] = useState(false);
 	const [errorMsg, setErrorMsg] = useState<string | null>(null);
+	// max 境界遷移のときだけ polite に流すアナウンス。 通常の count 更新は visible 表示のみ。
+	const [boundaryAnnouncement, setBoundaryAnnouncement] = useState<string>("");
+	const prevReachedMaxRef = useRef<boolean>(
+		initialSelectedSlugs.length >= OCCUPATION_MAX_PER_USER,
+	);
 
 	const reachedMax = selected.size >= OCCUPATION_MAX_PER_USER;
 	const isDirty =
@@ -56,8 +72,24 @@ export default function OccupationChipPicker({
 			} else if (next.size < OCCUPATION_MAX_PER_USER) {
 				next.add(slug);
 			}
+			// max 境界の遷移 (達した / 解除した) を 1 回だけ polite に流す。
+			const nextReached = next.size >= OCCUPATION_MAX_PER_USER;
+			if (nextReached !== prevReachedMaxRef.current) {
+				setBoundaryAnnouncement(
+					nextReached
+						? `最大 ${OCCUPATION_MAX_PER_USER} 件選択しました。 これ以上は選択できません。`
+						: "最大選択を解除しました。 追加で選択できます。",
+				);
+				prevReachedMaxRef.current = nextReached;
+			}
 			return next;
 		});
+	};
+
+	const handleChipClick = (slug: string, isDisabled: boolean) => {
+		// aria-disabled でも DOM の onClick は発火するので明示的に early-return。
+		if (isDisabled) return;
+		toggleSlug(slug);
 	};
 
 	const handleSave = async () => {
@@ -72,9 +104,6 @@ export default function OccupationChipPicker({
 			setSelected(nextSaved);
 			toast.success("職業を保存しました");
 		} catch (err: unknown) {
-			// axios error (= サーバ応答あり) は DRF error parser で人間に読める
-			// メッセージを取り出す。 client-side early-throw (Error) は
-			// 既に日本語メッセージなのでそのまま使う。
 			let message = "保存に失敗しました。";
 			if (axios.isAxiosError(err)) {
 				message = parseDrfErrors(err).summary ?? message;
@@ -89,7 +118,7 @@ export default function OccupationChipPicker({
 
 	if (allOccupations.length === 0) {
 		return (
-			<p className="text-sm text-muted-foreground">
+			<p className="text-sm text-muted-foreground" role="status">
 				職業 catalog を取得できませんでした。
 			</p>
 		);
@@ -98,53 +127,68 @@ export default function OccupationChipPicker({
 	return (
 		<section aria-labelledby="occupation-picker-heading" className="space-y-3">
 			<div className="flex items-baseline justify-between">
-				<h3
+				<h2
 					id="occupation-picker-heading"
 					className="text-sm font-semibold tracking-tight"
 				>
 					職業 (最大 {OCCUPATION_MAX_PER_USER} 件)
-				</h3>
+				</h2>
 				<p
 					className="text-xs text-muted-foreground"
-					aria-live="polite"
 					data-testid="occupation-count"
 				>
 					{selected.size} / {OCCUPATION_MAX_PER_USER} 件選択中
 				</p>
 			</div>
 
-			<ul className="flex flex-wrap gap-2" role="group" aria-label="職業を選択">
+			{/* 閾値アナウンス用 polite live region。 通常 count 変更では更新せず、
+			    max 境界をまたいだ瞬間だけ 1 回だけ message を入れる (SR noise 抑制)。 */}
+			<p role="status" className="sr-only">
+				{boundaryAnnouncement}
+			</p>
+
+			<div
+				role="group"
+				aria-label="職業を選択"
+				className="flex flex-wrap gap-2"
+			>
 				{allOccupations.map((occ) => {
 					const isSelected = selected.has(occ.slug);
 					const isDisabled = !isSelected && reachedMax;
 					return (
-						<li key={occ.slug}>
-							<button
-								type="button"
-								role="switch"
-								aria-checked={isSelected}
-								aria-label={occ.display_name}
-								disabled={isDisabled}
-								onClick={() => toggleSlug(occ.slug)}
-								data-slug={occ.slug}
-								className={
-									"rounded-full border px-3 py-1 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
-									(isSelected
-										? "border-[color:var(--a-accent)] bg-[color:var(--a-accent)] text-white"
-										: isDisabled
-											? "cursor-not-allowed border-border text-muted-foreground opacity-50"
-											: "border-border bg-background text-foreground hover:bg-muted")
-								}
-							>
-								{occ.display_name}
-							</button>
-						</li>
+						<button
+							key={occ.slug}
+							type="button"
+							role="switch"
+							aria-checked={isSelected}
+							aria-disabled={isDisabled || undefined}
+							aria-describedby={isDisabled ? HINT_ID : undefined}
+							onClick={() => handleChipClick(occ.slug, isDisabled)}
+							data-slug={occ.slug}
+							className={
+								"inline-flex min-h-[28px] items-center gap-1 rounded-full border px-3 py-1 text-sm transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent-deep)] " +
+								(isSelected
+									? "border-[color:var(--a-accent-deep)] bg-[color:var(--a-accent-deep)] text-white"
+									: isDisabled
+										? "cursor-not-allowed border-border text-muted-foreground opacity-50"
+										: "border-border bg-background text-foreground hover:bg-muted")
+							}
+						>
+							{isSelected && (
+								<span aria-hidden="true" className="text-xs leading-none">
+									✓
+								</span>
+							)}
+							{occ.display_name}
+						</button>
 					);
 				})}
-			</ul>
+			</div>
 
 			{reachedMax && (
 				<p
+					id={HINT_ID}
+					role="status"
 					className="text-xs text-muted-foreground"
 					data-testid="occupation-limit-hint"
 				>
@@ -154,7 +198,7 @@ export default function OccupationChipPicker({
 			)}
 
 			{errorMsg && (
-				<p role="alert" className="text-sm text-red-600">
+				<p role="status" className="text-sm text-red-600">
 					{errorMsg}
 				</p>
 			)}
@@ -164,7 +208,8 @@ export default function OccupationChipPicker({
 					type="button"
 					onClick={handleSave}
 					disabled={!isDirty || isSaving}
-					className="rounded-full bg-[color:var(--a-accent)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+					aria-busy={isSaving || undefined}
+					className="rounded-full bg-[color:var(--a-accent-deep)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--a-accent-deep)] disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{isSaving ? "保存中…" : "職業を保存"}
 				</button>

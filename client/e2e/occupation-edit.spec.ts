@@ -148,13 +148,15 @@ test.describe("Phase 12 P12-06b occupation chip edit + display (#818)", () => {
 		const fullstack = page.getByRole("switch", {
 			name: "フルスタックエンジニア",
 		});
-		await expect(fullstack).toBeDisabled();
+		// a11y-architect HIGH 修正後: disabled 属性ではなく aria-disabled=true で
+		// focus 到達可能にしてある。
+		await expect(fullstack).toHaveAttribute("aria-disabled", "true");
 		await expect(page.getByTestId("occupation-limit-hint")).toBeVisible();
 
 		// boundary: 既選択 chip を 1 つ外すと 4 件目が再び enable になる
 		// (code-reviewer MEDIUM: 境界 test の対称性)
 		await page.getByRole("switch", { name: "バックエンドエンジニア" }).click();
-		await expect(fullstack).not.toBeDisabled();
+		await expect(fullstack).not.toHaveAttribute("aria-disabled", "true");
 		await expect(page.getByTestId("occupation-limit-hint")).not.toBeVisible();
 
 		await ctx.close();

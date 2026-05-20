@@ -101,7 +101,7 @@ describe("OccupationChipPicker", () => {
 		);
 	});
 
-	it("disables unselected chips when 3 chips are selected", async () => {
+	it("marks unselected chips aria-disabled when 3 chips are selected", async () => {
 		const user = userEvent.setup();
 		render(
 			<OccupationChipPicker
@@ -109,17 +109,21 @@ describe("OccupationChipPicker", () => {
 				initialSelectedSlugs={["designer", "frontend", "backend"]}
 			/>,
 		);
-		// 4 件目 (fullstack) は disabled
-		expect(chip("フルスタックエンジニア")).toBeDisabled();
+		// 4 件目 (fullstack) は aria-disabled (focusable は維持して SR が読める)
+		const fullstack = chip("フルスタックエンジニア");
+		expect(fullstack).toHaveAttribute("aria-disabled", "true");
+		expect(fullstack).not.toHaveAttribute("disabled");
 		// 既選択は disable しない (off にできる必要)
-		expect(chip("デザイナー")).not.toBeDisabled();
-		// click しても aria-checked 変わらない
-		await user.click(chip("フルスタックエンジニア"));
-		expect(chip("フルスタックエンジニア")).toHaveAttribute(
-			"aria-checked",
-			"false",
-		);
-		expect(screen.getByTestId("occupation-limit-hint")).toBeInTheDocument();
+		expect(chip("デザイナー")).not.toHaveAttribute("aria-disabled");
+		// click しても aria-checked 変わらない (handler が early-return)
+		await user.click(fullstack);
+		expect(fullstack).toHaveAttribute("aria-checked", "false");
+		// 限定 hint が role=status で polite アナウンスされる
+		const hint = screen.getByTestId("occupation-limit-hint");
+		expect(hint).toBeInTheDocument();
+		expect(hint).toHaveAttribute("role", "status");
+		// 4 件目 chip は hint を aria-describedby で指す
+		expect(fullstack).toHaveAttribute("aria-describedby", hint.id);
 	});
 
 	it("save button is disabled when nothing changed", () => {
@@ -166,8 +170,10 @@ describe("OccupationChipPicker", () => {
 		await user.click(chip("デザイナー"));
 		await user.click(screen.getByRole("button", { name: "職業を保存" }));
 
-		const alert = await screen.findByRole("alert");
-		expect(alert).toHaveTextContent("保存に失敗しました");
+		// role=status (polite) で表示。 role=alert (assertive) は使わない。
+		const statusMsg = await screen.findByText(/保存に失敗しました/);
+		expect(statusMsg).toBeInTheDocument();
+		expect(statusMsg).toHaveAttribute("role", "status");
 		expect(toastSuccessSpy).not.toHaveBeenCalled();
 	});
 

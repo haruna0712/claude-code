@@ -300,14 +300,20 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 
 				{profile.occupations && profile.occupations.length > 0 && (
 					<section aria-label="職業" className="mt-3 px-4">
-						<ul className="flex flex-wrap gap-2">
+						{/* a11y-architect C2: chip 形状を border のみで示すと token contrast が
+						    保証されないため、 ``--a-accent-bg`` (sky-100) を fill にして
+						    text-foreground と AA contrast (>=10:1) を満たす。 */}
+						<ul
+							aria-label={`職業 ${profile.occupations.length} 件`}
+							className="flex flex-wrap gap-2"
+						>
 							{profile.occupations.map((o) => (
 								<li key={o.slug}>
 									<span
-										className="inline-block rounded-full border px-3 py-1 text-xs"
+										className="inline-block rounded-full px-3 py-1 text-xs"
 										style={{
-											borderColor: "var(--a-border)",
-											background: "var(--a-surface-soft, transparent)",
+											background: "var(--a-accent-bg)",
+											color: "var(--a-accent-text)",
 										}}
 									>
 										{o.display_name}
