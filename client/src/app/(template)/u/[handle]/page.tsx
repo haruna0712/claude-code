@@ -48,6 +48,9 @@ interface PublicProfile {
 	is_muting: boolean;
 	/** Phase 4B (#449): User UUID (ReportDialog の target_id 用) */
 	user_id: string;
+	/** Phase 12 P12-06: 職業 chip (controlled vocabulary)。 空配列なら未設定。
+	 *  backend `PublicProfileSerializer.get_occupations` 由来。 */
+	occupations: Array<{ slug: string; display_name: string }>;
 }
 
 type ProfileTab = "tweets" | "likes" | "favorites" | "mentor";
@@ -293,6 +296,32 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 
 				{profile.bio && (
 					<p className="mt-4 whitespace-pre-wrap px-4 text-sm">{profile.bio}</p>
+				)}
+
+				{profile.occupations && profile.occupations.length > 0 && (
+					<section aria-label="職業" className="mt-3 px-4">
+						{/* a11y-architect C2: chip 形状を border のみで示すと token contrast が
+						    保証されないため、 ``--a-accent-bg`` (sky-100) を fill にして
+						    text-foreground と AA contrast (>=10:1) を満たす。 */}
+						<ul
+							aria-label={`職業 ${profile.occupations.length} 件`}
+							className="flex flex-wrap gap-2"
+						>
+							{profile.occupations.map((o) => (
+								<li key={o.slug}>
+									<span
+										className="inline-block rounded-full px-3 py-1 text-xs"
+										style={{
+											background: "var(--a-accent-bg)",
+											color: "var(--a-accent-text)",
+										}}
+									>
+										{o.display_name}
+									</span>
+								</li>
+							))}
+						</ul>
+					</section>
 				)}
 
 				{residence && (
