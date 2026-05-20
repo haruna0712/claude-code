@@ -9,9 +9,10 @@
  * spec: docs/specs/phase-12-residence-map-spec.md §9
  */
 
-import axios, { type AxiosInstance } from "axios";
+import type { AxiosInstance } from "axios";
 
 import { api, ensureCsrfToken } from "@/lib/api/client";
+import { isAxiosStatus } from "@/lib/api/errors";
 
 /** controlled vocabulary 1 件 (catalog from /api/v1/occupations/)。 */
 export interface Occupation {
@@ -39,7 +40,9 @@ export async function fetchMyOccupations(
 		const res = await client.get<{ slugs: string[] }>("/users/me/occupations/");
 		return res.data.slugs;
 	} catch (error: unknown) {
-		if (isAuthFailure(error)) return null;
+		// 未認証 (401/403) は呼び出し側が login redirect を判断できるよう null に
+		// 正規化。 5xx / network 障害は throw して個人データ取得失敗を可視化する。
+		if (isAxiosStatus(error, 401, 403)) return null;
 		throw error;
 	}
 }
@@ -68,10 +71,4 @@ export async function saveMyOccupations(
 		slugs,
 	});
 	return res.data.slugs;
-}
-
-function isAuthFailure(error: unknown): boolean {
-	if (!axios.isAxiosError(error)) return false;
-	const status = error.response?.status;
-	return status === 401 || status === 403;
 }

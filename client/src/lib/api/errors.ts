@@ -14,7 +14,22 @@
  * toast / aria-live announcements.
  */
 
-import type { AxiosError } from "axios";
+import axios, { type AxiosError } from "axios";
+
+/**
+ * 単一の axios error が指定ステータスのいずれかを返したかを判定する。
+ * 404 を null に正規化したり 401/403 を未認証扱いするときに使う共通ヘルパ。
+ *
+ *   if (isAxiosStatus(err, 404)) return null;
+ *   if (isAxiosStatus(err, 401, 403)) return null;
+ *
+ * 非 axios エラー (e.g. ``TypeError``) は常に false を返す。
+ */
+export function isAxiosStatus(error: unknown, ...statuses: number[]): boolean {
+	if (!axios.isAxiosError(error)) return false;
+	const status = error.response?.status;
+	return typeof status === "number" && statuses.includes(status);
+}
 
 export interface FormErrors {
 	/** Top-level message shown near the submit button. */

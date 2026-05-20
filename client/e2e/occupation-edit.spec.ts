@@ -103,8 +103,17 @@ test.describe("Phase 12 P12-06b occupation chip edit + display (#818)", () => {
 		await expect(designer).toHaveAttribute("aria-checked", "true");
 		await expect(frontend).toHaveAttribute("aria-checked", "true");
 
-		// 保存
-		await page.getByRole("button", { name: "職業を保存" }).click();
+		// 保存 click → PUT 完了の signal を 2 つ待つ:
+		//   1. toast の「職業を保存しました」 が見える (完了シグナル)
+		//   2. 保存 button が再 disabled (savedSlugs と selected が一致した、 つまり PUT 反映済)
+		// この 2 つを揃えてから profile 遷移しないと stg ネットワーク遅延で flaky になる
+		// (code-reviewer HIGH 指摘)。
+		const saveButton = page.getByRole("button", { name: "職業を保存" });
+		await saveButton.click();
+		await expect(page.getByText("職業を保存しました")).toBeVisible({
+			timeout: 15000,
+		});
+		await expect(saveButton).toBeDisabled();
 
 		// 自分のプロフィールに行って chip が見える
 		await page.goto(`${BASE}/u/${USER1.handle}`);
@@ -141,6 +150,12 @@ test.describe("Phase 12 P12-06b occupation chip edit + display (#818)", () => {
 		});
 		await expect(fullstack).toBeDisabled();
 		await expect(page.getByTestId("occupation-limit-hint")).toBeVisible();
+
+		// boundary: 既選択 chip を 1 つ外すと 4 件目が再び enable になる
+		// (code-reviewer MEDIUM: 境界 test の対称性)
+		await page.getByRole("switch", { name: "バックエンドエンジニア" }).click();
+		await expect(fullstack).not.toBeDisabled();
+		await expect(page.getByTestId("occupation-limit-hint")).not.toBeVisible();
 
 		await ctx.close();
 	});
