@@ -87,9 +87,11 @@ test.describe("Phase 12 P12-06b occupation chip edit + display (#818)", () => {
 		const page = await ctx.newPage();
 		await page.goto(`${BASE}/settings/profile`);
 
-		// chip picker section の見出しが出るまで待つ
+		// chip picker section の見出しが出るまで待つ。
+		// a11y-architect H2 修正で page h1 → h2 階層を維持するため h3 → h2 に
+		// 変更してある (#818 commit fe952fd) ので level: 2 で参照する。
 		await expect(
-			page.getByRole("heading", { name: /職業/, level: 3 }),
+			page.getByRole("heading", { name: /職業/, level: 2 }),
 		).toBeVisible({ timeout: 15000 });
 
 		// 「デザイナー」 と 「フロントエンドエンジニア」 を switch chip として選ぶ
