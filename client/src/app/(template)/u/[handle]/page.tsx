@@ -299,7 +299,10 @@ export default async function ProfilePage({ params, searchParams }: PageProps) {
 				)}
 
 				{profile.occupations && profile.occupations.length > 0 && (
-					<section aria-label="職業" className="mt-3 px-4">
+					<section aria-label="職業" className="mt-4 px-4">
+						{/* ui-ux-tester polish #818: 居住地 section と同じ
+						    visible <h2>職業</h2> + mt-4 で並べて縦リズム / heading 揃え。 */}
+						<h2 className="mb-2 text-sm font-semibold">職業</h2>
 						{/* a11y-architect C2: chip 形状を border のみで示すと token contrast が
 						    保証されないため、 ``--a-accent-bg`` (sky-100) を fill にして
 						    text-foreground と AA contrast (>=10:1) を満たす。 */}
