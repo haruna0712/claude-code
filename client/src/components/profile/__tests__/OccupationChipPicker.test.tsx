@@ -118,11 +118,32 @@ describe("OccupationChipPicker", () => {
 		// click しても aria-checked 変わらない (handler が early-return)
 		await user.click(fullstack);
 		expect(fullstack).toHaveAttribute("aria-checked", "false");
-		// 限定 hint が role=status で polite アナウンスされる
+		// 初期 (= 保存済み clean state) では hint は出さない
+		// (ui-ux-tester polish #818: 「設定済の状態で常時 hint 表示は視覚 noise」)
+		expect(
+			screen.queryByTestId("occupation-limit-hint"),
+		).not.toBeInTheDocument();
+	});
+
+	it("shows limit hint only after user reaches max with a dirty change", async () => {
+		const user = userEvent.setup();
+		render(
+			<OccupationChipPicker
+				allOccupations={CATALOG}
+				initialSelectedSlugs={["designer", "frontend"]}
+			/>,
+		);
+		expect(
+			screen.queryByTestId("occupation-limit-hint"),
+		).not.toBeInTheDocument();
+
+		// 3 件目を選ぶと dirty + reachedMax で hint が現れる
+		await user.click(chip("バックエンドエンジニア"));
 		const hint = screen.getByTestId("occupation-limit-hint");
-		expect(hint).toBeInTheDocument();
 		expect(hint).toHaveAttribute("role", "status");
-		// 4 件目 chip は hint を aria-describedby で指す
+
+		const fullstack = chip("フルスタックエンジニア");
+		expect(fullstack).toHaveAttribute("aria-disabled", "true");
 		expect(fullstack).toHaveAttribute("aria-describedby", hint.id);
 	});
 

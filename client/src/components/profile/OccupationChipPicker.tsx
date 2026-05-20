@@ -127,10 +127,7 @@ export default function OccupationChipPicker({
 	return (
 		<section aria-labelledby="occupation-picker-heading" className="space-y-3">
 			<div className="flex items-baseline justify-between">
-				<h2
-					id="occupation-picker-heading"
-					className="text-sm font-semibold tracking-tight"
-				>
+				<h2 id="occupation-picker-heading" className="text-base font-semibold">
 					職業 (最大 {OCCUPATION_MAX_PER_USER} 件)
 				</h2>
 				<p
@@ -185,7 +182,7 @@ export default function OccupationChipPicker({
 				})}
 			</div>
 
-			{reachedMax && (
+			{reachedMax && isDirty && (
 				<p
 					id={HINT_ID}
 					role="status"
