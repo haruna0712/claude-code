@@ -45,13 +45,17 @@ describe("UserSearchBox", () => {
 		expect(mockPush).toHaveBeenCalledWith("/search/users");
 	});
 
-	it("encodes special characters in the URL", async () => {
+	it("encodes special characters in the URL (decodes back to the input)", async () => {
 		render(<UserSearchBox />);
 		await userEvent.type(screen.getByRole("searchbox"), "山田 太郎");
 		fireEvent.submit(screen.getByRole("search"));
 		const target = mockPush.mock.calls[0]?.[0] ?? "";
 		expect(target).toContain("/search/users?q=");
-		expect(target).toContain(encodeURIComponent("山田 太郎"));
+		// URLSearchParams で組み立てるため space は `+` 表現になる。 具体的な
+		// エンコード形式ではなく「decode すると元の値に戻る」 契約を検証する
+		// (backend / URLSearchParams は `+` も `%20` も space として解釈)。
+		const q = new URLSearchParams(target.split("?")[1] ?? "").get("q");
+		expect(q).toBe("山田 太郎");
 	});
 
 	it("enforces maxLength=100 on the input", () => {

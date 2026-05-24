@@ -79,6 +79,15 @@ describe("OccupationFilter", () => {
 		});
 	});
 
+	it("preserves view=map when toggling a chip in map view (P12-08 regression)", () => {
+		renderFilter({ view: "map" });
+		fireEvent.click(screen.getByRole("switch", { name: "デザイナー" }));
+		expect(mockPush).toHaveBeenCalledWith(
+			"/search/users?occupation=designer&view=map",
+			{ scroll: false },
+		);
+	});
+
 	it("adds a second occupation while keeping the first (OR set)", () => {
 		renderFilter({ selected: ["designer"] });
 		fireEvent.click(screen.getByRole("switch", { name: "フロントエンド" }));

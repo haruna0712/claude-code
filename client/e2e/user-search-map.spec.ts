@@ -128,10 +128,12 @@ test.describe("Phase 12 P12-08b user search map view (#817)", () => {
 		const page = await anon.newPage();
 		await page.goto(`${BASE}/search/users`);
 
-		await page.getByRole("link", { name: "地図" }).click();
+		// exact:true で toggle の「一覧」/「地図」 を、 map view の「一覧で見る」 escape
+		// link と区別する (後者は部分一致で「一覧」 にもマッチするため)。
+		await page.getByRole("link", { name: "地図", exact: true }).click();
 		await expect(page).toHaveURL(/[?&]view=map/);
 
-		await page.getByRole("link", { name: "一覧" }).click();
+		await page.getByRole("link", { name: "一覧", exact: true }).click();
 		await expect(page).not.toHaveURL(/view=map/);
 
 		await anon.close();

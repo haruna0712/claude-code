@@ -10,12 +10,18 @@
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
+import { buildUserSearchHref, type SearchView } from "@/lib/api/userSearch";
+
 interface UserSearchBoxProps {
 	initialValue?: string;
+	/** P12-08: 現在の表示モード。 検索 submit で list/map を維持する
+	 *  (地図 view で検索すると list に戻る regression を防ぐ)。 */
+	view?: SearchView;
 }
 
 export default function UserSearchBox({
 	initialValue = "",
+	view,
 }: UserSearchBoxProps) {
 	const router = useRouter();
 	const [value, setValue] = useState(initialValue);
@@ -23,11 +29,8 @@ export default function UserSearchBox({
 	const onSubmit = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		const trimmed = value.trim();
-		if (!trimmed) {
-			router.push("/search/users");
-			return;
-		}
-		router.push(`/search/users?q=${encodeURIComponent(trimmed)}`);
+		// view を維持して navigate。 occupation / near_me の維持は別 issue (#827)。
+		router.push(buildUserSearchHref({ q: trimmed, view }));
 	};
 
 	return (
