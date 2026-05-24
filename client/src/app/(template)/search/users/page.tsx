@@ -13,12 +13,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import NearMeFilter from "@/components/search/NearMeFilter";
+import OccupationFilter from "@/components/search/OccupationFilter";
 import SearchModeTabs from "@/components/search/SearchModeTabs";
 import UserSearchBox from "@/components/search/UserSearchBox";
 import UserSearchResultCard from "@/components/search/UserSearchResultCard";
 import WhoToFollow from "@/components/sidebar/WhoToFollow";
+import type { Occupation } from "@/lib/api/occupation";
 import { ApiServerError, serverFetch } from "@/lib/api/server";
 import {
+	buildUserSearchHref,
+	buildUserSearchParams,
 	PROXIMITY_RADIUS_DEFAULT_KM,
 	PROXIMITY_RADIUS_MAX_KM,
 	PROXIMITY_RADIUS_MIN_KM,
@@ -32,6 +36,8 @@ interface SearchPageProps {
 		cursor?: string;
 		near_me?: string;
 		radius_km?: string;
+		/** Next.js は重複 query key を string[] に、 単一を string にする。 */
+		occupation?: string | string[];
 	};
 }
 
@@ -45,6 +51,20 @@ interface SearchQuery {
 	cursor?: string;
 	nearMe: boolean;
 	radiusKm: number;
+	/** P12-07: URL ``?occupation=`` で復元した職業 slug (重複排除済)。 */
+	occupations: string[];
+}
+
+/** ``occupation`` query を string[] に正規化 (単一 string / 配列 / 未指定)。
+ *  空文字を落とし、 重複は除く (URL 安定 + filter の意味は集合)。 */
+function parseOccupations(raw: string | string[] | undefined): string[] {
+	const list = raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];
+	const seen = new Set<string>();
+	for (const slug of list) {
+		const trimmed = slug.trim();
+		if (trimmed) seen.add(trimmed);
+	}
+	return Array.from(seen);
 }
 
 function parseSearchParams(sp: SearchPageProps["searchParams"]): SearchQuery {
@@ -58,7 +78,24 @@ function parseSearchParams(sp: SearchPageProps["searchParams"]): SearchQuery {
 					PROXIMITY_RADIUS_MAX_KM,
 				)
 			: PROXIMITY_RADIUS_DEFAULT_KM;
-	return { q, cursor: sp.cursor, nearMe, radiusKm };
+	return {
+		q,
+		cursor: sp.cursor,
+		nearMe,
+		radiusKm,
+		occupations: parseOccupations(sp.occupation),
+	};
+}
+
+/** SSR で職業 catalog を取得。 失敗しても検索自体は動かすため fail-safe で
+ *  空配列に倒す (filter UI だけ消える)。 silent にしないよう console.error は残す。 */
+async function loadOccupations(): Promise<Occupation[]> {
+	try {
+		return await serverFetch<Occupation[]>("/occupations/");
+	} catch (error) {
+		console.error("[search/users] failed to load occupations catalog", error);
+		return [];
+	}
 }
 
 async function loadCurrentUser(): Promise<CurrentUser | null> {
@@ -77,14 +114,13 @@ type SearchOutcome =
 	| { kind: "error"; message: string };
 
 async function loadUserSearch(query: SearchQuery): Promise<SearchOutcome> {
-	const params = new URLSearchParams();
-	if (query.q) params.set("q", query.q);
-	if (query.cursor) params.set("cursor", query.cursor);
-	if (query.nearMe) {
-		params.set("near_me", "1");
-		params.set("radius_km", String(query.radiusKm));
-	}
-	const qs = params.toString();
+	const qs = buildUserSearchParams({
+		q: query.q,
+		cursor: query.cursor,
+		nearMe: query.nearMe,
+		radiusKm: query.radiusKm,
+		occupations: query.occupations,
+	}).toString();
 	const url = qs ? `/users/search/?${qs}` : "/users/search/";
 	try {
 		const page = await serverFetch<UserSearchPageData>(url);
@@ -125,26 +161,27 @@ function buildSearchHref(
 	query: SearchQuery,
 	overrides: { cursor?: string | null } = {},
 ): string {
-	const params = new URLSearchParams();
-	if (query.q) params.set("q", query.q);
-	if (query.nearMe) {
-		params.set("near_me", "1");
-		params.set("radius_km", String(query.radiusKm));
-	}
-	const cursor = overrides.cursor;
-	if (cursor) params.set("cursor", cursor);
-	const qs = params.toString();
-	return qs ? `/search/users?${qs}` : "/search/users";
+	return buildUserSearchHref({
+		q: query.q,
+		nearMe: query.nearMe,
+		radiusKm: query.radiusKm,
+		occupations: query.occupations,
+		cursor: overrides.cursor,
+	});
 }
 
 export default async function UserSearchPage({
 	searchParams,
 }: SearchPageProps) {
 	const query = parseSearchParams(searchParams);
-	const currentUser = await loadCurrentUser();
+	const [currentUser, occupationCatalog] = await Promise.all([
+		loadCurrentUser(),
+		loadOccupations(),
+	]);
 	const loggedIn = currentUser !== null;
-	// 何も指定がなければ検索しない
-	const hasAnyQuery = query.q.length > 0 || query.nearMe;
+	// 何も指定がなければ検索しない (occupation 選択も検索成立条件)
+	const hasAnyQuery =
+		query.q.length > 0 || query.nearMe || query.occupations.length > 0;
 	const outcome = hasAnyQuery
 		? await loadUserSearch(query)
 		: ({
@@ -156,6 +193,15 @@ export default async function UserSearchPage({
 		outcome.kind === "results" ? extractCursor(outcome.page.next) : null;
 	const prevCursor =
 		outcome.kind === "results" ? extractCursor(outcome.page.previous) : null;
+
+	// header subtitle / 表示用: 選択 occupation slug を display_name に解決。
+	// catalog に無い slug (取得失敗時など) は slug をそのまま見せる。
+	// 表示有無は hasAnyQuery と一致する (occupationLabels.length === query.occupations.length)
+	// ので別 flag を作らず hasAnyQuery を再利用する (typescript-reviewer 指摘の二重管理回避)。
+	const occupationLabels = query.occupations.map(
+		(slug) =>
+			occupationCatalog.find((o) => o.slug === slug)?.display_name ?? slug,
+	);
 
 	return (
 		<>
@@ -174,13 +220,15 @@ export default async function UserSearchPage({
 					>
 						検索
 					</h1>
-					{(query.q || query.nearMe) && (
+					{hasAnyQuery && (
 						<p
 							className="truncate text-[color:var(--a-text-subtle)]"
 							style={{ fontFamily: "var(--a-font-mono)", fontSize: 11 }}
 						>
 							{query.q && `「${query.q}」`}
 							{query.nearMe && ` · 半径 ${query.radiusKm}km`}
+							{occupationLabels.length > 0 &&
+								` · ${occupationLabels.join(" / ")}`}
 						</p>
 					)}
 				</div>
@@ -200,11 +248,25 @@ export default async function UserSearchPage({
 					    (typescript-reviewer HIGH 修正、 client component が
 					    Server Component の re-render で remount されない問題)。 */}
 					<NearMeFilter
-						key={`${query.nearMe}-${query.radiusKm}`}
+						key={`${query.nearMe}-${query.radiusKm}-${query.occupations.join(",")}`}
 						query={query.q}
 						initialNearMe={query.nearMe}
 						initialRadiusKm={query.radiusKm}
 						loggedIn={loggedIn}
+						occupations={query.occupations}
+					/>
+				</div>
+
+				{/* P12-07: 職業 chip filter。 catalog は SSR で取得 (失敗時は
+				    OccupationFilter が null を返して filter UI が消える)。
+				    selected は props から直接導出するので remount 用 key は不要。 */}
+				<div className="mb-6">
+					<OccupationFilter
+						occupations={occupationCatalog}
+						selected={query.occupations}
+						query={query.q}
+						nearMe={query.nearMe}
+						radiusKm={query.radiusKm}
 					/>
 				</div>
 

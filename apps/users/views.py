@@ -24,7 +24,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.common.cookie_auth import CookieAuthentication, CSRFEnforcingAuthentication
-from apps.users.models import UserResidence
+from apps.users.models import Occupation, UserResidence
 from apps.users.s3_presign import generate_presigned_upload_url
 from apps.users.serializers import (
     CustomUserSerializer,
@@ -957,11 +957,41 @@ class UserFullTextSearchView(ListAPIView):
                 self._cached_paginator = UserSearchCursorPagination()
         return self._cached_paginator
 
+    # 1 リクエストで受け付ける occupation slug の上限。 catalog は ~16 件なので
+    # 全選択しても余裕がある一方、 AllowAny endpoint に巨大 IN を投げる abuse を
+    # 防ぐ (python-reviewer HIGH 指摘)。
+    MAX_OCCUPATION_FILTER = 20
+
+    def _valid_occupation_slugs(self) -> list[str]:
+        """``?occupation=`` で渡された slug を **存在 + is_active=True** に正規化。
+
+        未知 slug / 廃止 (is_active=False) slug は落とす (bookmark URL を将来の
+        vocabulary 変更で壊さないため、 P12-07 spec §10.2)。 空白除去 + 重複排除し、
+        ``MAX_OCCUPATION_FILTER`` 件で頭打ちにしてから 1 回だけ DB 照合する。
+        1 件も渡されなければ空 list (DB 照合もしない)。
+        """
+        raw = self.request.query_params.getlist("occupation")
+        # 順序を保ったまま重複排除 → 上限でクランプ。
+        seen: dict[str, None] = {}
+        for s in raw:
+            trimmed = s.strip()
+            if trimmed:
+                seen.setdefault(trimmed)
+        cleaned = list(seen)[: self.MAX_OCCUPATION_FILTER]
+        if not cleaned:
+            return []
+        return list(
+            Occupation.objects.filter(slug__in=cleaned, is_active=True).values_list(
+                "slug", flat=True
+            )
+        )
+
     def get_queryset(self) -> QuerySet:
         params = self.request.query_params
         q = (params.get("q") or "").strip()
         near_me = params.get("near_me") == "1"
         near_raw = params.get("near")
+        occupation_slugs = self._valid_occupation_slugs()
 
         center: tuple[float, float] | None = None
         if near_me:
@@ -990,8 +1020,8 @@ class UserFullTextSearchView(ListAPIView):
                 )
             center = parsed
 
-        if center is None and not q:
-            # 何も指定が無ければ空配列 (P12-04 既存挙動)
+        if center is None and not q and not occupation_slugs:
+            # q / near / occupation のどれも無ければ空配列 (P12-04 既存挙動)
             return User.objects.none()
 
         qs = User.objects.filter(is_active=True)
@@ -999,6 +1029,11 @@ class UserFullTextSearchView(ListAPIView):
             qs = qs.filter(
                 Q(username__icontains=q) | Q(display_name__icontains=q) | Q(bio__icontains=q)
             )
+
+        if occupation_slugs:
+            # 複数 slug は OR 結合 (__in)。 M2M JOIN で同一 user が複数行になるので
+            # .distinct() で重複排除。 q / near との併用は AND (filter の連鎖)。
+            qs = qs.filter(occupations__slug__in=occupation_slugs).distinct()
 
         if center is None:
             return qs.order_by("username")

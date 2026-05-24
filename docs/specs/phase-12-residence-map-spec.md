@@ -291,8 +291,8 @@ PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/onboarding-
 3. ✅ **P12-04** (#680 merged): 汎用 user search page (full-text、 cursor pagination)
 4. ✅ **P12-05** (#681 merged): 近所検索 (haversine SQL, near_me=1 / near=lat,lng)
 5. ✅ **P12-03** (merged): signup wizard step 2 (居住地 prompt)
-6. **P12-06** (#815): `Occupation` model + 多選択編集 UI (本 spec §9 / 本 PR は backend、 frontend は follow-up)
-7. **P12-07** (#816): `/api/v1/users/search/?occupation=` filter + chip filter UI
+6. ✅ **P12-06** (#815 backend / #818 frontend merged): `Occupation` model + 多選択編集 UI (本 spec §9)
+7. **P12-07** (#816): `/api/v1/users/search/?occupation=` filter + chip filter UI (本 spec §10)
 8. **P12-08** (#817): `/search/users` に Leaflet 地図 view toggle (job filter と組み合わせ可能)
 
 各段階で `gan-evaluator` agent に採点させて UX を確認 (新 route 追加なので Phase 11 同様の必須運用)。
@@ -457,3 +457,104 @@ docker compose -f local.yml exec api pytest apps/users/tests/test_occupation.py 
 ### 9.7 frontend テスト (P12-06 follow-up)
 
 follow-up issue で実装。 概要は P12-07 / P12-08 と同様の chip 多選択 vitest + Playwright E2E。
+
+---
+
+## 10. 検索 API の occupation filter + chip UI — P12-07 (#816)
+
+### 10.1 背景
+
+P12-06 (#815 / #818) で User に `Occupation` M2M が入った。 これを **ユーザー検索 API + UI** から
+filter できるようにする。 ハルナさん要望「職業がデザイナーの人を検索する」 の中核。
+
+既存 `UserFullTextSearchView` (`GET /api/v1/users/search/`, §7.4 / §7.5) に occupation filter を
+**追加** する。 地図 view は P12-08 (#817) で別 PR、 本 PR は **list 表示のままの chip filter** に閉じる。
+
+### 10.2 API 仕様
+
+`GET /api/v1/users/search/?occupation=designer&occupation=frontend`
+
+| query                 | 意味                                                               |
+| --------------------- | ------------------------------------------------------------------ |
+| `occupation=<slug>`   | 繰り返し可。 **複数指定は OR 結合** (designer **または** frontend) |
+| `q` との併用          | AND (`q` 部分一致 **かつ** いずれかの occupation を持つ)           |
+| `near_me=1` / `near=` | AND (近所 **かつ** occupation)                                     |
+
+ルール:
+
+- **未知 slug は無視** (存在 + `is_active=True` の slug だけ採用)。 bookmark URL を将来の vocabulary 変更で壊さないため。
+- 有効な occupation slug が **1 件も無ければ occupation filter は適用しない** (q / near 単独検索と同じ挙動)。
+- M2M JOIN で同一 user が重複しうるので **`.distinct()`** で重複排除。
+- occupation だけ指定 (q も near も無し) でも検索成立 → `is_active=True` user を `username` 順で返す。
+- 検索成立条件は「`q` あり **or** `near` 系あり **or** 有効な occupation slug が 1 件以上」。 どれも無ければ従来通り空配列。
+
+レスポンス形は §7.4 の `UserFullTextSerializer` をそのまま流用 (occupation を列に増やさない。 表示は frontend が catalog と突き合わせる必要が無いので最小に保つ)。
+
+### 10.3 実装方針 (backend)
+
+`UserFullTextSearchView.get_queryset`:
+
+1. `params.getlist("occupation")` で slug 配列を取得 (DRF `query_params` は `QueryDict`)。
+2. `Occupation.objects.filter(slug__in=raw_slugs, is_active=True).values_list("slug", flat=True)` で
+   **有効 slug に正規化** (未知 / inactive を落とす)。
+3. 検索成立判定に「有効 occupation slug が 1 件以上」 を OR で加える。
+4. `qs = qs.filter(occupations__slug__in=valid_slugs).distinct()` で OR filter。
+   - near 検索 (haversine annotate) と併用する場合も `.distinct()` を最後に維持する。
+   - 既存 `order_by` の前に `.distinct()` を挟んでも cursor pagination は安定 (ordering 列は username / distance のまま)。
+
+### 10.4 実装方針 (frontend)
+
+- `lib/api/userSearch.ts`: `UserSearchOptions` に `occupations?: string[]` 追加。 `fetchUserSearch` で
+  `occupations.forEach((slug) => params.append("occupation", slug))` (URLSearchParams は append で繰り返し可)。
+- **新規** `components/search/OccupationFilter.tsx` (client component):
+  - props: `occupations: Occupation[]` (catalog), `selected: string[]`, `query`, `nearMe`, `radiusKm`。
+  - chip を `role="group"`、 各 chip は `<button role="switch" aria-checked>` (OccupationChipPicker と同じ a11y パターンを踏襲)。
+  - toggle で `router.push("/search/users?...&occupation=slug")` に URL 同期。 既存 q / near_me / radius_km は維持。
+  - 選択 chip は `--a-accent-deep` 塗り + ✓、 未選択は border のみ (OccupationChipPicker と一貫)。
+- `app/(template)/search/users/page.tsx`:
+  - `searchParams.occupation` は string | string[] (Next.js は重複 key を配列化)。 正規化 helper で `string[]` に。
+  - SSR で `fetchOccupations()` を呼んで catalog を取得 (fail-safe: 失敗時 console.error + [], filter UI 非表示)。
+  - `loadUserSearch` / `buildSearchHref` に occupation を織り込む。 hasAnyQuery 判定に occupation を追加。
+  - `OccupationFilter` を `NearMeFilter` の下に配置。
+- catalog が空 (取得失敗) のとき chip UI は描画しない (q / near は従来通り動く)。
+
+### 10.5 テスト (P12-07)
+
+#### backend pytest — `apps/users/tests/test_user_search_occupation.py`
+
+| case                                 | 期待                                                              |
+| ------------------------------------ | ----------------------------------------------------------------- |
+| `?occupation=designer`               | designer を持つ user のみ、 持たない user は出ない                |
+| `?occupation=designer&=frontend`     | designer **OR** frontend を持つ user (和集合)、 重複 user は 1 件 |
+| 複数 occupation 持つ user の重複排除 | designer+frontend 両方の user が結果に 1 回だけ (`.distinct()`)   |
+| `?q=react&occupation=frontend`       | bio/handle/name に react を含み **かつ** frontend (AND)           |
+| `?near_me=1&occupation=designer`     | auth 必須 + 近所 **かつ** designer (AND)、 anon は 401            |
+| `?near=lat,lng&occupation=designer`  | anon 可 + 近所 **かつ** designer (AND)                            |
+| 未知 slug 単独 `?occupation=xxx`     | 有効 slug 0 件 + q/near 無し → **空配列** (検索条件なし扱い)      |
+| inactive slug 単独                   | 採用しない → 有効 slug 0 件 → **空配列**                          |
+| valid + invalid 混在                 | invalid を drop し valid slug だけで filter                       |
+| occupation 単独 (有効 slug あり)     | 検索成立、 該当 user を username 順                               |
+| 何も指定無し (occupation も無し)     | 空配列 (従来挙動維持)                                             |
+
+#### frontend vitest — `lib/api/__tests__/userSearch.test.ts` (追記) + `components/search/__tests__/OccupationFilter.test.tsx`
+
+- `fetchUserSearch` が `occupations: ["designer","frontend"]` を `?occupation=designer&occupation=frontend` に展開
+- 空配列 / 未指定なら occupation param を付けない
+- OccupationFilter: chip click で `router.push` が呼ばれ URL に occupation slug が入る
+- 選択済み chip 再 click で URL から外れる
+- selected prop の chip が `aria-checked="true"`
+
+#### E2E — `client/e2e/user-search-occupation.spec.ts`
+
+| ID          | 誰が | 何をする                                       | 何が見える                                                 |
+| ----------- | ---- | ---------------------------------------------- | ---------------------------------------------------------- |
+| OCCSEARCH-1 | anon | `/search/users` で「デザイナー」 chip を click | URL に `?occupation=designer`、 designer user が結果に出る |
+| OCCSEARCH-2 | anon | designer + frontend の 2 chip を選択           | 両方の OR 和集合が出る、 URL に 2 つの occupation          |
+| OCCSEARCH-3 | anon | chip 選択した URL を直接 reload                | chip が選択状態を保持 (URL → 初期 selected 復元)           |
+| OCCSEARCH-4 | anon | `?q=...&occupation=designer` で q と併用       | q AND occupation で絞られる                                |
+
+実行:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/user-search-occupation.spec.ts
+```

@@ -121,4 +121,39 @@ describe("NearMeFilter", () => {
 			"/search/users?near_me=1&radius_km=30",
 		);
 	});
+
+	it("preserves occupation filter when toggling near_me (P12-07 cross-filter)", () => {
+		render(
+			<NearMeFilter
+				query="rust"
+				initialNearMe={false}
+				initialRadiusKm={10}
+				loggedIn={true}
+				occupations={["designer", "frontend"]}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("checkbox"));
+		expect(mockPush).toHaveBeenCalledWith(
+			"/search/users?q=rust&near_me=1&radius_km=10&occupation=designer&occupation=frontend",
+		);
+	});
+
+	it("keeps occupation in login next= link when not logged in", () => {
+		render(
+			<NearMeFilter
+				query=""
+				initialNearMe={false}
+				initialRadiusKm={10}
+				loggedIn={false}
+				occupations={["designer"]}
+			/>,
+		);
+		const loginLink = screen.getByRole("link", {
+			name: "ログインして近い順に探す",
+		});
+		expect(loginLink).toHaveAttribute(
+			"href",
+			`/login?next=${encodeURIComponent("/search/users?occupation=designer")}`,
+		);
+	});
 });

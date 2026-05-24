@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import {
+	buildUserSearchHref,
 	PROXIMITY_RADIUS_DEFAULT_KM,
 	PROXIMITY_RADIUS_MAX_KM,
 	PROXIMITY_RADIUS_MIN_KM,
@@ -29,6 +30,9 @@ interface NearMeFilterProps {
 	initialRadiusKm: number;
 	/** 「ログイン必須」 を出す必要があるかどうか。 page 側で current user を見て判定。 */
 	loggedIn: boolean;
+	/** P12-07: 併存する職業 filter。 near_me toggle / slider 操作で取りこぼさず
+	 *  URL を維持する (code-reviewer HIGH: cross-filter state loss 対策)。 */
+	occupations?: string[];
 }
 
 export default function NearMeFilter({
@@ -36,20 +40,21 @@ export default function NearMeFilter({
 	initialNearMe,
 	initialRadiusKm,
 	loggedIn,
+	occupations = [],
 }: NearMeFilterProps) {
 	const router = useRouter();
 	const [nearMe, setNearMe] = useState(initialNearMe);
 	const [radiusKm, setRadiusKm] = useState(initialRadiusKm);
 
 	function navigate(next: { nearMe: boolean; radiusKm: number }) {
-		const params = new URLSearchParams();
-		if (query) params.set("q", query);
-		if (next.nearMe) {
-			params.set("near_me", "1");
-			params.set("radius_km", String(next.radiusKm));
-		}
-		const qs = params.toString();
-		router.push(qs ? `/search/users?${qs}` : "/search/users");
+		router.push(
+			buildUserSearchHref({
+				q: query,
+				nearMe: next.nearMe,
+				radiusKm: next.radiusKm,
+				occupations,
+			}),
+		);
 	}
 
 	return (
@@ -82,7 +87,7 @@ export default function NearMeFilter({
 				{!loggedIn && (
 					<Link
 						href={`/login?next=${encodeURIComponent(
-							query ? `/search/users?q=${query}` : "/search/users",
+							buildUserSearchHref({ q: query, occupations }),
 						)}`}
 						className="rounded-md border border-[color:var(--a-border)] px-2 py-1 text-[color:var(--a-text-muted)] underline-offset-2 hover:underline"
 						style={{ fontSize: 11.5 }}

@@ -1,7 +1,12 @@
 /**
- * userSearch helper tests (Phase 12 P12-04).
+ * userSearch helper tests (Phase 12 P12-04 / P12-07).
+ *
+ * P12-07 で ``fetchUserSearch`` の params 組み立てが ``Record<string,string>``
+ * から ``URLSearchParams`` に変わった (occupation の同名 key 繰り返しを
+ * サポートするため)。 アサーションは URLSearchParams を介して検証する。
  */
 
+import type { AxiosRequestConfig } from "axios";
 import MockAdapter from "axios-mock-adapter";
 import { describe, expect, it } from "vitest";
 
@@ -15,11 +20,27 @@ function stub() {
 	return { client, mock };
 }
 
+/** config.params (URLSearchParams) を単一値の plain object に潰す。
+ *  occupation のような複数値 key は getAll で別途検証する。
+ *  誤って複数値 key にこの helper を使うと last-wins で false-green になるため、
+ *  重複 key を検出したら明示的に throw する (typescript-reviewer HIGH 指摘)。 */
+function scalarParams(config: AxiosRequestConfig): Record<string, string> {
+	const params = config.params as URLSearchParams;
+	const keys = Array.from(params.keys());
+	const dupes = keys.filter((k, i) => keys.indexOf(k) !== i);
+	if (dupes.length > 0) {
+		throw new Error(
+			`scalarParams() received duplicate keys [${dupes.join(", ")}]; use getAll() instead`,
+		);
+	}
+	return Object.fromEntries(params.entries());
+}
+
 describe("userSearch API", () => {
 	it("fetchUserSearch sends ?q= when query is non-empty", async () => {
 		const { client, mock } = stub();
 		mock.onGet("/users/search/").reply((config) => {
-			expect(config.params).toEqual({ q: "alice" });
+			expect(scalarParams(config)).toEqual({ q: "alice" });
 			return [
 				200,
 				{
@@ -46,7 +67,7 @@ describe("userSearch API", () => {
 	it("fetchUserSearch trims whitespace and omits empty q", async () => {
 		const { client, mock } = stub();
 		mock.onGet("/users/search/").reply((config) => {
-			expect(config.params).toEqual({});
+			expect(scalarParams(config)).toEqual({});
 			return [200, { results: [], next: null, previous: null }];
 		});
 		const page = await fetchUserSearch("   ", {}, client);
@@ -56,7 +77,7 @@ describe("userSearch API", () => {
 	it("fetchUserSearch forwards cursor for pagination", async () => {
 		const { client, mock } = stub();
 		mock.onGet("/users/search/").reply((config) => {
-			expect(config.params).toEqual({ q: "bob", cursor: "abc123" });
+			expect(scalarParams(config)).toEqual({ q: "bob", cursor: "abc123" });
 			return [200, { results: [], next: null, previous: "prev=xyz" }];
 		});
 		const page = await fetchUserSearch("bob", { cursor: "abc123" }, client);
@@ -94,7 +115,7 @@ describe("userSearch API", () => {
 	it("fetchUserSearch sends near_me=1 + radius_km when proximity enabled", async () => {
 		const { client, mock } = stub();
 		mock.onGet("/users/search/").reply((config) => {
-			expect(config.params).toEqual({ near_me: "1", radius_km: "15" });
+			expect(scalarParams(config)).toEqual({ near_me: "1", radius_km: "15" });
 			return [200, { results: [], next: null, previous: null }];
 		});
 		await fetchUserSearch("", { nearMe: true, radiusKm: 15 }, client);
@@ -103,7 +124,7 @@ describe("userSearch API", () => {
 	it("fetchUserSearch combines q + near_me + cursor", async () => {
 		const { client, mock } = stub();
 		mock.onGet("/users/search/").reply((config) => {
-			expect(config.params).toEqual({
+			expect(scalarParams(config)).toEqual({
 				q: "rust",
 				cursor: "abc",
 				near_me: "1",
@@ -121,9 +142,55 @@ describe("userSearch API", () => {
 	it("fetchUserSearch defaults radiusKm to 10 when nearMe with no radius", async () => {
 		const { client, mock } = stub();
 		mock.onGet("/users/search/").reply((config) => {
-			expect(config.params).toEqual({ near_me: "1", radius_km: "10" });
+			expect(scalarParams(config)).toEqual({ near_me: "1", radius_km: "10" });
 			return [200, { results: [], next: null, previous: null }];
 		});
 		await fetchUserSearch("", { nearMe: true }, client);
+	});
+
+	it("fetchUserSearch appends one occupation param per slug (P12-07)", async () => {
+		const { client, mock } = stub();
+		mock.onGet("/users/search/").reply((config) => {
+			const params = config.params as URLSearchParams;
+			expect(params.getAll("occupation")).toEqual(["designer", "frontend"]);
+			return [200, { results: [], next: null, previous: null }];
+		});
+		await fetchUserSearch(
+			"",
+			{ occupations: ["designer", "frontend"] },
+			client,
+		);
+	});
+
+	it("fetchUserSearch omits occupation param when array empty/undefined", async () => {
+		const { client, mock } = stub();
+		mock.onGet("/users/search/").reply((config) => {
+			const params = config.params as URLSearchParams;
+			expect(params.getAll("occupation")).toEqual([]);
+			expect(scalarParams(config)).toEqual({ q: "go" });
+			return [200, { results: [], next: null, previous: null }];
+		});
+		await fetchUserSearch("go", { occupations: [] }, client);
+	});
+
+	it("fetchUserSearch combines q + occupation (AND on backend)", async () => {
+		const { client, mock } = stub();
+		mock.onGet("/users/search/").reply((config) => {
+			const params = config.params as URLSearchParams;
+			expect(params.get("q")).toBe("react");
+			expect(params.getAll("occupation")).toEqual(["frontend"]);
+			return [200, { results: [], next: null, previous: null }];
+		});
+		await fetchUserSearch("react", { occupations: ["frontend"] }, client);
+	});
+
+	it("fetchUserSearch skips empty / whitespace-only slugs in occupations", async () => {
+		const { client, mock } = stub();
+		mock.onGet("/users/search/").reply((config) => {
+			const params = config.params as URLSearchParams;
+			expect(params.getAll("occupation")).toEqual(["designer"]);
+			return [200, { results: [], next: null, previous: null }];
+		});
+		await fetchUserSearch("", { occupations: ["designer", "", "   "] }, client);
 	});
 });
