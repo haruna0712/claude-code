@@ -249,7 +249,7 @@ export default async function UserSearchPage({
 					ユーザー名、表示名、自己紹介で検索します。投稿を探す場合は「投稿」タブに切り替えてください。
 				</p>
 				<div className="mb-3">
-					<UserSearchBox initialValue={query.q} />
+					<UserSearchBox initialValue={query.q} view={query.view} />
 				</div>
 				<div className="mb-6">
 					{/* key で URL 状態が変わるたびに NearMeFilter を remount し、
@@ -263,6 +263,7 @@ export default async function UserSearchPage({
 						initialRadiusKm={query.radiusKm}
 						loggedIn={loggedIn}
 						occupations={query.occupations}
+						view={query.view}
 					/>
 				</div>
 
@@ -276,6 +277,7 @@ export default async function UserSearchPage({
 						query={query.q}
 						nearMe={query.nearMe}
 						radiusKm={query.radiusKm}
+						view={query.view}
 					/>
 				</div>
 

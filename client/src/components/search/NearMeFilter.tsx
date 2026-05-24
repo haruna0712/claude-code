@@ -22,6 +22,7 @@ import {
 	PROXIMITY_RADIUS_DEFAULT_KM,
 	PROXIMITY_RADIUS_MAX_KM,
 	PROXIMITY_RADIUS_MIN_KM,
+	type SearchView,
 } from "@/lib/api/userSearch";
 
 interface NearMeFilterProps {
@@ -33,6 +34,8 @@ interface NearMeFilterProps {
 	/** P12-07: 併存する職業 filter。 near_me toggle / slider 操作で取りこぼさず
 	 *  URL を維持する (code-reviewer HIGH: cross-filter state loss 対策)。 */
 	occupations?: string[];
+	/** P12-08: 現在の表示モード。 near_me toggle で list/map を維持する。 */
+	view?: SearchView;
 }
 
 export default function NearMeFilter({
@@ -41,6 +44,7 @@ export default function NearMeFilter({
 	initialRadiusKm,
 	loggedIn,
 	occupations = [],
+	view,
 }: NearMeFilterProps) {
 	const router = useRouter();
 	const [nearMe, setNearMe] = useState(initialNearMe);
@@ -53,6 +57,7 @@ export default function NearMeFilter({
 				nearMe: next.nearMe,
 				radiusKm: next.radiusKm,
 				occupations,
+				view,
 			}),
 		);
 	}
@@ -87,7 +92,7 @@ export default function NearMeFilter({
 				{!loggedIn && (
 					<Link
 						href={`/login?next=${encodeURIComponent(
-							buildUserSearchHref({ q: query, occupations }),
+							buildUserSearchHref({ q: query, occupations, view }),
 						)}`}
 						className="rounded-md border border-[color:var(--a-border)] px-2 py-1 text-[color:var(--a-text-muted)] underline-offset-2 hover:underline"
 						style={{ fontSize: 11.5 }}

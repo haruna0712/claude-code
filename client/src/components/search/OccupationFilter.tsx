@@ -23,7 +23,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 import type { Occupation } from "@/lib/api/occupation";
-import { buildUserSearchHref } from "@/lib/api/userSearch";
+import { buildUserSearchHref, type SearchView } from "@/lib/api/userSearch";
 
 interface OccupationFilterProps {
 	/** GET /api/v1/occupations/ の catalog (is_active のみ、 display_order 順)。 */
@@ -35,6 +35,9 @@ interface OccupationFilterProps {
 	/** 併存する近所検索 state (URL 維持用)。 */
 	nearMe: boolean;
 	radiusKm: number;
+	/** P12-08: 現在の表示モード。 chip toggle で list/map を維持する
+	 *  (地図 view で chip を押すと list に戻る regression を防ぐ)。 */
+	view?: SearchView;
 }
 
 export default function OccupationFilter({
@@ -43,6 +46,7 @@ export default function OccupationFilter({
 	query,
 	nearMe,
 	radiusKm,
+	view,
 }: OccupationFilterProps) {
 	const router = useRouter();
 
@@ -79,6 +83,7 @@ export default function OccupationFilter({
 				nearMe,
 				radiusKm,
 				occupations: nextOccupations,
+				view,
 			}),
 			{ scroll: false },
 		);
