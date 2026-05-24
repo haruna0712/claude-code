@@ -125,11 +125,15 @@ test.describe("Phase 12 P12-07 user search occupation filter (#816)", () => {
 		// URL が ?occupation=designer に同期する
 		await expect(page).toHaveURL(/[?&]occupation=designer/);
 
-		// designer の USER1 は出る、 backend の USER2 は出ない
+		// designer の USER1 は出る、 backend の USER2 は出ない。
+		// locator は必ず「検索結果」 region に scope する: page 全体だと右 rail の
+		// WhoToFollow (おすすめユーザー) の /u/<handle> link を拾って false 一致する。
 		const results = page.getByRole("region", { name: "検索結果" });
 		await expect(results).toBeVisible({ timeout: 15000 });
-		await expect(page.locator(`a[href="/u/${USER1.handle}"]`)).toBeVisible();
-		await expect(page.locator(`a[href="/u/${USER2.handle}"]`)).toHaveCount(0);
+		await expect(results.locator(`a[href="/u/${USER1.handle}"]`)).toBeVisible();
+		await expect(results.locator(`a[href="/u/${USER2.handle}"]`)).toHaveCount(
+			0,
+		);
 
 		await anon.close();
 	});
@@ -156,11 +160,11 @@ test.describe("Phase 12 P12-07 user search occupation filter (#816)", () => {
 		await expect(page).toHaveURL(/occupation=designer/);
 		await expect(page).toHaveURL(/occupation=backend/);
 
-		// OR 和集合: USER1 (designer) も USER2 (backend) も出る
-		await expect(page.locator(`a[href="/u/${USER1.handle}"]`)).toBeVisible({
-			timeout: 15000,
-		});
-		await expect(page.locator(`a[href="/u/${USER2.handle}"]`)).toBeVisible();
+		// OR 和集合: USER1 (designer) も USER2 (backend) も出る (検索結果 region に scope)
+		const results = page.getByRole("region", { name: "検索結果" });
+		await expect(results).toBeVisible({ timeout: 15000 });
+		await expect(results.locator(`a[href="/u/${USER1.handle}"]`)).toBeVisible();
+		await expect(results.locator(`a[href="/u/${USER2.handle}"]`)).toBeVisible();
 
 		await anon.close();
 	});
@@ -198,20 +202,29 @@ test.describe("Phase 12 P12-07 user search occupation filter (#816)", () => {
 		const anon = await browser.newContext();
 		const page = await anon.newPage();
 
-		// q=<USER1 handle> AND occupation=designer → USER1 が出る
+		// q=<USER1 handle> AND occupation=designer → USER1 が出る (検索結果 region に scope)
 		await page.goto(
 			`${BASE}/search/users?q=${encodeURIComponent(USER1.handle)}&occupation=designer`,
 		);
-		await expect(page.locator(`a[href="/u/${USER1.handle}"]`)).toBeVisible({
-			timeout: 15000,
-		});
+		const hitResults = page.getByRole("region", { name: "検索結果" });
+		await expect(hitResults).toBeVisible({ timeout: 15000 });
+		await expect(
+			hitResults.locator(`a[href="/u/${USER1.handle}"]`),
+		).toBeVisible();
 
-		// 同じ q だが USER1 が持たない occupation=backend → USER1 は出ない (AND)
+		// 同じ q だが USER1 が持たない occupation=backend → USER1 は出ない (AND)。
+		// まず空状態メッセージの描画を待ち (検索が走って 0 件だったことを確定させ、
+		// vacuous な 0 件アサーションを避ける)、 その上で region 内 link が 0 を確認。
 		await page.goto(
 			`${BASE}/search/users?q=${encodeURIComponent(USER1.handle)}&occupation=backend`,
 		);
-		// 検索は走るが該当無し (USER1 は backend を持たない)
-		await expect(page.locator(`a[href="/u/${USER1.handle}"]`)).toHaveCount(0);
+		await expect(
+			page.getByText("条件に一致するユーザーは見つかりませんでした"),
+		).toBeVisible({ timeout: 15000 });
+		const emptyResults = page.getByRole("region", { name: "検索結果" });
+		await expect(
+			emptyResults.locator(`a[href="/u/${USER1.handle}"]`),
+		).toHaveCount(0);
 
 		await anon.close();
 	});
