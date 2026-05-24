@@ -292,7 +292,7 @@ PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/onboarding-
 4. ✅ **P12-05** (#681 merged): 近所検索 (haversine SQL, near_me=1 / near=lat,lng)
 5. ✅ **P12-03** (merged): signup wizard step 2 (居住地 prompt)
 6. ✅ **P12-06** (#815 backend / #818 frontend merged): `Occupation` model + 多選択編集 UI (本 spec §9)
-7. **P12-07** (#816): `/api/v1/users/search/?occupation=` filter + chip filter UI (本 spec §10)
+7. ✅ **P12-07** (#816 merged / PR #823, E2E hotfix #826): `/api/v1/users/search/?occupation=` filter + chip filter UI (本 spec §10、 stg E2E 4/4 pass、 gan-evaluator 8.0/10、 ui-ux-tester CRITICAL 0 → follow-up #827 / #828)
 8. **P12-08** (#817): `/search/users` に Leaflet 地図 view toggle (job filter と組み合わせ可能)
 
 各段階で `gan-evaluator` agent に採点させて UX を確認 (新 route 追加なので Phase 11 同様の必須運用)。
