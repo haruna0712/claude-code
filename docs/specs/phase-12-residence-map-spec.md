@@ -293,7 +293,7 @@ PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/onboarding-
 5. ✅ **P12-03** (merged): signup wizard step 2 (居住地 prompt)
 6. ✅ **P12-06** (#815 backend / #818 frontend merged): `Occupation` model + 多選択編集 UI (本 spec §9)
 7. ✅ **P12-07** (#816 merged / PR #823, E2E hotfix #826): `/api/v1/users/search/?occupation=` filter + chip filter UI (本 spec §10、 stg E2E 4/4 pass、 gan-evaluator 8.0/10、 ui-ux-tester CRITICAL 0 → follow-up #827 / #828)
-8. **P12-08** (#817): `/search/users` に Leaflet 地図 view toggle (job filter と組み合わせ可能)
+8. **P12-08** (#817): `/search/users` に Leaflet 地図 view toggle + bbox query (本 spec §11、 backend=P12-08a / frontend=P12-08b の 2 PR)
 
 各段階で `gan-evaluator` agent に採点させて UX を確認 (新 route 追加なので Phase 11 同様の必須運用)。
 
@@ -557,4 +557,136 @@ filter できるようにする。 ハルナさん要望「職業がデザイナ
 
 ```bash
 PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/user-search-occupation.spec.ts
+```
+
+---
+
+## 11. 地図 view toggle + bbox query — P12-08 (#817)
+
+### 11.1 背景
+
+ハルナさん要望の最終形:「ユーザー検索で地図上で検索できる。 地図の上に検索欄があって、 職業がデザイナーの人を検索する」。 P12-06 (職業 model) / P12-07 (職業 filter) が揃ったので、 `/search/users` に **地図 view** を載せる。 地図上で職業 chip + bbox pan が効く。
+
+スコープを 2 PR に分割 (500 行 guideline + review 量):
+
+- **P12-08a (backend)**: search response に `residence` / `occupations` を追加 + `?bbox=` filter
+- **P12-08b (frontend)**: `UserMapView` + `SearchViewToggle` + page 統合 + E2E
+
+### 11.2 プライバシー設計 (最重要)
+
+- 地図に出すのは各 user が **自分で設定した residence の円** (中心 + 半径、 min 500m)。 P12-01 で既にピンポイント漏れは防いである (DB CheckConstraint で radius ≥ 500m)。
+- **中心 marker (ピン) は描かない**。 Circle (塗り) のみ。 ピンを描くと「ここに住んでいる」 と誤読されるため。 円の中心は user が粗く設定した点であって自宅ではない、 という P12-02 の設計を踏襲。
+- residence 未設定 user は **地図 view から除外** (bbox filter は residence INNER JOIN)。 list view には従来通り出る。
+
+### 11.3 API 仕様 (P12-08a)
+
+#### search response に residence / occupations を追加
+
+`UserFullTextSerializer` (`GET /api/v1/users/search/`) に nested field を追加:
+
+```jsonc
+{
+	"user_id": "...",
+	"username": "...",
+	"display_name": "...",
+	"bio": "...",
+	"avatar_url": "...",
+	"distance_km": null,
+	"residence": {
+		"latitude": "35.681236",
+		"longitude": "139.767125",
+		"radius_m": 500,
+	}, // 未設定なら null
+	"occupations": [{ "slug": "designer", "display_name": "デザイナー" }], // 空配列可
+}
+```
+
+- `residence` は `select_related("residence")` で N+1 回避。 未設定は `null`。
+- `occupations` は `prefetch_related("occupations")` で N+1 回避。 map の Circle 配色 + popup chip 用。
+- list view (既存) はこの 2 field を無視するだけ。 後方互換。
+
+#### `?bbox=south,west,north,east` filter
+
+> **privacy 判断 (council 2026-05)**: bbox は「矩形内の全 user の residence を一括取得」 する
+> **地理的総ざらい列挙**。 個々の円は 500m で粗いが、 occupation filter + 矩形 sweep で
+> 「この界隈の designer を全部出す」 ができてしまう。 anon の drive-by / scraper sweep を
+> 防ぐため、 **bbox は near_me と同様 auth 必須** にする (occupation/text 検索は anon のまま)。
+> 「profile で公開済」 ≠ 「地図で sweep 列挙可」。
+
+| query                              | 意味                                                                    |
+| ---------------------------------- | ----------------------------------------------------------------------- |
+| `bbox=sw_lat,sw_lng,ne_lat,ne_lng` | residence center が矩形内の user のみ。 **auth 必須** (anon は 401)     |
+| `occupation` との併用              | AND (bbox 内 **かつ** その職業)                                         |
+| `q` との併用                       | AND                                                                     |
+| `near_me` / `near` との併用        | **near 系を優先** (bbox は無視)。 両方 distance/矩形 は UX 上両立しない |
+
+ルール:
+
+- **auth check を最優先**: anon が bbox を付けたら parse 前に **401** (near_me と一貫)。
+- 4 値 comma 区切り、 各 float、 `south ≤ north` / 緯度 ∈ [-90,90] / 経度 ∈ [-180,180]。 不正は **400**。
+- 経度の日付変更線跨ぎ (west > east) は MVP では非対応 (400 でなく east<west も許容し単純 `BETWEEN`、 跨ぎは結果 0 でよい)。 → シンプルに `latitude BETWEEN south AND north AND longitude BETWEEN west AND east`。
+- residence INNER JOIN (lat/lng の範囲 lookup が自動で INNER JOIN するので未設定 user は除外)、 self 除外は near と異なり **しない** (bbox は自分も地図に出てよい)。
+- `bbox` 単独 (q / near / occupation 無し) でも検索成立 (ただし auth 済み)。
+- 並びは `username` (距離概念が無いので proximity paginator は使わない)。
+- 結果上限の注意: bbox が広いと大量 hit しうる。 pagination (cursor, page_size=20) はそのまま効く。 frontend は「50 件超なら zoom in 促し」 を出すが、 **backend は通常 pagination で返す** (count を別途返さず、 frontend は 1 page 目 + `next` 有無で「多すぎ」 を判定)。
+
+### 11.4 frontend 設計 (P12-08b)
+
+- **`SearchViewToggle.tsx`**: list ↔ map の切替。 `role=switch` ではなく **2 つの `role=tab` / もしくは aria-pressed の toggle button 2 個** が素直 (#824 の議論を踏まえ button + `aria-pressed`)。 `?view=map` / `?view=list` (default list) を URL 同期。 keyboard 操作可。
+
+  > **scope 判断 (council 2026-05)**: **pan-to-update (地図 pan/zoom → `?bbox=` 再取得) は P12-08b では作らない**。
+  > MVP は「occupation chip で絞る → 該当 user の residence 円を地図に出す → tap でプロフィール」。
+  > 地図は**現在の検索結果 (text/occupation filter) を別レンダリングしたもの**で、 anon のまま動く
+  > (= owner 要望「地図で designer を探す」 を満たす)。 pan で矩形を sweep する「この area を検索」 機能は
+  > bbox endpoint (auth 必須) を使う **follow-up issue** に切り出す (debounce/race の複雑さ + privacy の
+  > sweep 面を分離)。 PR A の bbox endpoint は follow-up までは dormant (auth-gated)。
+
+- **`UserMapView.tsx`** (`next/dynamic` + `ssr:false`、 Leaflet):
+  - 描画対象は**現在の検索結果**(occupation/text filter 済み) のうち residence を持つ user。 bbox は使わない。
+  - 地図中心 / zoom は描画する円に **auto-fit** (`fitBounds`)。 結果 0 なら東京駅 default + 空 state 文言。
+  - 各 user の residence を `Circle` で描画。 配色は先頭 occupation の slug→色 (固定 palette、 無職業は neutral gray)。 **中心 marker は描かない** (§11.2)。
+  - Circle click → popup (display_name / @handle / occupation chip / 「プロフィールを見る」 link)。 ESC で閉じる。
+  - 職業 chip filter (`OccupationFilter`) は list/map 共通で上部に出す → map でも Circle が増減。
+- **`SearchViewToggle.tsx`**: list ↔ map の切替。 `aria-pressed` の toggle button 2 個。 `?view=map` / `?view=list` (default list) を URL 同期、 keyboard 操作可。
+- **a11y**: 地図は keyboard-only user に厳しいので **list view を常に並存** (toggle で戻れる)。 map view でも「一覧で見る」 link を出す (dead-end 回避)。
+- **TileLayer (`map/MapTileLayer.tsx` で集約)**: OSM 標準 URL を **env var (`NEXT_PUBLIC_MAP_TILE_URL` / attribution) で差し替え可能**にして 1 箇所に集約する (council 全員一致 — prod で OSM 規約に当たる前に MapTiler/Protomaps 等へ env 変更だけで swap できる seam を今作る)。 既存 `ResidenceCircleMap` のインライン URL も将来この集約に寄せる (本 PR では新規 map view のみ)。
+
+### 11.5 OSM タイル使用ポリシー
+
+OSM 公式タイルは production heavy traffic で規約違反になりうる。 MVP / stg は OSM 標準で OK。 prod DAU 増加時に Carto / Stadia / 自前 tile server に切替 (follow-up issue)。
+
+### 11.6 テスト
+
+#### backend pytest — `apps/users/tests/test_user_search_bbox.py` (P12-08a)
+
+| case                                      | 期待                                                    |
+| ----------------------------------------- | ------------------------------------------------------- |
+| anon の `?bbox=`                          | **401** (auth 必須、 sweep 列挙の privacy 防御)         |
+| (auth) `?bbox=` 内の residence user のみ  | 矩形内 user が出る、 矩形外は出ない                     |
+| (auth) residence 未設定 user は除外       | 未設定は結果に出ない                                    |
+| (auth) `?bbox=...&occupation=designer`    | bbox 内 AND designer                                    |
+| (auth) 不正 bbox (3値/非数値/範囲外/反転) | 400                                                     |
+| `?bbox=` + `?near_me=1`                   | near_me 優先 (bbox 無視、 distance 順)                  |
+| response に residence / occupations 含む  | residence={lat,lng,radius_m} or null、 occupations 配列 |
+| residence の N+1 が無い                   | `django_assert_max_num_queries` で query 数を bound     |
+
+#### frontend vitest (P12-08b)
+
+- `SearchViewToggle`: list/map click で `?view=` 同期、 `aria-pressed` 反映
+- `userSearch.ts`: `bbox` / `view` を query に織り込む (buildUserSearchParams 拡張)
+- `UserMapView`: react-leaflet を mock し、 residence ありの user 数だけ Circle、 未設定は描かない、 occupation 配色
+
+#### E2E — `client/e2e/user-search-map.spec.ts` (P12-08b)
+
+| ID    | 誰が | 何をする                                    | 何が見える                                     |
+| ----- | ---- | ------------------------------------------- | ---------------------------------------------- |
+| MAP-1 | anon | `/search/users?view=map` を開く             | `.leaflet-container` が描画される              |
+| MAP-2 | anon | list ↔ map toggle を keyboard で操作       | `?view=map` / `?view=list` が URL 同期         |
+| MAP-3 | anon | map view で職業 chip を選ぶ                 | `?occupation=` + `view=map` 維持、 Circle 増減 |
+| MAP-4 | anon | 地図 view から「一覧で見る」 で list へ戻る | list view に戻れる (dead-end 無し)             |
+
+実行:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/user-search-map.spec.ts
 ```
