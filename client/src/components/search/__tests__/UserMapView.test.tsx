@@ -87,11 +87,11 @@ describe("UserMapView", () => {
 		expect(screen.getByText(/結果が多いため/)).toBeInTheDocument();
 	});
 
-	it("always offers a '一覧で見る' link back to list view", () => {
+	it("offers a '一覧で見る' link back to list view when a query is active", () => {
 		render(
 			<UserMapView
-				results={[]}
-				hasQuery={false}
+				results={[user({ residence: RES })]}
+				hasQuery={true}
 				hasMore={false}
 				listHref={LIST_HREF}
 			/>,
@@ -100,5 +100,17 @@ describe("UserMapView", () => {
 			"href",
 			LIST_HREF,
 		);
+	});
+
+	it("hides the '一覧で見る' link when there is no query (no map to escape)", () => {
+		render(
+			<UserMapView
+				results={[]}
+				hasQuery={false}
+				hasMore={false}
+				listHref={LIST_HREF}
+			/>,
+		);
+		expect(screen.queryByRole("link", { name: "一覧で見る" })).toBeNull();
 	});
 });

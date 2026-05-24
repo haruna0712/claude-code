@@ -54,36 +54,34 @@ export default function UserMapView({
 		<section aria-label="ユーザー地図" className="space-y-2">
 			{/* a11y H2/H3: 地図 widget (keyboard/SR には dead-end になりがち) に入る前に、
 			    text alternative への導線 (「一覧で見る」) と件数サマリを **canvas より前**
-			    に置く。 list view は常にこの link から辿れる (data は map-locked しない)。 */}
-			<div className="flex items-center justify-between gap-3">
-				<p role="status" className="text-xs text-[color:var(--a-text-muted)]">
-					{hasQuery && plottableCount > 0
-						? `${plottableCount} 人を地図に表示しています。一覧で詳細を確認できます。`
-						: ""}
-				</p>
-				<Link
-					href={listHref}
-					className="shrink-0 text-xs text-[color:var(--a-accent)] underline underline-offset-2"
-				>
-					一覧で見る
-				</Link>
-			</div>
+			    に置く。 検索条件が無いとき (= 地図も無い) は逃げ先が無いので row ごと隠す
+			    (ui-ux-tester: orphan link 回避)。 count summary だけ role=status を残し、
+			    静的な guidance 文は live region にしない (ui-ux-tester / a11y M6)。 */}
+			{hasQuery && (
+				<div className="flex items-center justify-between gap-3">
+					<p role="status" className="text-xs text-[color:var(--a-text-muted)]">
+						{plottableCount > 0
+							? `${plottableCount} 人を地図に表示しています。一覧で詳細を確認できます。`
+							: ""}
+					</p>
+					<Link
+						href={listHref}
+						className="shrink-0 py-2 text-xs text-[color:var(--a-accent)] underline underline-offset-2"
+					>
+						一覧で見る
+					</Link>
+				</div>
+			)}
 
 			{!hasQuery && (
-				<p
-					role="status"
-					className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-6 text-sm text-[color:var(--a-text-muted)]"
-				>
+				<p className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-6 text-sm text-[color:var(--a-text-muted)]">
 					職業や名前で絞り込むと、
 					居住地を設定したユーザーが地図に表示されます。
 				</p>
 			)}
 
 			{hasQuery && plottableCount === 0 && (
-				<p
-					role="status"
-					className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-6 text-sm text-[color:var(--a-text-muted)]"
-				>
+				<p className="rounded-lg border border-dashed border-[color:var(--a-border)] px-4 py-6 text-sm text-[color:var(--a-text-muted)]">
 					条件に一致するユーザーのうち、
 					居住地を地図に設定している人はいませんでした。
 				</p>
@@ -91,7 +89,6 @@ export default function UserMapView({
 
 			{hasQuery && hasMore && (
 				<p
-					role="status"
 					className="rounded-md border border-[color:var(--a-border)] px-3 py-2 text-xs text-[color:var(--a-text-muted)]"
 					style={{ background: "var(--a-bg-muted)" }}
 				>
