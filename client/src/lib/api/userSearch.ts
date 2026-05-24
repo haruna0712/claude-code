@@ -36,25 +36,72 @@ export interface UserSearchOptions {
 	nearMe?: boolean;
 	/** P12-05: 近所検索の半径 (km, 1〜200 で clamp は backend 側で行う)。 */
 	radiusKm?: number;
+	/** P12-07: 職業 slug で絞り込む。 複数指定は backend で OR 結合。 */
+	occupations?: string[];
 }
 
 export const PROXIMITY_RADIUS_MIN_KM = 1;
 export const PROXIMITY_RADIUS_MAX_KM = 100;
 export const PROXIMITY_RADIUS_DEFAULT_KM = 10;
 
-/** ``GET /users/search/?q=`` を呼ぶ。 cursor を渡せば next/prev page。 */
+/** ``/search/users`` (frontend route) と ``/users/search/`` (API) 双方の
+ *  query string を組み立てる単一の正本。 q / near_me / radius_km / occupation[] /
+ *  cursor を一貫した順序・形式 (occupation は同名 key を append) で出す。
+ *  これを共有することで NearMeFilter / OccupationFilter / page が filter を
+ *  取りこぼさず相互に維持できる (code-reviewer HIGH: cross-filter state loss 対策)。 */
+export interface UserSearchQueryState {
+	q?: string;
+	nearMe?: boolean;
+	radiusKm?: number;
+	occupations?: string[];
+	cursor?: string | null;
+}
+
+export function buildUserSearchParams(
+	state: UserSearchQueryState,
+): URLSearchParams {
+	const params = new URLSearchParams();
+	const q = state.q?.trim();
+	if (q) params.set("q", q);
+	if (state.nearMe) {
+		params.set("near_me", "1");
+		params.set(
+			"radius_km",
+			String(state.radiusKm ?? PROXIMITY_RADIUS_DEFAULT_KM),
+		);
+	}
+	for (const slug of state.occupations ?? []) {
+		const trimmed = slug.trim();
+		if (trimmed) params.append("occupation", trimmed);
+	}
+	if (state.cursor) params.set("cursor", state.cursor);
+	return params;
+}
+
+/** frontend route href (`/search/users?...`)。 query が空なら base path のみ。 */
+export function buildUserSearchHref(state: UserSearchQueryState): string {
+	const qs = buildUserSearchParams(state).toString();
+	return qs ? `/search/users?${qs}` : "/search/users";
+}
+
+/** ``GET /users/search/?q=`` を呼ぶ。 cursor を渡せば next/prev page。
+ *
+ * occupation は同名 key を繰り返す (``?occupation=a&occupation=b``) ので
+ * ``Record<string,string>`` ではなく ``URLSearchParams`` で組み立てる
+ * (axios の array シリアライズは ``occupation[]=`` 形式になり backend の
+ * ``getlist("occupation")`` と噛み合わないため、 明示的に append する)。 */
 export async function fetchUserSearch(
 	query: string,
 	options: UserSearchOptions = {},
 	client: AxiosInstance = api,
 ): Promise<UserSearchPage> {
-	const params: Record<string, string> = {};
-	if (query.trim()) params.q = query.trim();
-	if (options.cursor) params.cursor = options.cursor;
-	if (options.nearMe) {
-		params.near_me = "1";
-		params.radius_km = String(options.radiusKm ?? PROXIMITY_RADIUS_DEFAULT_KM);
-	}
+	const params = buildUserSearchParams({
+		q: query,
+		cursor: options.cursor,
+		nearMe: options.nearMe,
+		radiusKm: options.radiusKm,
+		occupations: options.occupations,
+	});
 	const res = await client.get<UserSearchPage>("/users/search/", { params });
 	return res.data;
 }
