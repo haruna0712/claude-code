@@ -293,7 +293,9 @@ PLAYWRIGHT_BASE_URL=https://stg.codeplace.me npx playwright test e2e/onboarding-
 5. ✅ **P12-03** (merged): signup wizard step 2 (居住地 prompt)
 6. ✅ **P12-06** (#815 backend / #818 frontend merged): `Occupation` model + 多選択編集 UI (本 spec §9)
 7. ✅ **P12-07** (#816 merged / PR #823, E2E hotfix #826): `/api/v1/users/search/?occupation=` filter + chip filter UI (本 spec §10、 stg E2E 4/4 pass、 gan-evaluator 8.0/10、 ui-ux-tester CRITICAL 0 → follow-up #827 / #828)
-8. **P12-08** (#817): `/search/users` に Leaflet 地図 view toggle + bbox query (本 spec §11、 backend=P12-08a / frontend=P12-08b の 2 PR)
+8. ✅ **P12-08** (#817 merged): `/search/users` に Leaflet 地図 view toggle + bbox query (本 spec §11、 PR #830 backend / #833 frontend / #834 view 維持 fix / #835 UX polish、 stg E2E 4/4 pass、 gan-evaluator 8.0/10、 ui-ux-tester CRITICAL 0 → follow-up #827 mobile chip / #828 surface 重複 / #831 pan+bbox sweep & 凡例 / #832 tile seam 統一)
+
+→ **Phase 12 の住所マップ + ユーザー検索 (P12-01〜P12-08) が全完了。** ハルナさん要望「地図の上で職業を絞って探す」 を #815 (職業 model) → #816 (職業 filter) → #817 (地図 view) で実現。
 
 各段階で `gan-evaluator` agent に採点させて UX を確認 (新 route 追加なので Phase 11 同様の必須運用)。
 
