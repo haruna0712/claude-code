@@ -826,6 +826,10 @@ class UserFullTextSerializer(serializers.ModelSerializer):
 
     user_id = serializers.UUIDField(source="id", read_only=True)
     distance_km = serializers.SerializerMethodField()
+    # P12-08: 地図 view 用。 residence は select_related、 occupations は
+    # prefetch_related を view 側で入れて N+1 を防ぐ。 list view は無視するだけ。
+    residence = serializers.SerializerMethodField()
+    occupations = serializers.SerializerMethodField()
 
     def get_distance_km(self, obj: User) -> float | None:
         # annotation 値 (Decimal / float) を float に正規化。 annotation 無しなら None。
@@ -833,6 +837,26 @@ class UserFullTextSerializer(serializers.ModelSerializer):
         if value is None:
             return None
         return round(float(value), 2)
+
+    def get_residence(self, obj: User) -> dict | None:
+        """自分で設定した居住地の円 (中心 + 半径)。 未設定は None。
+        ピンポイントではなく min 500m の円なので公開してよい
+        (spec: docs/specs/phase-12-residence-map-spec.md §11.2)。"""
+        try:
+            res = obj.residence
+        except UserResidence.DoesNotExist:
+            return None
+        return {
+            "latitude": str(res.latitude),
+            "longitude": str(res.longitude),
+            "radius_m": res.radius_m,
+        }
+
+    def get_occupations(self, obj: User) -> list[dict[str, str]]:
+        """user の職業 chip (slug + display_name)。 地図 Circle の配色 / popup 用。
+        M2M は Occupation.Meta.ordering (display_order) を継承。
+        view が prefetch_related("occupations") を入れるので N+1 にならない。"""
+        return [{"slug": o.slug, "display_name": o.display_name} for o in obj.occupations.all()]
 
     class Meta:
         model = User
@@ -843,6 +867,8 @@ class UserFullTextSerializer(serializers.ModelSerializer):
             "bio",
             "avatar_url",
             "distance_km",
+            "residence",
+            "occupations",
         )
         read_only_fields = fields
 
@@ -911,6 +937,30 @@ def _parse_radius_km(value: str | None) -> float:
     except (ValueError, TypeError):
         r = _NEAR_RADIUS_KM_DEFAULT
     return max(0.0, min(r, _NEAR_RADIUS_KM_MAX))
+
+
+def _parse_bbox(value: str) -> tuple[float, float, float, float] | None:
+    """``"south,west,north,east"`` → (south, west, north, east)。 不正は None (P12-08)。
+
+    4 値 float、 緯度 ∈ [-90,90] / 経度 ∈ [-180,180]、 ``south ≤ north`` を要求。
+    経度の日付変更線跨ぎ (west > east) は MVP 非対応 — そのまま BETWEEN し結果 0 で可。
+    """
+    try:
+        parts = value.split(",")
+        if len(parts) != 4:
+            return None
+        south, west, north, east = (float(p) for p in parts)
+    except (ValueError, AttributeError, OverflowError):
+        return None
+    if not all(math.isfinite(v) for v in (south, west, north, east)):
+        return None
+    if not (-90.0 <= south <= 90.0 and -90.0 <= north <= 90.0):
+        return None
+    if not (-180.0 <= west <= 180.0 and -180.0 <= east <= 180.0):
+        return None
+    if south > north:
+        return None
+    return (south, west, north, east)
 
 
 class UserFullTextSearchView(ListAPIView):
@@ -991,6 +1041,7 @@ class UserFullTextSearchView(ListAPIView):
         q = (params.get("q") or "").strip()
         near_me = params.get("near_me") == "1"
         near_raw = params.get("near")
+        bbox_raw = params.get("bbox")
         occupation_slugs = self._valid_occupation_slugs()
 
         center: tuple[float, float] | None = None
@@ -1020,11 +1071,36 @@ class UserFullTextSearchView(ListAPIView):
                 )
             center = parsed
 
-        if center is None and not q and not occupation_slugs:
-            # q / near / occupation のどれも無ければ空配列 (P12-04 既存挙動)
+        # bbox は near 系が無いときだけ評価する (near 優先、 §11.3)。 near と併用された
+        # bbox は黙って無視 (malformed でも 400 にしない — 使われないので)。
+        bbox: tuple[float, float, float, float] | None = None
+        if center is None and bbox_raw is not None:
+            # bbox は「矩形内の全 user の residence を一括取得」 する地理的総ざらい
+            # 列挙なので、 near_me と同様 **auth 必須** にする (privacy、 owner 判断
+            # 2026-05: anon の drive-by / scraper sweep を遮断。 occupation/text 検索は
+            # anon のまま)。 auth check を parse より先に置き、 anon は 401。
+            if not self.request.user.is_authenticated:
+                raise NotAuthenticated("bbox 検索には認証が必要です")
+            bbox = _parse_bbox(bbox_raw)
+            if bbox is None:
+                raise ValidationError(
+                    {
+                        "bbox": "bbox は 'south,west,north,east' の 4 値で、 "
+                        "lat∈[-90,90] / lng∈[-180,180] / south≤north が必要です"
+                    }
+                )
+
+        if center is None and not q and not occupation_slugs and bbox is None:
+            # q / near / occupation / bbox のどれも無ければ空配列 (P12-04 既存挙動)
             return User.objects.none()
 
-        qs = User.objects.filter(is_active=True)
+        # P12-08: serializer の residence / occupations field 用に JOIN/prefetch を
+        # 入れて N+1 を防ぐ。 全 branch (text / near / bbox) 共通。
+        qs = (
+            User.objects.filter(is_active=True)
+            .select_related("residence")
+            .prefetch_related("occupations")
+        )
         if q:
             qs = qs.filter(
                 Q(username__icontains=q) | Q(display_name__icontains=q) | Q(bio__icontains=q)
@@ -1036,6 +1112,19 @@ class UserFullTextSearchView(ListAPIView):
             qs = qs.filter(occupations__slug__in=occupation_slugs).distinct()
 
         if center is None:
+            # 地図 view (P12-08): bbox 内の residence を持つ user に絞る。
+            # lat/lng の範囲 lookup が residence を INNER JOIN するので未設定 user は
+            # 自動的に除外される (residence__isnull=False は冗長なので付けない、
+            # python-reviewer MEDIUM)。 self 除外は near と違い行わない (自分も地図に
+            # 出てよい)。 経度跨ぎは BETWEEN で結果 0 になるだけ。
+            if bbox is not None:
+                south, west, north, east = bbox
+                qs = qs.filter(
+                    residence__latitude__gte=south,
+                    residence__latitude__lte=north,
+                    residence__longitude__gte=west,
+                    residence__longitude__lte=east,
+                )
             return qs.order_by("username")
 
         # 近所検索: haversine SQL で distance を annotation
