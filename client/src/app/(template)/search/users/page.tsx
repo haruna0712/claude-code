@@ -15,6 +15,8 @@ import Link from "next/link";
 import NearMeFilter from "@/components/search/NearMeFilter";
 import OccupationFilter from "@/components/search/OccupationFilter";
 import SearchModeTabs from "@/components/search/SearchModeTabs";
+import SearchViewToggle from "@/components/search/SearchViewToggle";
+import UserMapView from "@/components/search/UserMapView";
 import UserSearchBox from "@/components/search/UserSearchBox";
 import UserSearchResultCard from "@/components/search/UserSearchResultCard";
 import WhoToFollow from "@/components/sidebar/WhoToFollow";
@@ -26,6 +28,7 @@ import {
 	PROXIMITY_RADIUS_DEFAULT_KM,
 	PROXIMITY_RADIUS_MAX_KM,
 	PROXIMITY_RADIUS_MIN_KM,
+	type SearchView,
 	type UserSearchPage as UserSearchPageData,
 } from "@/lib/api/userSearch";
 import type { CurrentUser } from "@/lib/api/users";
@@ -38,6 +41,8 @@ interface SearchPageProps {
 		radius_km?: string;
 		/** Next.js は重複 query key を string[] に、 単一を string にする。 */
 		occupation?: string | string[];
+		/** P12-08: list (default) / map。 */
+		view?: string;
 	};
 }
 
@@ -53,6 +58,8 @@ interface SearchQuery {
 	radiusKm: number;
 	/** P12-07: URL ``?occupation=`` で復元した職業 slug (重複排除済)。 */
 	occupations: string[];
+	/** P12-08: list (default) / map の表示モード。 */
+	view: SearchView;
 }
 
 /** ``occupation`` query を string[] に正規化 (単一 string / 配列 / 未指定)。
@@ -84,6 +91,7 @@ function parseSearchParams(sp: SearchPageProps["searchParams"]): SearchQuery {
 		nearMe,
 		radiusKm,
 		occupations: parseOccupations(sp.occupation),
+		view: sp.view === "map" ? "map" : "list",
 	};
 }
 
@@ -166,6 +174,7 @@ function buildSearchHref(
 		nearMe: query.nearMe,
 		radiusKm: query.radiusKm,
 		occupations: query.occupations,
+		view: query.view,
 		cursor: overrides.cursor,
 	});
 }
@@ -260,7 +269,7 @@ export default async function UserSearchPage({
 				{/* P12-07: 職業 chip filter。 catalog は SSR で取得 (失敗時は
 				    OccupationFilter が null を返して filter UI が消える)。
 				    selected は props から直接導出するので remount 用 key は不要。 */}
-				<div className="mb-6">
+				<div className="mb-4">
 					<OccupationFilter
 						occupations={occupationCatalog}
 						selected={query.occupations}
@@ -270,7 +279,36 @@ export default async function UserSearchPage({
 					/>
 				</div>
 
-				{!hasAnyQuery && (
+				{/* P12-08: 一覧 ↔ 地図 の表示切替。 URL ?view= 同期、 filter は維持。 */}
+				<div className="mb-6">
+					<SearchViewToggle
+						view={query.view}
+						query={{
+							q: query.q,
+							nearMe: query.nearMe,
+							radiusKm: query.radiusKm,
+							occupations: query.occupations,
+						}}
+					/>
+				</div>
+
+				{/* P12-08: 地図 view。 現在の検索結果 (residence あり) を Circle 描画。 */}
+				{query.view === "map" && outcome.kind === "results" && (
+					<UserMapView
+						results={outcome.page.results}
+						hasQuery={hasAnyQuery}
+						hasMore={outcome.page.next != null}
+						listHref={buildUserSearchHref({
+							q: query.q,
+							nearMe: query.nearMe,
+							radiusKm: query.radiusKm,
+							occupations: query.occupations,
+							view: "list",
+						})}
+					/>
+				)}
+
+				{!hasAnyQuery && query.view === "list" && (
 					<>
 						<p className="mb-6 text-sm text-[color:var(--a-text-muted)]">
 							ユーザー名 / 表示名 / 自己紹介 (bio) で部分一致検索できます。
@@ -336,7 +374,8 @@ export default async function UserSearchPage({
 					</p>
 				)}
 
-				{outcome.kind === "results" &&
+				{query.view === "list" &&
+					outcome.kind === "results" &&
 					hasAnyQuery &&
 					outcome.page.results.length === 0 && (
 						<p
@@ -347,48 +386,50 @@ export default async function UserSearchPage({
 						</p>
 					)}
 
-				{outcome.kind === "results" && outcome.page.results.length > 0 && (
-					<section aria-label="検索結果">
-						<p
-							role="status"
-							className="mb-3 text-xs text-[color:var(--a-text-muted)]"
-						>
-							{outcome.page.results.length} 件
-							{outcome.page.next ? " (続きあり)" : ""}
-						</p>
-						<ul role="list" className="space-y-2">
-							{outcome.page.results.map((u) => (
-								<UserSearchResultCard key={u.user_id} user={u} />
-							))}
-						</ul>
+				{query.view === "list" &&
+					outcome.kind === "results" &&
+					outcome.page.results.length > 0 && (
+						<section aria-label="検索結果">
+							<p
+								role="status"
+								className="mb-3 text-xs text-[color:var(--a-text-muted)]"
+							>
+								{outcome.page.results.length} 件
+								{outcome.page.next ? " (続きあり)" : ""}
+							</p>
+							<ul role="list" className="space-y-2">
+								{outcome.page.results.map((u) => (
+									<UserSearchResultCard key={u.user_id} user={u} />
+								))}
+							</ul>
 
-						<nav
-							aria-label="ページ送り"
-							className="mt-6 flex items-center justify-between text-sm"
-						>
-							{prevCursor ? (
-								<Link
-									href={buildSearchHref(query, { cursor: prevCursor })}
-									className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
-								>
-									← 前の 20 件
-								</Link>
-							) : (
-								<span aria-hidden="true" />
-							)}
-							{nextCursor ? (
-								<Link
-									href={buildSearchHref(query, { cursor: nextCursor })}
-									className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
-								>
-									次の 20 件 →
-								</Link>
-							) : (
-								<span aria-hidden="true" />
-							)}
-						</nav>
-					</section>
-				)}
+							<nav
+								aria-label="ページ送り"
+								className="mt-6 flex items-center justify-between text-sm"
+							>
+								{prevCursor ? (
+									<Link
+										href={buildSearchHref(query, { cursor: prevCursor })}
+										className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+									>
+										← 前の 20 件
+									</Link>
+								) : (
+									<span aria-hidden="true" />
+								)}
+								{nextCursor ? (
+									<Link
+										href={buildSearchHref(query, { cursor: nextCursor })}
+										className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40"
+									>
+										次の 20 件 →
+									</Link>
+								) : (
+									<span aria-hidden="true" />
+								)}
+							</nav>
+						</section>
+					)}
 			</div>
 		</>
 	);

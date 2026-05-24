@@ -11,7 +11,13 @@ import MockAdapter from "axios-mock-adapter";
 import { describe, expect, it } from "vitest";
 
 import { createApiClient } from "@/lib/api/client";
-import { fetchUserSearch } from "@/lib/api/userSearch";
+import {
+	buildUserSearchHref,
+	buildUserSearchParams,
+	fetchUserSearch,
+	isPlottableUser,
+	type UserSearchResultItem,
+} from "@/lib/api/userSearch";
 
 function stub() {
 	const client = createApiClient();
@@ -192,5 +198,79 @@ describe("userSearch API", () => {
 			return [200, { results: [], next: null, previous: null }];
 		});
 		await fetchUserSearch("", { occupations: ["designer", "", "   "] }, client);
+	});
+});
+
+describe("buildUserSearchParams / buildUserSearchHref view (P12-08)", () => {
+	it("sets view=map only for map; list (default) is omitted", () => {
+		expect(buildUserSearchParams({ view: "map" }).get("view")).toBe("map");
+		expect(buildUserSearchParams({ view: "list" }).get("view")).toBeNull();
+		expect(buildUserSearchParams({}).get("view")).toBeNull();
+	});
+
+	it("buildUserSearchHref keeps filters and appends view=map", () => {
+		expect(
+			buildUserSearchHref({
+				q: "react",
+				occupations: ["designer"],
+				view: "map",
+			}),
+		).toBe("/search/users?q=react&occupation=designer&view=map");
+	});
+
+	it("buildUserSearchHref omits view for the default list", () => {
+		expect(buildUserSearchHref({ q: "react", view: "list" })).toBe(
+			"/search/users?q=react",
+		);
+	});
+});
+
+describe("isPlottableUser (P12-08)", () => {
+	function user(
+		residence: UserSearchResultItem["residence"],
+	): UserSearchResultItem {
+		return {
+			user_id: "u",
+			username: "u",
+			display_name: "U",
+			bio: "",
+			avatar_url: "",
+			distance_km: null,
+			residence,
+			occupations: [],
+		};
+	}
+
+	it("is false when residence is null", () => {
+		expect(isPlottableUser(user(null))).toBe(false);
+	});
+
+	it("is true for valid finite coordinates", () => {
+		expect(
+			isPlottableUser(
+				user({ latitude: "35.681", longitude: "139.767", radius_m: 500 }),
+			),
+		).toBe(true);
+	});
+
+	it("is false for empty-string coordinates (Number('') === 0 trap)", () => {
+		expect(
+			isPlottableUser(
+				user({ latitude: "", longitude: "139.767", radius_m: 500 }),
+			),
+		).toBe(false);
+	});
+
+	it("is false for non-numeric / non-finite coordinates", () => {
+		expect(
+			isPlottableUser(
+				user({ latitude: "NaN", longitude: "139.767", radius_m: 500 }),
+			),
+		).toBe(false);
+		expect(
+			isPlottableUser(
+				user({ latitude: "35.6", longitude: "Infinity", radius_m: 500 }),
+			),
+		).toBe(false);
 	});
 });

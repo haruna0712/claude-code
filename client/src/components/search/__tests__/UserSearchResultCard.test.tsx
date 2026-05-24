@@ -18,6 +18,8 @@ function makeUser(
 		bio: "Engineer in Tokyo",
 		avatar_url: "https://cdn.example.com/avatar.png",
 		distance_km: null,
+		residence: null,
+		occupations: [],
 		...overrides,
 	};
 }
