@@ -251,7 +251,9 @@ export default async function UserSearchPage({
 				<div className="mb-3">
 					<UserSearchBox initialValue={query.q} view={query.view} />
 				</div>
-				<div className="mb-6">
+				{/* mb-3 で filter 群の rhythm を揃える (ui-ux-tester MEDIUM:
+				    near→chips が 68px で浮いていた)。 */}
+				<div className="mb-3">
 					{/* key で URL 状態が変わるたびに NearMeFilter を remount し、
 					    `useState(initialXxx)` の初回 seed を最新値に強制する
 					    (typescript-reviewer HIGH 修正、 client component が
