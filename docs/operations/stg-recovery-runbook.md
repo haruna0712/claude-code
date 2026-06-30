@@ -7,6 +7,35 @@
 
 ---
 
+## 0-0. 2026-06-30 teardown メモ (コスト削減のため stg 全停止)
+
+ローカル Docker 開発環境へ移行したため stg を全 destroy（〜183 resources）。次回
+再 apply 時にハマらないよう、この回の特記事項:
+
+- **Route53 hosted zone `codeplace.me` (`Z04674981WOS2DYA9WTLV`) は意図的に残した**。
+  NS 委任 (お名前.com) を維持して再構築を楽にするため、destroy 前に
+  `terraform state rm 'module.edge.aws_route53_zone.this'` で state から除外し、
+  AWS 上のゾーンは温存した。
+  - **⚠️ 再 apply 時は apply 前に必ず import する**（しないと同名ゾーンが二重に
+    作られ NS がズレる）:
+    ```bash
+    terraform import 'module.edge.aws_route53_zone.this' Z04674981WOS2DYA9WTLV
+    ```
+- 削除できなかった「中身が残っている」系は手動で空にしてから再 destroy した:
+  - S3 versioned bucket (static / media / **alb-logs ~25k versions**) → 全 version 削除
+  - ECR repo (backend / frontend / nginx) → `aws ecr delete-repository --force`
+  - RDS final snapshot 名衝突 (`sns-stg-postgres-final`) → 旧 snapshot 削除
+- `skip_final_snapshot=true` を渡しても destroy は **state 保存値 (false)** を使うため
+  final snapshot が作られる。teardown 後に `aws rds delete-db-snapshot` で消すこと。
+- 残り 19 resources が `github_oidc` の `count` (ecs_cluster_arn 依存) 評価エラーで
+  止まったら、`-target=module.data -target=module.storage -target=module.compute
+-target=module.secrets -target=module.network` で直接 destroy する。
+- Secrets 13 個は force-delete 済 (7 日 recovery を待たない)。再 apply は §2 Option B。
+- **terraform state bucket `sns-stg-tf-state` / lock table `sns-stg-tf-lock` は残す**
+  (再 apply に必要なので消さない)。
+
+---
+
 ## 0. 前提
 
 - AWS CLI 設定済 (`aws sts get-caller-identity` で確認)
