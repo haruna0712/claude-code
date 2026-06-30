@@ -81,7 +81,16 @@ cd claude-code
 
 # 2. 環境変数ファイル
 cp .envs/.env.example .envs/.env.local
-# エディタで .envs/.env.local を開き、DB / Redis / Mailpit の既定値で OK
+# .env.example は **全項目が空のテンプレート**。cp しただけだと POSTGRES_PASSWORD 等が
+# 空で postgres が起動失敗するため、エディタで .envs/.env.local を開いてローカル既定値を埋める。
+# 最低限:
+#   POSTGRES_HOST=postgres / POSTGRES_PORT=5432
+#   POSTGRES_DB=postgres / POSTGRES_USER=postgres / POSTGRES_PASSWORD=postgres
+#   DJANGO_SECRET_KEY=<任意の非空文字列> / SIGNING_KEY=<任意の非空文字列>
+#   DJANGO_SETTINGS_MODULE=config.settings.local / COOKIE_SECURE=False
+#   CELERY_BROKER_URL=redis://redis:6379/0 / CELERY_RESULT_BACKEND=redis://redis:6379/0
+#   EMAIL_HOST=mailpit / EMAIL_PORT=1025 / DOMAIN=localhost:8080
+# 詳細な手順とトラブルシュートは docs/operations/local-dev-setup.md を参照。
 # Sentry DSN / Stripe / OpenAI / Anthropic のキーはローカルでは空でよい
 # (Sentry は DSN が空だと自動で無効化、Stripe/OpenAI/Anthropic は Phase 7/8 で使用)
 
